@@ -1,298 +1,247 @@
-import React, { useState } from 'react';
-
-const formatDate = (date: Date) => {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
-
-const shiftDate = (value: string, amount: number) => {
-  const date = new Date(`${value}T00:00:00`);
-  date.setDate(date.getDate() + amount);
-  return formatDate(date);
-};
-
-// Simple in‑memory types for the preview
-interface FoodEntry {
-  id: string;
-  meal: 'Breakfast' | 'Lunch' | 'Dinner' | 'Snacks';
-  name: string;
-  serving: string; // e.g. "1 cup"
-  calories: number;
-  protein: number; // g
-  carbs: number; // g
-  fat: number; // g
-}
-
-type Goal = 'bulk' | 'cut' | 'maintain';
-
-type Sex = 'male' | 'female';
+import React, { useState, useMemo } from 'react';
+import { useApp } from '../../context/AppContext';
+import { MealType, NutritionProfile } from '../../types';
+import { FoodDiary } from '../nutrition/FoodDiary';
+import { MacroDonutChart } from '../nutrition/MacroDonutChart';
+import { WeightTracker } from '../nutrition/WeightTracker';
+import { FoodSearchModal, LoggedFoodPayload } from '../nutrition/FoodSearchModal';
+import { CustomFoodModal } from '../nutrition/CustomFoodModal';
+import { FitnessOnboardingModal } from '../nutrition/FitnessOnboardingModal';
+import { NutritionAnalytics } from '../nutrition/NutritionAnalytics';
+import { DEFAULT_NUTRITION_PROFILE } from '../../services/storage';
+import { Calculator, Plus, Calendar, Utensils } from 'lucide-react';
 
 export const NutritionView: React.FC = () => {
-  // --- onboarding state ---
-  const [goal, setGoal] = useState<Goal>('maintain');
-  const [age, setAge] = useState<number>(30);
-  const [sex, setSex] = useState<Sex>('male');
-  const [heightCm, setHeightCm] = useState<number>(170);
-  const [weightKg, setWeightKg] = useState<number>(70);
-  const [activity, setActivity] = useState<'sedentary' | 'light' | 'moderate' | 'active' | 'very' >('moderate');
-  const [calcDone, setCalcDone] = useState(false);
+  const {
+    state,
+    addFoodDiaryEntry,
+    addMultipleFoodDiaryEntries,
+    deleteFoodDiaryEntry,
+    addCustomFood,
+    logWeight,
+    deleteWeightLog,
+    updateNutritionProfile,
+  } = useApp();
 
-  // results
-  const [bmi, setBmi] = useState<number | null>(null);
-  const [tdee, setTdee] = useState<number | null>(null);
-  const [macroTargets, setMacroTargets] = useState<{protein: number; carbs: number; fat: number} | null>(null);
+  const [activeViewTab, setActiveViewTab] = useState<'diary' | 'analytics'>('diary');
 
-  // --- food diary ---
-  const [selectedDate, setSelectedDate] = useState<string>(formatDate(new Date()));
-  const [entries, setEntries] = useState<FoodEntry[]>([]);
+  const [selectedDate, setSelectedDate] = useState<string>(() => {
+    return new Date().toISOString().split('T')[0];
+  });
 
-  // Helper: activity multiplier
-  const activityMultipliers: Record<string, number> = {
-    sedentary: 1.2,
-    light: 1.375,
-    moderate: 1.55,
-    active: 1.725,
-    very: 1.9,
+  const [activeMealType, setActiveMealType] = useState<MealType>('breakfast');
+  const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
+  const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
+  const [isOnboardingModalOpen, setIsOnboardingModalOpen] = useState(false);
+
+  const profile = state.nutritionProfile || DEFAULT_NUTRITION_PROFILE;
+  const targetCalories = profile.targetCalories || 2200;
+  const macroTargets = profile.macroTargets || {
+    calories: 2200,
+    protein: 140,
+    carbs: 260,
+    fat: 65,
   };
 
-  const calculate = () => {
-    // BMI
-    const bmiVal = weightKg / ((heightCm / 100) ** 2);
-    setBmi(Number(bmiVal.toFixed(1)));
-    // BMR (Mifflin–St Jeor)
-    const bmr = sex === 'male'
-      ? 10 * weightKg + 6.25 * heightCm - 5 * age + 5
-      : 10 * weightKg + 6.25 * heightCm - 5 * age - 161;
-    // TDEE
-    const tdeeVal = Math.round(bmr * activityMultipliers[activity]);
-    // Goal adjustment
-    const surplus = goal === 'bulk' ? 300 : goal === 'cut' ? -300 : 0;
-    const targetCal = Math.max(1200, tdeeVal + surplus); // safety floor
-    setTdee(targetCal);
-    // Macro split (Protein 25%, Fat 25%, Carbs 50%) – simple example
-    const protein = Math.round((0.25 * targetCal) / 4);
-    const fat = Math.round((0.25 * targetCal) / 9);
-    const carbs = Math.round((0.5 * targetCal) / 4);
-    setMacroTargets({ protein, carbs, fat });
-    setCalcDone(true);
-  };
+  // Compute daily totals for selected date
+  const dayEntries = useMemo(() => {
+    return (state.foodDiaryEntries || []).filter((e) => e.date === selectedDate);
+  }, [state.foodDiaryEntries, selectedDate]);
 
-  const addDemoFood = () => {
-    const newEntry: FoodEntry = {
-      id: `food-${Date.now()}`,
-      meal: 'Breakfast',
-      name: 'Oats with Milk',
-      serving: '1 bowl',
-      calories: 350,
-      protein: 15,
-      carbs: 55,
-      fat: 7,
-    };
-    setEntries((prev) => [...prev, newEntry]);
-  };
-
-  const dailyTotals = entries.reduce(
-    (acc, cur) => {
-      acc.calories += cur.calories;
-      acc.protein += cur.protein;
-      acc.carbs += cur.carbs;
-      acc.fat += cur.fat;
-      return acc;
-    },
-    { calories: 0, protein: 0, carbs: 0, fat: 0 }
+  const consumedCalories = dayEntries.reduce((acc, cur) => acc + cur.calories, 0);
+  const consumedProtein = Number(
+    dayEntries.reduce((acc, cur) => acc + cur.protein, 0).toFixed(1)
+  );
+  const consumedCarbs = Number(
+    dayEntries.reduce((acc, cur) => acc + cur.carbs, 0).toFixed(1)
+  );
+  const consumedFat = Number(
+    dayEntries.reduce((acc, cur) => acc + cur.fat, 0).toFixed(1)
+  );
+  const consumedFiber = Number(
+    dayEntries
+      .reduce((acc, cur) => acc + (cur.fiber || 0), 0)
+      .toFixed(1)
+  );
+  const consumedSodium = Math.round(
+    dayEntries.reduce((acc, cur) => acc + (cur.sodium || 0), 0)
   );
 
-  const prevDay = () => setSelectedDate((d) => shiftDate(d, -1));
-  const nextDay = () => setSelectedDate((d) => shiftDate(d, 1));
+  const incompleteFoodsCount = dayEntries.filter((e) => e.fiber === undefined).length;
+
+  const handleOpenSearchModal = (meal: MealType) => {
+    setActiveMealType(meal);
+    setIsSearchModalOpen(true);
+  };
+
+  const handleLogFood = (foodData: LoggedFoodPayload) => {
+    addFoodDiaryEntry({
+      ...foodData,
+      date: selectedDate,
+      mealType: activeMealType,
+      isSample: false,
+    });
+  };
+
+  const handleLogMultipleFoods = (foods: LoggedFoodPayload[]) => {
+    const payloads = foods.map((food) => ({
+      ...food,
+      date: selectedDate,
+      mealType: activeMealType,
+      isSample: false,
+    }));
+    addMultipleFoodDiaryEntries(payloads);
+  };
 
   return (
-    <div className="space-y-8 pb-20">
-      {/* ---- Onboarding ---- */}
-      <section className="border p-4 rounded-xl bg-white dark:bg-espresso-850 shadow-subtle">
-        <h2 className="font-serif text-2xl mb-4 text-espresso-950 dark:text-ivory-50">Nutrition Onboarding</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-espresso-700 dark:text-espresso-300 mb-1">Goal</label>
-            <div className="flex gap-2">
-              {['bulk', 'cut', 'maintain'].map((g) => (
-                <label key={g} className="inline-flex items-center">
-                  <input
-                    type="radio"
-                    name="goal"
-                    value={g}
-                    checked={goal === g}
-                    onChange={() => setGoal(g as Goal)}
-                    className="form-radio h-4 w-4 text-terracotta-600"
-                  />
-                  <span className="ml-2 capitalize text-espresso-800 dark:text-ivory-100">{g}</span>
-                </label>
-              ))}
-            </div>
+    <div className="space-y-6 pb-20">
+      {/* Top Header */}
+      <div className="border-b border-ivory-300 dark:border-espresso-800 pb-6 flex flex-col md:flex-row md:items-end justify-between gap-4">
+        <div>
+          <span className="text-xs font-mono font-semibold uppercase tracking-wider text-terracotta-600 dark:text-terracotta-400">
+            Metabolic Calibration & Fuel
+          </span>
+          <div className="flex items-center gap-3 mt-1">
+            <h1 className="font-serif text-3xl sm:text-4xl font-normal text-espresso-950 dark:text-ivory-50 tracking-tight">
+              Nutrition & Fuel
+            </h1>
+            <span className="text-[10px] uppercase font-mono px-2.5 py-0.5 rounded-md bg-ivory-200 dark:bg-espresso-800 text-espresso-800 dark:text-ivory-200 font-semibold">
+              {profile.goal.toUpperCase()}
+            </span>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-espresso-700 dark:text-espresso-300 mb-1">Age (years)</label>
-            <input
-              type="number"
-              min={1}
-              value={age}
-              onChange={(e) => setAge(Number(e.target.value))}
-              className="w-full rounded border-gray-300 dark:border-espresso-700 bg-ivory-50 dark:bg-espresso-950 p-2"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-espresso-700 dark:text-espresso-300 mb-1">Sex</label>
-            <select
-              value={sex}
-              onChange={(e) => setSex(e.target.value as Sex)}
-              className="w-full rounded border-gray-300 dark:border-espresso-700 bg-ivory-50 dark:bg-espresso-950 p-2"
+          <p className="text-xs sm:text-sm text-espresso-500 dark:text-espresso-400 mt-1">
+            Batch multiselect food logging, macro charts, annual calendar heatmaps, and body composition tracking.
+          </p>
+        </div>
+
+        {/* View Switcher & Action Buttons */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* View Mode Toggle: Diary vs Trends & Heatmap */}
+          <div className="inline-flex p-1 bg-ivory-100 dark:bg-espresso-800 rounded-xl border border-ivory-300 dark:border-espresso-700 mr-1">
+            <button
+              onClick={() => setActiveViewTab('diary')}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition ${
+                activeViewTab === 'diary'
+                  ? 'bg-white dark:bg-espresso-700 text-espresso-950 dark:text-ivory-50 shadow-subtle'
+                  : 'text-espresso-600 dark:text-espresso-300 hover:text-espresso-900 dark:hover:text-ivory-100'
+              }`}
             >
-              <option value="male">Male</option>
-              <option value="female">Female</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-espresso-700 dark:text-espresso-300 mb-1">Height (cm)</label>
-            <input
-              type="number"
-              min={30}
-              value={heightCm}
-              onChange={(e) => setHeightCm(Number(e.target.value))}
-              className="w-full rounded border-gray-300 dark:border-espresso-700 bg-ivory-50 dark:bg-espresso-950 p-2"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-espresso-700 dark:text-espresso-300 mb-1">Weight (kg)</label>
-            <input
-              type="number"
-              min={10}
-              value={weightKg}
-              onChange={(e) => setWeightKg(Number(e.target.value))}
-              className="w-full rounded border-gray-300 dark:border-espresso-700 bg-ivory-50 dark:bg-espresso-950 p-2"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-espresso-700 dark:text-espresso-300 mb-1">Activity level</label>
-            <select
-              value={activity}
-              onChange={(e) => setActivity(e.target.value as any)}
-              className="w-full rounded border-gray-300 dark:border-espresso-700 bg-ivory-50 dark:bg-espresso-950 p-2"
+              <Utensils className="w-3.5 h-3.5" />
+              <span>Daily Diary</span>
+            </button>
+            <button
+              onClick={() => setActiveViewTab('analytics')}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition ${
+                activeViewTab === 'analytics'
+                  ? 'bg-white dark:bg-espresso-700 text-espresso-950 dark:text-ivory-50 shadow-subtle'
+                  : 'text-espresso-600 dark:text-espresso-300 hover:text-espresso-900 dark:hover:text-ivory-100'
+              }`}
             >
-              <option value="sedentary">Sedentary (little or no exercise)</option>
-              <option value="light">Light (1–3 days/week)</option>
-              <option value="moderate">Moderate (3–5 days/week)</option>
-              <option value="active">Active (6–7 days/week)</option>
-              <option value="very">Very active (hard training daily)</option>
-            </select>
+              <Calendar className="w-3.5 h-3.5" />
+              <span>Trends & Heatmap</span>
+            </button>
+          </div>
+
+          <button
+            onClick={() => setIsCustomModalOpen(true)}
+            className="px-3.5 py-2 rounded-xl border border-ivory-300 dark:border-espresso-700 bg-white dark:bg-espresso-850 hover:bg-ivory-50 dark:hover:bg-espresso-800 text-espresso-800 dark:text-ivory-100 text-xs font-semibold flex items-center gap-1.5 shadow-subtle transition"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Custom Food</span>
+          </button>
+          <button
+            onClick={() => setIsOnboardingModalOpen(true)}
+            className="px-4 py-2 rounded-xl text-white text-xs font-semibold flex items-center gap-1.5 shadow-subtle transition hover:opacity-95"
+            style={{ backgroundColor: 'var(--accent)' }}
+          >
+            <Calculator className="w-3.5 h-3.5" />
+            <span>Calibrate Targets</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Main View Tab Content */}
+      {activeViewTab === 'analytics' ? (
+        <NutritionAnalytics
+          entries={state.foodDiaryEntries || []}
+          profile={profile}
+          onSelectDate={(date) => setSelectedDate(date)}
+          onSwitchToDayView={() => setActiveViewTab('diary')}
+        />
+      ) : (
+        /* Diary View: Two-Column Layout */
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.25fr)_minmax(340px,0.75fr)] gap-6 lg:gap-8 items-start">
+          {/* Left Column: Food Diary */}
+          <div className="min-w-0">
+            <FoodDiary
+              selectedDate={selectedDate}
+              onSelectDate={setSelectedDate}
+              entries={state.foodDiaryEntries || []}
+              onOpenSearchModal={handleOpenSearchModal}
+              onDeleteEntry={deleteFoodDiaryEntry}
+              enabledMealTypes={profile.enabledMealTypes}
+            />
+          </div>
+
+          {/* Right Column: Macro Donut Chart & Weight Tracker */}
+          <div className="min-w-0 space-y-6">
+            <MacroDonutChart
+              consumedCalories={consumedCalories}
+              consumedProtein={consumedProtein}
+              consumedCarbs={consumedCarbs}
+              consumedFat={consumedFat}
+              consumedFiber={consumedFiber}
+              consumedSodium={consumedSodium}
+              targetCalories={targetCalories}
+              macroTargets={macroTargets}
+              incompleteFoodsCount={incompleteFoodsCount}
+              waterTargetMl={profile.waterTargetMl || 2500}
+              waterIntakeMl={2000}
+            />
+
+            <WeightTracker
+              weightLogs={state.weightLogs || []}
+              currentGoal={profile.goal}
+              selectedDate={selectedDate}
+              onLogWeight={logWeight}
+              onDeleteWeight={deleteWeightLog}
+              onOpenTargetModal={() => setIsOnboardingModalOpen(true)}
+            />
           </div>
         </div>
-        <button
-          onClick={calculate}
-          className="mt-4 px-4 py-2 bg-terracotta-600 hover:bg-terracotta-700 text-white rounded"
-        >
-          Calculate
-        </button>
-        {calcDone && (
-          <div className="mt-4 p-4 border-t border-ivory-300 dark:border-espresso-800">
-            <p className="text-sm text-espresso-800 dark:text-ivory-100">
-              <strong>BMI:</strong> {bmi} ({bmi && bmi < 18.5 ? 'Underweight' : bmi && bmi < 25 ? 'Normal' : bmi && bmi < 30 ? 'Overweight' : 'Obese'})
-            </p>
-            <p className="text-sm text-espresso-800 dark:text-ivory-100">
-              <strong>Estimated daily calories:</strong> {tdee} kcal (estimates only)
-            </p>
-            {macroTargets && (
-              <p className="text-sm text-espresso-800 dark:text-ivory-100">
-                <strong>Macro targets (g):</strong> {macroTargets.protein} P / {macroTargets.carbs} C / {macroTargets.fat} F
-              </p>
-            )}
-          </div>
-        )}
-      </section>
+      )}
 
-      {/* ---- Daily Nutrition Dashboard ---- */}
-      <section className="border p-4 rounded-xl bg-white dark:bg-espresso-850 shadow-subtle">
-        <h2 className="font-serif text-2xl mb-4 text-espresso-950 dark:text-ivory-50">Daily Nutrition</h2>
-        <div className="flex items-center gap-4 mb-4">
-          <button onClick={prevDay} className="px-2 py-1 bg-ivory-200 dark:bg-espresso-700 rounded">←</button>
-          <span className="font-medium text-espresso-800 dark:text-ivory-100">{selectedDate}</span>
-          <button onClick={nextDay} className="px-2 py-1 bg-ivory-200 dark:bg-espresso-700 rounded">→</button>
-        </div>
-        {calcDone ? (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-            <div className="p-3 bg-ivory-50 dark:bg-espresso-950 rounded">
-              <p className="text-sm text-espresso-700 dark:text-espresso-300">Target Calories</p>
-              <p className="text-xl font-serif text-espresso-950 dark:text-ivory-50">{tdee} kcal</p>
-            </div>
-            <div className="p-3 bg-ivory-50 dark:bg-espresso-950 rounded">
-              <p className="text-sm text-espresso-700 dark:text-espresso-300">Consumed</p>
-              <p className="text-xl font-serif text-espresso-950 dark:text-ivory-50">{dailyTotals.calories} kcal</p>
-            </div>
-            <div className="p-3 bg-ivory-50 dark:bg-espresso-950 rounded">
-              <p className="text-sm text-espresso-700 dark:text-espresso-300">Remaining</p>
-              <p className="text-xl font-serif text-espresso-950 dark:text-ivory-50">{(tdee ?? 0) - dailyTotals.calories} kcal</p>
-            </div>
-          </div>
-        ) : (
-          <p className="text-sm text-espresso-600 dark:text-espresso-300 italic">Calculate your targets above to see daily numbers.</p>
-        )}
-        {/* Macro donut – simple SVG placeholder */}
-        {macroTargets && (
-          <div className="flex items-center justify-center mt-4">
-            <svg viewBox="0 0 32 32" className="w-32 h-32">
-              <circle r="16" cx="16" cy="16" fill="#e2e8f0" />
-              {/* Protein slice */}
-              <path
-                d="M16 16 L16 0 A16 16 0 0 1 31.2 12.8 z"
-                fill="#4ade80" // green
-              />
-              {/* Carbs slice */}
-              <path
-                d="M16 16 L31.2 12.8 A16 16 0 0 1 22.6 30.9 z"
-                fill="#60a5fa" // blue
-              />
-              {/* Fat slice */}
-              <path
-                d="M16 16 L22.6 30.9 A16 16 0 0 1 0 16 z"
-                fill="#f87171" // red
-              />
-            </svg>
-            <div className="ml-4 text-sm">
-              <p><span className="font-medium">Protein:</span> {macroTargets.protein} g</p>
-              <p><span className="font-medium">Carbs:</span> {macroTargets.carbs} g</p>
-              <p><span className="font-medium">Fat:</span> {macroTargets.fat} g</p>
-            </div>
-          </div>
-        )}
-      </section>
+      {/* Modals */}
+      <FoodSearchModal
+        isOpen={isSearchModalOpen}
+        onClose={() => setIsSearchModalOpen(false)}
+        mealType={activeMealType}
+        customFoods={state.customFoods}
+        recipes={state.recipes}
+        onLogFood={handleLogFood}
+        onLogMultipleFoods={handleLogMultipleFoods}
+        onOpenCustomModal={() => {
+          setIsSearchModalOpen(false);
+          setIsCustomModalOpen(true);
+        }}
+      />
 
-      {/* ---- Food Diary ---- */}
-      <section className="border p-4 rounded-xl bg-white dark:bg-espresso-850 shadow-subtle">
-        <h2 className="font-serif text-2xl mb-4 text-espresso-950 dark:text-ivory-50">Food Diary</h2>
-        <button
-          onClick={addDemoFood}
-          className="mb-4 px-3 py-1 bg-terracotta-600 hover:bg-terracotta-700 text-white rounded"
-        >
-          + Add Demo Food
-        </button>
-        {entries.length === 0 ? (
-          <p className="text-sm text-espresso-600 dark:text-espresso-300 italic">No food logged for this day.</p>
-        ) : (
-          <ul className="space-y-2">
-            {entries.map((e) => (
-              <li key={e.id} className="p-2 border rounded bg-ivory-50 dark:bg-espresso-950">
-                <div className="flex justify-between">
-                  <span className="font-medium text-espresso-950 dark:text-ivory-100">{e.meal}: {e.name}</span>
-                  <span className="text-sm text-espresso-700 dark:text-espresso-300">{e.calories} kcal</span>
-                </div>
-                <div className="text-xs text-espresso-600 dark:text-espresso-400 mt-1">
-                  {e.protein} P / {e.carbs} C / {e.fat} F
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      <CustomFoodModal
+        isOpen={isCustomModalOpen}
+        onClose={() => setIsCustomModalOpen(false)}
+        onSaveCustomFood={(food) => {
+          addCustomFood(food);
+        }}
+      />
+
+      <FitnessOnboardingModal
+        isOpen={isOnboardingModalOpen}
+        onClose={() => setIsOnboardingModalOpen(false)}
+        currentProfile={profile}
+        onSaveProfile={(updatedProfile: NutritionProfile) => {
+          updateNutritionProfile(updatedProfile);
+        }}
+      />
     </div>
   );
 };

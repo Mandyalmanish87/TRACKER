@@ -5,11 +5,14 @@ export const GymView: React.FC = () => {
 
   return (
     <div className="space-y-6 pb-16">
-      <div className="border-b border-ivory-300 dark:border-espresso-800 pb-4">
-        <h1 className="font-serif text-3xl font-normal text-espresso-950 dark:text-ivory-50">
-          Physical Conditioning & Splits
+      <div className="border-b border-ivory-300 dark:border-espresso-800 pb-6">
+        <span className="text-xs font-mono font-semibold uppercase tracking-wider text-terracotta-600 dark:text-terracotta-400">
+          Physical Conditioning & Recovery
+        </span>
+        <h1 className="font-serif text-3xl sm:text-4xl font-normal text-espresso-950 dark:text-ivory-50 tracking-tight mt-1">
+          Physical Conditioning &amp; Splits
         </h1>
-        <p className="text-xs text-espresso-500 dark:text-espresso-400 mt-1">
+        <p className="text-xs sm:text-sm text-espresso-500 dark:text-espresso-400 mt-1">
           Weekly resistance training routines, working sets, and progressive overload tracking.
         </p>
       </div>
@@ -37,14 +40,14 @@ export const GymView: React.FC = () => {
               ].map((item) => (
                 <div
                   key={item.day}
-                  className="p-2.5 rounded-lg border border-ivory-200 dark:border-espresso-750 bg-white dark:bg-espresso-850 flex items-center justify-between"
+                  className="p-3.5 rounded-xl border border-ivory-200 dark:border-espresso-750 bg-white dark:bg-espresso-850 flex items-center justify-between shadow-subtle"
                 >
                   <div>
                     <span className="font-semibold text-espresso-900 dark:text-ivory-100">
                       {item.day}:
                     </span>{' '}
-                    <span className="text-espresso-600 dark:text-espresso-300">{item.split}</span>
-                    <p className="text-[10px] text-espresso-400 font-mono mt-0.5">{item.focus}</p>
+                    <span className="text-espresso-700 dark:text-ivory-200">{item.split}</span>
+                    <p className="text-[11px] text-espresso-400 dark:text-espresso-500 mt-0.5">{item.focus}</p>
                   </div>
                 </div>
               ))}

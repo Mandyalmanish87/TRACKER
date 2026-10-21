@@ -28,24 +28,27 @@ export const AttendanceView: React.FC = () => {
 
   return (
     <div className="space-y-6 pb-16">
-      <div className="border-b border-ivory-300 dark:border-espresso-800 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="border-b border-ivory-300 dark:border-espresso-800 pb-6 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
-          <h1 className="font-serif text-3xl font-normal text-espresso-950 dark:text-ivory-50">
+          <span className="text-xs font-mono font-semibold uppercase tracking-wider text-terracotta-600 dark:text-terracotta-400">
+            Strategic Margin & Schedule
+          </span>
+          <h1 className="font-serif text-3xl sm:text-4xl font-normal text-espresso-950 dark:text-ivory-50 tracking-tight mt-1">
             Attendance & Schedule Tracking
           </h1>
-          <p className="text-xs text-espresso-500 dark:text-espresso-400 mt-1">
+          <p className="text-xs sm:text-sm text-espresso-500 dark:text-espresso-400 mt-1">
             Global threshold: {targetRequirement}% · Monitor institutional records, margins, and mark classes on your calendar.
           </p>
         </div>
 
         {/* View Switcher: Calendar vs Analytics */}
-        <div className="flex items-center p-1 bg-ivory-100 dark:bg-espresso-800 rounded-xl border border-ivory-200 dark:border-espresso-700 shrink-0 self-start sm:self-auto">
+        <div className="flex items-center p-1 bg-ivory-100 dark:bg-espresso-800 rounded-xl border border-ivory-300 dark:border-espresso-700 shrink-0 self-start sm:self-auto">
           <button
             onClick={() => setActiveTab('calendar')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+            className={`flex items-center gap-1.5 px-3.5 sm:px-4 py-1.5 rounded-lg text-xs font-medium transition ${
               activeTab === 'calendar'
                 ? 'bg-white dark:bg-espresso-700 text-espresso-950 dark:text-ivory-50 shadow-subtle'
-                : 'text-espresso-500 dark:text-espresso-400 hover:text-espresso-800 dark:hover:text-ivory-200'
+                : 'text-espresso-600 dark:text-espresso-300 hover:text-espresso-900 dark:hover:text-ivory-100'
             }`}
           >
             <Calendar className="w-3.5 h-3.5" />
@@ -53,10 +56,10 @@ export const AttendanceView: React.FC = () => {
           </button>
           <button
             onClick={() => setActiveTab('analytics')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+            className={`flex items-center gap-1.5 px-3.5 sm:px-4 py-1.5 rounded-lg text-xs font-medium transition ${
               activeTab === 'analytics'
                 ? 'bg-white dark:bg-espresso-700 text-espresso-950 dark:text-ivory-50 shadow-subtle'
-                : 'text-espresso-500 dark:text-espresso-400 hover:text-espresso-800 dark:hover:text-ivory-200'
+                : 'text-espresso-600 dark:text-espresso-300 hover:text-espresso-900 dark:hover:text-ivory-100'
             }`}
           >
             <BarChart3 className="w-3.5 h-3.5" />

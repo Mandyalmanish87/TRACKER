@@ -8,11 +8,24 @@ export default {
   theme: {
     extend: {
       fontFamily: {
+        jb: ['"Syne"', '"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
+        display: ['"Syne"', '"Space Grotesk"', 'sans-serif'],
         serif: ['"Playfair Display"', 'Georgia', 'Cambria', 'serif'],
         sans: ['"Plus Jakarta Sans"', 'Inter', 'system-ui', 'sans-serif'],
         mono: ['"JetBrains Mono"', 'Menlo', 'monospace'],
       },
       colors: {
+        jb: {
+          yellow: '#FFE600',
+          yellowShade: '#E5CF00',
+          blue: '#2B38FF',
+          blueShade: '#1F2BBF',
+          pink: '#FF3B81',
+          cream: '#F8F6F0',
+          creamShade: '#EDE9DF',
+          black: '#111111',
+          darkSurface: '#161618',
+        },
         ivory: {
           50: '#FDFCF9',
           100: '#FAF7F2',

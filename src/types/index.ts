@@ -44,14 +44,32 @@ export interface AttendanceLog {
   isPlanned?: boolean;
 }
 
+export type SessionStatus = 'completed' | 'interrupted' | 'cancelled';
+
 export interface StudySession {
   id: string;
   subjectId?: string;
   subjectName?: string;
-  durationMinutes: number;
+  durationMinutes: number; // actual focused duration in minutes
+  plannedDurationMinutes?: number; // target planned duration if timed
   timestamp: string; // ISO string
+  startTime?: string; // ISO string
+  endTime?: string; // ISO string
+  status?: SessionStatus;
   notes?: string;
   isSample?: boolean;
+}
+
+export interface ActiveTimerState {
+  mode: 'pomodoro' | 'short_break' | 'long_break' | 'custom';
+  plannedSeconds: number;
+  accumulatedSeconds: number;
+  lastStartedTimestamp: number | null;
+  isRunning: boolean;
+  subjectId?: string;
+  subjectName?: string;
+  notes?: string;
+  sessionStartedAt?: string;
 }
 
 export interface GymExerciseSet {
@@ -276,4 +294,312 @@ export interface AppStateData {
   occurrenceOverrides?: OccurrenceOverride[];
   // Extra classes (one-off additions)
   extraClasses?: ExtraClass[];
+  // Milestone 5: Study Planner, Spaced Repetition & Daily Questions
+  tasks?: PlannerTask[];
+  spacedReviews?: SpacedReview[];
+  dailyQuestions?: DailyQuestionEntry[];
+  dailyQuestionTarget?: number;
+  reviewIntervals?: number[];
+  // Milestone 7: Gym & Nutrition
+  foodDiaryEntries?: FoodDiaryEntry[];
+  customFoods?: CustomFood[];
+  recipes?: Recipe[];
+  weightLogs?: WeightLogEntry[];
+  nutritionProfile?: NutritionProfile;
+  // Milestone 8: Focus Radio & Custom Playlists
+  radioUrls?: RadioUrl[];
+  radioQueue?: RadioUrl[];
+  radioLoopMode?: RadioLoopMode;
+  radioIsShuffle?: boolean;
+  customPlaylists?: CustomPlaylist[];
+  // Milestone 6: Mock-Test Analytics & Error Log
+  mockTests?: MockTest[];
+  errorLogs?: ErrorLogEntry[];
+  // Events & Tasks Calendar Module
+  events?: CalendarEvent[];
 }
+
+// ----- Events & Tasks Calendar Types -----
+export type EventCategory =
+  | 'exam'
+  | 'deadline'
+  | 'task'
+  | 'holiday'
+  | 'college_event'
+  | 'personal_event'
+  | 'reminder';
+
+export type EventPriority = 'high' | 'medium' | 'low';
+
+export type ExamType = 'mid_sem' | 'end_sem' | 'practical' | 'viva' | 'quiz' | 'other';
+
+export interface CalendarEvent {
+  id: string;
+  title: string;
+  category: EventCategory;
+  date: string; // YYYY-MM-DD
+  endDate?: string; // YYYY-MM-DD
+  startTime?: string; // HH:MM (24h)
+  endTime?: string;   // HH:MM (24h)
+  isAllDay?: boolean;
+  description?: string;
+  location?: string;
+  priority?: EventPriority;
+  reminderNoticeMinutes?: number;
+  linkUrl?: string;
+  isCompleted?: boolean;
+  status?: TaskStatus;
+  subjectId?: string;
+  examType?: ExamType;
+  linkedEntity?: string;
+  createdAt: string;
+  completedAt?: string;
+  isSample?: boolean;
+}
+
+// ----- Milestone 5 Types -----
+export type TaskStatus = 'todo' | 'in_progress' | 'done';
+export type TaskPriority = 'low' | 'medium' | 'high';
+
+export interface PlannerTask {
+  id: string;
+  title: string;
+  description?: string;
+  status: TaskStatus;
+  priority: TaskPriority;
+  subjectId?: string;
+  syllabusSubjectId?: string;
+  syllabusChapterId?: string;
+  syllabusTopicId?: string;
+  dueDate?: string; // YYYY-MM-DD
+  dueTime?: string; // HH:mm (24h)
+  estimatedDuration?: number; // minutes
+  notes?: string;
+  errorLogId?: string; // Link to ErrorLogEntry if created from error log
+  createdAt: string; // ISO string
+  completedAt?: string; // ISO string
+  isSample?: boolean;
+}
+
+export interface SpacedReviewHistoryItem {
+  reviewedAt: string; // ISO string
+  nextDueDate: string; // YYYY-MM-DD
+}
+
+export interface SpacedReview {
+  id: string;
+  syllabusTopicId: string;
+  syllabusSubjectId?: string;
+  syllabusChapterId?: string;
+  topicName?: string;
+  dueDate: string; // YYYY-MM-DD local calendar date
+  intervalDays: number;
+  repetitionLevel: number;
+  isCompleted?: boolean;
+  completedAt?: string; // ISO string
+  history?: SpacedReviewHistoryItem[];
+  notes?: string;
+  isSample?: boolean;
+}
+
+export interface DailyQuestionEntry {
+  id: string;
+  date: string; // YYYY-MM-DD local calendar date
+  subjectId?: string;
+  subjectName?: string;
+  attempted: number; // integer >= 0
+  correct: number;   // integer >= 0, <= attempted
+  notes?: string;
+  createdAt: string; // ISO string
+  isSample?: boolean;
+}
+
+// ----- Milestone 7: Gym & Nutrition Types -----
+export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snacks' | 'pre_workout' | 'post_workout';
+export type FoodServingUnit = 'g' | 'ml' | 'piece' | 'cup' | 'tbsp' | 'serving';
+
+export interface FoodItem {
+  id: string;
+  name: string;
+  category: 'Grains & Cereals' | 'Dairy & Eggs' | 'Legumes & Pulses' | 'Poultry & Meat' | 'Vegetables' | 'Fruits' | 'Nuts & Seeds' | 'Fats & Oils' | 'Snacks & Beverages' | 'Supplements' | 'Custom';
+  servingSize: number;
+  servingUnit: FoodServingUnit;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  fiber?: number;
+  sugar?: number;
+  sodium?: number;
+  saturatedFat?: number;
+  potassium?: number;
+  isCustom?: boolean;
+  notes?: string;
+}
+
+export interface CustomFood extends FoodItem {
+  isCustom: true;
+  createdAt: string; // ISO string
+  isSample?: boolean;
+}
+
+export interface RecipeIngredient {
+  foodId: string;
+  foodName: string;
+  quantity: number;
+  servingUnit: FoodServingUnit;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+}
+
+export interface Recipe {
+  id: string;
+  name: string;
+  ingredients: RecipeIngredient[];
+  totalServings: number;
+  caloriesPerServing: number;
+  proteinPerServing: number;
+  carbsPerServing: number;
+  fatPerServing: number;
+  notes?: string;
+  createdAt: string;
+  isSample?: boolean;
+}
+
+export interface FoodDiaryEntry {
+  id: string;
+  date: string; // YYYY-MM-DD local calendar date
+  mealType: MealType;
+  foodId?: string;
+  name: string;
+  quantity: number;
+  servingUnit: FoodServingUnit;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  fiber?: number;
+  sugar?: number;
+  sodium?: number;
+  lastEditedAt: string; // ISO string
+  isSample?: boolean;
+}
+
+export interface WeightLogEntry {
+  id: string;
+  date: string; // YYYY-MM-DD local calendar date (one per day)
+  weightKg: number;
+  notes?: string;
+  isSample?: boolean;
+}
+
+export type FitnessGoal = 'bulk' | 'cut' | 'maintain';
+export type BiologicalSex = 'male' | 'female' | 'prefer_not_to_say';
+export type ActivityLevel = 'sedentary' | 'light' | 'moderate' | 'very' | 'extra';
+
+export interface MacroTargets {
+  protein: number; // in grams
+  carbs: number;   // in grams
+  fat: number;     // in grams
+  calories: number; // in kcal
+  isManualOverride?: boolean;
+}
+
+export interface NutritionProfile {
+  goal: FitnessGoal;
+  age?: number;
+  heightCm?: number;
+  weightKg?: number;
+  sex?: BiologicalSex;
+  activityLevel?: ActivityLevel;
+  calorieAdjustment?: number; // e.g. +300 for bulk, -300 for cut
+  calculatedBmr?: number;
+  calculatedTdee?: number;
+  targetCalories: number;
+  macroTargets: MacroTargets;
+  waterTargetMl?: number;
+  enabledMealTypes?: MealType[];
+  updatedAt: string;
+}
+
+// ----- Milestone 8: Focus Radio -----
+export type RadioLoopMode = 'off' | 'all' | 'one';
+
+export interface RadioUrl {
+  id: string;
+  label: string;    // user-given name
+  url: string;      // original YouTube URL (display purposes)
+  embedUrl: string; // precomputed embed src URL
+  addedAt: string;  // ISO string
+  type?: 'video' | 'playlist';
+}
+
+export interface CustomPlaylistItem {
+  id: string;
+  title: string;
+  url: string;
+  videoId: string;
+  addedAt: string;
+}
+
+export interface CustomPlaylist {
+  id: string;
+  name: string;
+  description?: string;
+  items: CustomPlaylistItem[];
+  createdAt: string;
+  youtubePlaylistUrl?: string; // Optional: direct YouTube playlist URL
+  youtubePlaylistId?: string;  // Optional: playlist id (e.g. PL...)
+  type?: 'custom' | 'youtube'; // 'youtube' if created directly from YT playlist link
+}
+
+// ----- Milestone 6: Mock-Test Analytics & Error Log Types -----
+export type ErrorType = 'conceptual' | 'calculation' | 'silly' | 'formula';
+
+export interface ErrorLogEntry {
+  id: string;
+  title: string;
+  subjectId: string;
+  syllabusChapterId?: string;
+  syllabusTopicId?: string;
+  mockTestId?: string;
+  errorType: ErrorType;
+  description?: string;
+  correctApproach?: string;
+  reviewedCount: number;
+  lastReviewedAt?: string; // ISO string
+  resolved?: boolean;
+  createdAt: string; // ISO string
+  isSample?: boolean;
+}
+
+export interface MockTestSubjectScore {
+  subjectId: string;
+  score: number;
+  maxMarks: number;
+  questionsAttempted: number;
+  questionsCorrect: number;
+}
+
+export interface MockTest {
+  id: string;
+  title: string;
+  category: string; // e.g. "Full Length Mock", "Chapter Test", "Semester Exam"
+  date: string; // YYYY-MM-DD
+  totalScore: number;
+  maxMarks: number;
+  questionsAttempted: number;
+  questionsCorrect: number;
+  subjectScores?: MockTestSubjectScore[];
+  notes?: string;
+  createdAt: string; // ISO string
+  isSample?: boolean;
+}
+
+
+
+
+
+

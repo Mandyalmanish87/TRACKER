@@ -204,39 +204,39 @@ export const AttendanceCalendarTab: React.FC = () => {
           <button
             onClick={handleToday}
             aria-label="Attendance calendar today"
-            className="px-3 py-1.5 rounded-xl text-xs font-semibold border border-ivory-300 dark:border-espresso-700 hover:bg-ivory-100 dark:hover:bg-espresso-800"
+            className="px-3.5 py-1.5 rounded-xl text-xs font-medium border border-ivory-300 dark:border-espresso-700 hover:bg-ivory-50 dark:hover:bg-espresso-800 transition"
           >
             Today
           </button>
-          <div className="flex items-center border border-ivory-300 dark:border-espresso-700 rounded-xl overflow-hidden">
+          <div className="flex items-center border border-ivory-300 dark:border-espresso-700 rounded-xl overflow-hidden bg-ivory-100 dark:bg-espresso-800">
             <button
               onClick={handlePrev}
-              className="p-1.5 text-espresso-600 dark:text-ivory-200 hover:bg-ivory-100"
+              className="p-1.5 text-espresso-600 dark:text-espresso-300 hover:bg-ivory-200 dark:hover:bg-espresso-700 transition"
               title="Previous"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
             <button
               onClick={handleNext}
-              className="p-1.5 text-espresso-600 dark:text-ivory-200 hover:bg-ivory-100 border-l border-ivory-300 dark:border-espresso-700"
+              className="p-1.5 text-espresso-600 dark:text-espresso-300 hover:bg-ivory-200 dark:hover:bg-espresso-700 border-l border-ivory-300 dark:border-espresso-700 transition"
               title="Next"
             >
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>
-          <h3 className="font-serif text-base sm:text-lg font-bold text-espresso-950 dark:text-ivory-50">
+          <h3 className="font-serif text-lg sm:text-xl font-bold text-espresso-950 dark:text-ivory-50 tracking-tight">
             {headerTitle}
           </h3>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
           {/* Subject Filter Dropdown */}
-          <div className="flex items-center gap-1 text-xs">
-            <Filter className="w-3.5 h-3.5 text-espresso-400" />
+          <div className="flex items-center gap-1.5 text-xs font-mono font-semibold uppercase tracking-wider text-espresso-500 dark:text-espresso-400">
+            <Filter className="w-3.5 h-3.5" />
             <select
               value={selectedSubjectFilter}
               onChange={(e) => setSelectedSubjectFilter(e.target.value)}
-              className="px-2.5 py-1.5 rounded-xl border border-ivory-300 dark:border-espresso-700 bg-white dark:bg-espresso-800 text-xs text-espresso-900 dark:text-ivory-100"
+              className="px-3 py-1.5 rounded-xl border border-ivory-300 dark:border-espresso-700 bg-ivory-50 dark:bg-espresso-800 text-xs font-mono text-espresso-900 dark:text-ivory-100 focus:outline-none"
             >
               <option value="all">All Courses</option>
               {state.subjects.map((s) => (
@@ -248,23 +248,23 @@ export const AttendanceCalendarTab: React.FC = () => {
           </div>
 
           {/* Month / Week Toggle */}
-          <div className="flex items-center p-1 bg-ivory-100 dark:bg-espresso-800 rounded-xl border border-ivory-200 dark:border-espresso-700">
+          <div className="flex items-center p-1 bg-ivory-100 dark:bg-espresso-800 rounded-xl border border-ivory-300 dark:border-espresso-700">
             <button
               onClick={() => setCalendarView('month')}
-              className={`px-3 py-1 rounded-lg text-xs font-semibold capitalize transition ${
+              className={`px-3.5 sm:px-4 py-1.5 rounded-lg text-xs font-medium transition ${
                 calendarView === 'month'
                   ? 'bg-white dark:bg-espresso-700 text-espresso-950 dark:text-ivory-50 shadow-subtle'
-                  : 'text-espresso-500'
+                  : 'text-espresso-600 dark:text-espresso-300 hover:text-espresso-900 dark:hover:text-ivory-100'
               }`}
             >
               Month
             </button>
             <button
               onClick={() => setCalendarView('week')}
-              className={`px-3 py-1 rounded-lg text-xs font-semibold capitalize transition ${
+              className={`px-3.5 sm:px-4 py-1.5 rounded-lg text-xs font-medium transition ${
                 calendarView === 'week'
                   ? 'bg-white dark:bg-espresso-700 text-espresso-950 dark:text-ivory-50 shadow-subtle'
-                  : 'text-espresso-500'
+                  : 'text-espresso-600 dark:text-espresso-300 hover:text-espresso-900 dark:hover:text-ivory-100'
               }`}
             >
               Week
@@ -275,8 +275,8 @@ export const AttendanceCalendarTab: React.FC = () => {
 
       {/* Month View Grid */}
       {calendarView === 'month' && (
-        <div className="rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 shadow-subtle overflow-hidden">
-          <div className="grid grid-cols-7 border-b border-ivory-200 dark:border-espresso-800 bg-ivory-50/70 dark:bg-espresso-900/60 text-center font-mono text-[11px] font-bold text-espresso-600 dark:text-espresso-400 py-2 uppercase">
+        <div className="rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-900 shadow-subtle overflow-hidden">
+          <div className="grid grid-cols-7 border-b border-ivory-300 dark:border-espresso-750 bg-ivory-100/70 dark:bg-espresso-850/70 text-center font-mono text-xs font-semibold text-espresso-600 dark:text-ivory-300 py-2.5 uppercase tracking-wider">
             {DAYS_OF_WEEK.map((d) => (
               <span key={d.id}>{d.short}</span>
             ))}

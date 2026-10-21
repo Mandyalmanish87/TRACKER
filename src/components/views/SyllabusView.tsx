@@ -14,11 +14,18 @@ import {
   Calendar,
   X,
   Sparkles,
+  ListTodo,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { SyllabusSubject, TopicStatus, Subtopic } from '../../types';
 import { ConfirmModal } from '../common/ConfirmModal';
 import { GptSyllabusImportModal } from '../syllabus/GptSyllabusImportModal';
+import { TaskModal } from '../planner/TaskModal';
+import { hasActiveReviewForTopic, DEFAULT_REVIEW_INTERVALS } from '../../utils/spacedRepetitionUtils';
+
+export interface SyllabusViewProps {
+  onNavigateToPlanner?: () => void;
+}
 
 const STATUS_CONFIG: Record<
   TopicStatus,
@@ -66,7 +73,7 @@ const SUBJECT_COLORS = [
   '#4A5568', // Slate
 ];
 
-export const SyllabusView: React.FC = () => {
+export const SyllabusView: React.FC<SyllabusViewProps> = ({ onNavigateToPlanner }) => {
   const {
     state,
     addSyllabusSubject,
@@ -80,6 +87,7 @@ export const SyllabusView: React.FC = () => {
     deleteSubtopic,
     setTopicStatus,
     incrementRevision,
+    addSpacedReview,
   } = useApp();
 
   const subjects = state.syllabusSubjects || [];
@@ -122,6 +130,23 @@ export const SyllabusView: React.FC = () => {
 
   // GPT Syllabus Import modal
   const [isGptImportModalOpen, setIsGptImportModalOpen] = useState(false);
+
+  // Milestone 5: Planner task modal state
+  const [taskModalTopic, setTaskModalTopic] = useState<{
+    topicId: string;
+    chapterId: string;
+    subjectId: string;
+    topicName: string;
+  } | null>(null);
+
+  // Milestone 5: Spaced review prompt modal state
+  const [reviewPromptTopic, setReviewPromptTopic] = useState<{
+    topicId: string;
+    chapterId: string;
+    subjectId: string;
+    topicName: string;
+  } | null>(null);
+  const [reviewPromptInterval, setReviewPromptInterval] = useState<number>(1);
 
   // In-app confirm modal state (replacing window.confirm)
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -300,32 +325,32 @@ export const SyllabusView: React.FC = () => {
   return (
     <div className="space-y-6 pb-20">
       {/* ── Header ── */}
-      <div className="border-b border-ivory-300 dark:border-espresso-800 pb-5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="border-b border-ivory-300 dark:border-espresso-800 pb-6">
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
           <div>
-            <p className="text-xs uppercase tracking-widest font-mono font-semibold mb-1" style={{ color: 'var(--accent)' }}>
+            <span className="text-xs font-mono font-semibold uppercase tracking-wider text-terracotta-600 dark:text-terracotta-400">
               Curriculum Mastery
-            </p>
-            <h1 className="font-serif text-3xl sm:text-4xl font-normal text-espresso-950 dark:text-ivory-50">
+            </span>
+            <h1 className="font-serif text-3xl sm:text-4xl font-normal text-espresso-950 dark:text-ivory-50 tracking-tight mt-1">
               Syllabus Tracker
             </h1>
-            <p className="text-xs text-espresso-500 dark:text-espresso-400 mt-1">
+            <p className="text-xs sm:text-sm text-espresso-500 dark:text-espresso-400 mt-1">
               Track chapter coverage, revisions, and preparation targets with zero guesswork.
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2.5">
             <button
               onClick={() => setIsGptImportModalOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-white dark:bg-espresso-850 border border-ivory-300 dark:border-espresso-700 text-espresso-800 dark:text-ivory-100 hover:bg-ivory-100 dark:hover:bg-espresso-800 shadow-subtle transition"
+              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-white dark:bg-espresso-850 border border-ivory-300 dark:border-espresso-700 text-espresso-800 dark:text-ivory-100 hover:bg-ivory-50 dark:hover:bg-espresso-800 shadow-subtle transition"
             >
-              <Sparkles className="w-3.5 h-3.5 text-ochre-600 dark:text-ochre-400" />
+              <Sparkles className="w-3.5 h-3.5 text-terracotta-600 dark:text-terracotta-400" />
               <span>Import Syllabus with GPT</span>
             </button>
 
             <button
               onClick={() => setShowAddSubjectModal(true)}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-white text-xs font-semibold hover:opacity-95 transition shadow-subtle"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold text-white shadow-subtle transition hover:opacity-95"
               style={{ backgroundColor: 'var(--accent)' }}
             >
               <Plus className="w-4 h-4" /> Add Subject
@@ -335,16 +360,16 @@ export const SyllabusView: React.FC = () => {
       </div>
 
       {/* ── Overall Progress Summary Card ── */}
-      <div className="p-5 sm:p-6 rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 shadow-subtle">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="space-y-1">
+      <div className="p-6 rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 shadow-subtle">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div className="space-y-1.5">
             <div className="flex items-center gap-2">
-              <BookOpen className="w-4 h-4" style={{ color: 'var(--accent)' }} />
-              <span className="font-mono text-xs uppercase tracking-wider text-espresso-600 dark:text-espresso-300 font-semibold">
+              <BookOpen className="w-4 h-4 text-terracotta-600 dark:text-terracotta-400" />
+              <span className="font-mono text-xs uppercase tracking-wider text-espresso-500 dark:text-espresso-400 font-semibold">
                 Overall Syllabus Progress
               </span>
             </div>
-            <div className="flex items-baseline gap-2">
+            <div className="flex items-baseline gap-3">
               <span className="font-serif text-3xl sm:text-4xl font-bold tabular-nums text-espresso-950 dark:text-ivory-50">
                 {overallStats.percentage}%
               </span>
@@ -355,27 +380,27 @@ export const SyllabusView: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
-            <div className="px-3 py-2 rounded-xl bg-ivory-100 dark:bg-espresso-800 border border-ivory-200 dark:border-espresso-700">
-              <span className="block font-mono text-lg font-bold text-espresso-900 dark:text-ivory-100">{overallStats.total}</span>
-              <span className="text-[11px] text-espresso-500 dark:text-espresso-400">Total Topics</span>
+            <div className="px-4 py-2.5 rounded-xl bg-ivory-100 dark:bg-espresso-800 border border-ivory-200 dark:border-espresso-700">
+              <span className="block font-serif text-xl font-bold text-espresso-950 dark:text-ivory-50">{overallStats.total}</span>
+              <span className="text-[10px] font-mono uppercase tracking-wider text-espresso-400">Total Topics</span>
             </div>
-            <div className="px-3 py-2 rounded-xl bg-sage-50 dark:bg-sage-900/20 border border-sage-200 dark:border-sage-800/40">
-              <span className="block font-mono text-lg font-bold text-sage-700 dark:text-sage-300">{overallStats.done}</span>
-              <span className="text-[11px] text-sage-600 dark:text-sage-400">Mastered</span>
+            <div className="px-4 py-2.5 rounded-xl bg-sage-50 dark:bg-sage-900/30 border border-sage-200 dark:border-sage-800/40">
+              <span className="block font-serif text-xl font-bold text-sage-600 dark:text-sage-400">{overallStats.done}</span>
+              <span className="text-[10px] font-mono uppercase tracking-wider text-sage-700 dark:text-sage-300">Mastered</span>
             </div>
-            <div className="px-3 py-2 rounded-xl bg-ochre-50 dark:bg-ochre-900/20 border border-ochre-200 dark:border-ochre-800/40">
-              <span className="block font-mono text-lg font-bold text-ochre-700 dark:text-ochre-300">{overallStats.inProgress}</span>
-              <span className="text-[11px] text-ochre-600 dark:text-ochre-400">In Progress</span>
+            <div className="px-4 py-2.5 rounded-xl bg-ochre-50 dark:bg-ochre-900/30 border border-ochre-200 dark:border-ochre-800/40">
+              <span className="block font-serif text-xl font-bold text-ochre-600 dark:text-ochre-400">{overallStats.inProgress}</span>
+              <span className="text-[10px] font-mono uppercase tracking-wider text-ochre-700 dark:text-ochre-300">In Progress</span>
             </div>
-            <div className="px-3 py-2 rounded-xl bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800/40">
-              <span className="block font-mono text-lg font-bold text-rose-700 dark:text-rose-300">{overallStats.revisionNeeded}</span>
-              <span className="text-[11px] text-rose-600 dark:text-rose-400">Needs Revision</span>
+            <div className="px-4 py-2.5 rounded-xl bg-rose-50 dark:bg-rose-900/30 border border-rose-200 dark:border-rose-800/40">
+              <span className="block font-serif text-xl font-bold text-rose-600 dark:text-rose-400">{overallStats.revisionNeeded}</span>
+              <span className="text-[10px] font-mono uppercase tracking-wider text-rose-700 dark:text-rose-300">Needs Revision</span>
             </div>
           </div>
         </div>
 
         {/* Global Progress Bar */}
-        <div className="w-full bg-ivory-200 dark:bg-espresso-800 h-2.5 rounded-full overflow-hidden mt-5">
+        <div className="w-full bg-ivory-200 dark:bg-espresso-800 h-2 rounded-full overflow-hidden mt-6">
           <div
             className="h-full rounded-full transition-all duration-300"
             style={{ width: `${overallStats.percentage}%`, backgroundColor: 'var(--accent)' }}
@@ -386,18 +411,18 @@ export const SyllabusView: React.FC = () => {
       {/* ── Search & Filter Controls ── */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
         <div className="relative flex-1 max-w-md">
-          <Search className="w-4 h-4 text-espresso-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+          <Search className="w-4 h-4 text-black/40 dark:text-white/40 absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search subjects, chapters, or topics…"
-            className="w-full pl-9 pr-3.5 py-2 rounded-xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 text-xs text-espresso-900 dark:text-ivory-100 placeholder:text-espresso-400 dark:placeholder:text-espresso-500 focus:outline-none focus:ring-2 focus:ring-terracotta-400"
+            className="w-full pl-10 pr-4 py-2 rounded-full border border-black/10 dark:border-white/10 bg-white dark:bg-[#161618] text-xs font-mono text-[#111111] dark:text-[#F8F6F0] placeholder:text-black/40 dark:placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-[#2B38FF]"
           />
           {searchQuery && (
             <button
               onClick={() => setSearchQuery('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-espresso-400 hover:text-espresso-600"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-black/40 hover:text-black dark:text-white/40 dark:hover:text-white"
             >
               <X className="w-3.5 h-3.5" />
             </button>
@@ -405,7 +430,7 @@ export const SyllabusView: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
-          <span className="text-[11px] font-mono uppercase text-espresso-400 dark:text-espresso-500 hidden sm:inline mr-1">
+          <span className="text-[11px] font-mono uppercase font-bold text-black/40 dark:text-white/40 hidden sm:inline mr-1">
             Filter:
           </span>
           {(['all', 'in_progress', 'done', 'revision_needed', 'deadlines'] as const).map((filter) => {
@@ -421,10 +446,10 @@ export const SyllabusView: React.FC = () => {
               <button
                 key={filter}
                 onClick={() => setStatusFilter(filter)}
-                className={`text-xs px-3 py-1.5 rounded-xl border font-medium whitespace-nowrap transition ${
+                className={`text-xs px-3.5 py-1.5 rounded-xl border transition ${
                   isSelected
-                    ? 'border-espresso-800 dark:border-ivory-300 bg-espresso-900 text-ivory-50 dark:bg-ivory-100 dark:text-espresso-950 font-semibold shadow-subtle'
-                    : 'border-ivory-300 dark:border-espresso-700 bg-white/70 dark:bg-espresso-850 text-espresso-700 dark:text-espresso-300 hover:bg-ivory-100'
+                    ? 'border-espresso-900 bg-espresso-900 text-ivory-50 dark:border-ivory-100 dark:bg-ivory-100 dark:text-espresso-950 font-bold shadow-subtle'
+                    : 'border-ivory-300 dark:border-espresso-700 bg-white/70 dark:bg-espresso-850 text-espresso-700 dark:text-ivory-200 hover:bg-ivory-100 dark:hover:bg-espresso-800'
                 }`}
               >
                 {label}
@@ -689,6 +714,10 @@ export const SyllabusView: React.FC = () => {
                             ) : (
                               filteredTopics.map((topic) => {
                                 const cfg = STATUS_CONFIG[topic.status];
+                                const topicTasks = (state.tasks || []).filter((t) => t.syllabusTopicId === topic.id);
+                                const activeReview = (state.spacedReviews || []).find(
+                                  (r) => r.syllabusTopicId === topic.id && !r.isCompleted
+                                );
 
                                 return (
                                   <div
@@ -702,9 +731,18 @@ export const SyllabusView: React.FC = () => {
                                     {/* Topic Title & Status Clicker */}
                                     <div className="flex items-start gap-2.5 flex-1 min-w-0">
                                       <button
-                                        onClick={() =>
-                                          setTopicStatus(activeSubject.id, chapter.id, topic.id, NEXT_STATUS[topic.status])
-                                        }
+                                        onClick={() => {
+                                          const nextSt = NEXT_STATUS[topic.status];
+                                          setTopicStatus(activeSubject.id, chapter.id, topic.id, nextSt);
+                                          if (nextSt === 'done' && !hasActiveReviewForTopic(state.spacedReviews || [], topic.id)) {
+                                            setReviewPromptTopic({
+                                              topicId: topic.id,
+                                              chapterId: chapter.id,
+                                              subjectId: activeSubject.id,
+                                              topicName: topic.name,
+                                            });
+                                          }
+                                        }}
                                         className="mt-0.5 p-1 rounded-lg hover:bg-ivory-200 dark:hover:bg-espresso-750 transition shrink-0"
                                         title={`Status: ${cfg.label}. Click to cycle: Not Started → In Progress → Done → Revision Needed`}
                                       >
@@ -729,7 +767,60 @@ export const SyllabusView: React.FC = () => {
                                     </div>
 
                                     {/* Metadata & Actions */}
-                                    <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+                                    <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 self-end sm:self-center shrink-0">
+                                      {/* Linked Tasks Pill */}
+                                      {topicTasks.length > 0 && (
+                                        <button
+                                          onClick={() => onNavigateToPlanner && onNavigateToPlanner()}
+                                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border border-ivory-200 dark:border-espresso-750 text-[10px] font-mono font-medium text-espresso-600 dark:text-espresso-300 hover:bg-ivory-100 dark:hover:bg-espresso-800"
+                                          title="View tasks in Planner"
+                                        >
+                                          <ListTodo className="w-2.5 h-2.5" />
+                                          <span>{topicTasks.length} task{topicTasks.length !== 1 ? 's' : ''}</span>
+                                        </button>
+                                      )}
+
+                                      {/* Create Task Button */}
+                                      <button
+                                        onClick={() =>
+                                          setTaskModalTopic({
+                                            topicId: topic.id,
+                                            chapterId: chapter.id,
+                                            subjectId: activeSubject.id,
+                                            topicName: topic.name,
+                                          })
+                                        }
+                                        className="p-1 rounded-lg text-espresso-400 hover:text-espresso-700 dark:hover:text-ivory-200 hover:bg-ivory-100 dark:hover:bg-espresso-750 transition"
+                                        title="Create Planner task for this topic"
+                                      >
+                                        <ListTodo className="w-3.5 h-3.5" />
+                                      </button>
+
+                                      {/* Spaced Review Button / Badge */}
+                                      {activeReview ? (
+                                        <span
+                                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-mono font-semibold bg-ochre-50 dark:bg-ochre-950/40 text-ochre-700 dark:text-ochre-300 border border-ochre-200 dark:border-ochre-900"
+                                          title={`Active spaced review due on ${activeReview.dueDate}`}
+                                        >
+                                          Rev: {activeReview.dueDate}
+                                        </span>
+                                      ) : (
+                                        <button
+                                          onClick={() =>
+                                            setReviewPromptTopic({
+                                              topicId: topic.id,
+                                              chapterId: chapter.id,
+                                              subjectId: activeSubject.id,
+                                              topicName: topic.name,
+                                            })
+                                          }
+                                          className="p-1 rounded-lg text-espresso-400 hover:text-ochre-600 dark:hover:text-ochre-400 hover:bg-ochre-50 dark:hover:bg-ochre-950/30 transition"
+                                          title="Schedule Spaced Review"
+                                        >
+                                          <RotateCcw className="w-3.5 h-3.5" />
+                                        </button>
+                                      )}
+
                                       {/* Revision counter pill */}
                                       <button
                                         onClick={() => incrementRevision(activeSubject.id, chapter.id, topic.id)}
@@ -1249,6 +1340,81 @@ export const SyllabusView: React.FC = () => {
         isOpen={isGptImportModalOpen}
         onClose={() => setIsGptImportModalOpen(false)}
       />
+
+      {/* ── Milestone 5: Task Creation Modal pre-filled with Topic ── */}
+      {taskModalTopic && (
+        <TaskModal
+          isOpen={Boolean(taskModalTopic)}
+          onClose={() => setTaskModalTopic(null)}
+          initialTopicId={taskModalTopic.topicId}
+          initialChapterId={taskModalTopic.chapterId}
+          initialSubjectId={taskModalTopic.subjectId}
+        />
+      )}
+
+      {/* ── Milestone 5: Spaced Review Prompt Modal ── */}
+      {reviewPromptTopic && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-espresso-950/60 backdrop-blur-sm">
+          <div className="w-full max-w-sm bg-white dark:bg-espresso-900 rounded-2xl border border-ivory-300 dark:border-espresso-700 p-5 shadow-2xl space-y-4">
+            <h4 className="font-serif text-base font-bold text-espresso-950 dark:text-ivory-50">
+              Schedule Spaced Review
+            </h4>
+            <p className="text-xs text-espresso-600 dark:text-espresso-300">
+              Would you like to schedule an empirical spaced review for <strong>{reviewPromptTopic.topicName}</strong>?
+            </p>
+            <div>
+              <label className="block text-xs font-semibold text-espresso-700 dark:text-ivory-200 mb-1">
+                Starting Interval
+              </label>
+              <select
+                value={reviewPromptInterval}
+                onChange={(e) => setReviewPromptInterval(parseInt(e.target.value, 10))}
+                className="w-full px-3 py-2 text-xs rounded-xl border border-ivory-300 dark:border-espresso-750 bg-ivory-50 dark:bg-espresso-800 text-espresso-950 dark:text-ivory-50"
+              >
+                {(state.reviewIntervals || DEFAULT_REVIEW_INTERVALS).map((days, idx) => (
+                  <option key={days} value={days}>
+                    Step {idx + 1}: in {days} day{days !== 1 ? 's' : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setReviewPromptTopic(null)}
+                className="px-3.5 py-1.5 text-xs rounded-xl border border-ivory-300 dark:border-espresso-750 text-espresso-600 dark:text-espresso-300 hover:bg-ivory-100"
+              >
+                Not Now
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const targetDate = new Date();
+                  targetDate.setDate(targetDate.getDate() + reviewPromptInterval);
+                  const dueDateStr = targetDate.toISOString().split('T')[0];
+
+                  addSpacedReview({
+                    syllabusTopicId: reviewPromptTopic.topicId,
+                    syllabusSubjectId: reviewPromptTopic.subjectId,
+                    syllabusChapterId: reviewPromptTopic.chapterId,
+                    topicName: reviewPromptTopic.topicName,
+                    dueDate: dueDateStr,
+                    intervalDays: reviewPromptInterval,
+                    repetitionLevel: 1,
+                    isCompleted: false,
+                    history: [],
+                  });
+                  setReviewPromptTopic(null);
+                }}
+                className="px-4 py-1.5 text-xs font-semibold rounded-xl text-white shadow-subtle"
+                style={{ backgroundColor: 'var(--accent)' }}
+              >
+                Schedule Review
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

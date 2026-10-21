@@ -33,9 +33,9 @@ export const RemindersWidget: React.FC = () => {
 
   return (
     <Card
-      eyebrow="Priorities & Tasks"
-      title="Daily Action Items"
-      subtitle="Connected academic, fitness, and life commitments"
+      eyebrow="Events & Tasks"
+      title="Upcoming Events & Tasks"
+      subtitle="Academic deadlines, exams, priorities, and daily commitments"
       action={
         <Button
           variant="secondary"

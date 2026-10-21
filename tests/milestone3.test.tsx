@@ -267,7 +267,7 @@ describe('Milestone 3: Syllabus Tracker, Smart Calendar & GPT Timetable Importer
       expect(screen.getByText(/completed/i)).toBeInTheDocument();
 
       // Click the View shortcut on the widget
-      const viewBtn = screen.getByRole('button', { name: /view/i });
+      const viewBtn = screen.getByRole('button', { name: /^view$/i });
       fireEvent.click(viewBtn);
 
       // Should have switched to Syllabus view

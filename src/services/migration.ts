@@ -15,7 +15,12 @@ export function migrateV1ToV2(raw: unknown): AppStateData {
   const subjects = Array.isArray(v1.subjects) ? v1.subjects : [];
   const timetable = Array.isArray(v1.timetable) ? v1.timetable : [];
   const attendanceLogs = Array.isArray(v1.attendanceLogs) ? v1.attendanceLogs : [];
-  const studySessions = Array.isArray(v1.studySessions) ? v1.studySessions : [];
+  const studySessions = Array.isArray(v1.studySessions)
+    ? v1.studySessions.map((s: any) => ({
+        ...s,
+        status: s.status ?? 'completed',
+      }))
+    : [];
   const gymWorkouts = Array.isArray(v1.gymWorkouts) ? v1.gymWorkouts : [];
   const reminders = Array.isArray(v1.reminders) ? v1.reminders : [];
 

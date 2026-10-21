@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import { useTheme } from '../../theme/ThemeContext';
 import { AccentColor, BackgroundStyle, ThemeMode } from '../../types';
@@ -15,6 +15,12 @@ import {
   CalendarClock,
   Clock,
   GraduationCap,
+  RotateCcw,
+  Info,
+  Target,
+  BookOpen,
+  Cloud,
+  RefreshCw,
 } from 'lucide-react';
 
 // ─── Accent Color Catalogue ────────────────────────────────────────────────
@@ -41,14 +47,14 @@ const SectionHeading: React.FC<{ icon: React.ReactNode; title: string; sub?: str
   icon, title, sub,
 }) => (
   <div className="flex items-start gap-3 mb-5">
-    <div className="mt-0.5 p-2 rounded-xl bg-ivory-200 dark:bg-espresso-800 text-espresso-600 dark:text-espresso-300">
+    <div className="mt-0.5 p-2 rounded-xl bg-ivory-100 dark:bg-espresso-800 text-espresso-700 dark:text-espresso-300">
       {icon}
     </div>
     <div>
-      <h2 className="text-sm font-semibold text-espresso-900 dark:text-ivory-100 uppercase tracking-wider font-mono">
+      <h2 className="text-sm font-semibold text-espresso-950 dark:text-ivory-50">
         {title}
       </h2>
-      {sub && <p className="text-xs text-espresso-500 dark:text-espresso-400 mt-0.5">{sub}</p>}
+      {sub && <p className="text-xs text-espresso-400 dark:text-espresso-500 mt-0.5">{sub}</p>}
     </div>
   </div>
 );
@@ -62,9 +68,25 @@ const Card: React.FC<{ children: React.ReactNode; className?: string }> = ({ chi
   </div>
 );
 
+// ─── App Version ──────────────────────────────────────────────────────────────
+const APP_VERSION = '0.8.0';
+
 // ─── Main SettingsView ──────────────────────────────────────────────────────
 export const SettingsView: React.FC = () => {
-  const { state, updateSettings, updateProfile } = useApp();
+  const {
+    state,
+    updateSettings,
+    updateProfile,
+    fullReset,
+    setDailyQuestionTarget,
+    updateReviewIntervals,
+    authUser,
+    syncStatus,
+    lastSyncedAt,
+    signInWithGoogle,
+    signOut,
+    syncNow,
+  } = useApp();
   const { mode, setMode } = useTheme();
 
   const settings = state.settings ?? {
@@ -85,6 +107,20 @@ export const SettingsView: React.FC = () => {
   const [profileSaved, setProfileSaved] = useState(false);
 
   const [customBgUrl, setCustomBgUrl] = useState(settings.customBackgroundUrl ?? '');
+
+  // Full reset state
+  const [resetText, setResetText] = useState('');
+  const [resetDone, setResetDone] = useState(false);
+
+  // Daily question target local state
+  const [questionTarget, setQuestionTarget] = useState(state.dailyQuestionTarget ?? 25);
+  const [qtSaved, setQtSaved] = useState(false);
+
+  // Review intervals local state
+  const DEFAULT_INTERVALS = state.reviewIntervals ?? [1, 3, 7, 14, 30];
+  const [intervalInput, setIntervalInput] = useState(DEFAULT_INTERVALS.join(', '));
+  const [intervalError, setIntervalError] = useState('');
+  const [intervalSaved, setIntervalSaved] = useState(false);
 
   // Keep local state in sync when state loads or updates
   React.useEffect(() => {
@@ -114,25 +150,38 @@ export const SettingsView: React.FC = () => {
     updateSettings({ backgroundStyle: bg });
   };
 
+  const profileTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const qtTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (profileTimeoutRef.current) clearTimeout(profileTimeoutRef.current);
+      if (qtTimeoutRef.current) clearTimeout(qtTimeoutRef.current);
+    };
+  }, []);
+
   const handleSaveProfile = () => {
     updateProfile({
       displayName,
       targetExam,
       examDate: examDate || undefined,
     });
+    if (profileTimeoutRef.current) clearTimeout(profileTimeoutRef.current);
     setProfileSaved(true);
-    setTimeout(() => setProfileSaved(false), 2000);
+    profileTimeoutRef.current = setTimeout(() => {
+      if (typeof window !== 'undefined') setProfileSaved(false);
+    }, 2000);
   };
 
   return (
     <div className="space-y-8 pb-20">
       {/* Page header */}
-      <div className="border-b border-ivory-300 dark:border-espresso-800 pb-5">
-        <p className="text-xs uppercase tracking-widest font-mono font-semibold mb-1.5" style={{ color: 'var(--accent)' }}>
-          Personalisation
-        </p>
-        <div className="flex items-end justify-between gap-3">
-          <h1 className="font-serif text-3xl sm:text-4xl font-normal tracking-tight text-espresso-950 dark:text-ivory-50">
+      <div className="border-b border-ivory-300 dark:border-espresso-800 pb-6">
+        <span className="text-xs font-mono font-semibold uppercase tracking-wider text-terracotta-600 dark:text-terracotta-400">
+          Personalisation &amp; Appearance
+        </span>
+        <div className="flex items-end justify-between gap-3 mt-1">
+          <h1 className="font-serif text-3xl sm:text-4xl font-normal text-espresso-950 dark:text-ivory-50 tracking-tight">
             Settings
           </h1>
           <Settings className="w-6 h-6 text-espresso-400 dark:text-espresso-500 mb-1" />
@@ -140,6 +189,90 @@ export const SettingsView: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+        {/* ── Google Account & Cloud Synchronization ── */}
+        <Card className="lg:col-span-2">
+          <SectionHeading
+            icon={<Cloud className="w-4 h-4" />}
+            title="Google Account & Cloud Synchronization"
+            sub="Sync your timetable, study tasks, and attendance across all devices"
+          />
+
+          {authUser ? (
+            <div className="space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl bg-ivory-100 dark:bg-espresso-800 border border-ivory-200 dark:border-espresso-750">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full overflow-hidden bg-terracotta-100 dark:bg-terracotta-900 text-terracotta-700 dark:text-terracotta-300 font-bold flex items-center justify-center text-sm">
+                    {authUser.avatarUrl ? (
+                      <img src={authUser.avatarUrl} alt={authUser.name || 'User'} className="w-full h-full object-cover" />
+                    ) : (
+                      (authUser.name || authUser.email)[0].toUpperCase()
+                    )}
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-semibold text-espresso-950 dark:text-ivory-50">
+                      {authUser.name || 'Scholar Student'}
+                    </h4>
+                    <p className="text-xs font-mono text-espresso-500 dark:text-ivory-400">
+                      {authUser.email}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="sm:text-right">
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-mono font-semibold bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                    {syncStatus === 'syncing' ? 'Syncing...' : 'Connected'}
+                  </span>
+                  {lastSyncedAt && (
+                    <p className="text-[10px] text-espresso-400 dark:text-ivory-400 font-mono mt-1">
+                      Last sync: {lastSyncedAt.toLocaleTimeString()}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={syncNow}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold bg-terracotta-600 hover:bg-terracotta-700 text-white shadow-subtle transition flex items-center gap-1.5 cursor-pointer"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Sync Cloud Now</span>
+                </button>
+                <button
+                  onClick={signOut}
+                  className="px-4 py-2 rounded-xl text-xs font-medium border border-rose-200 dark:border-rose-900 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition cursor-pointer"
+                >
+                  Sign Out
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="p-4 rounded-xl bg-ivory-100/70 dark:bg-espresso-800/70 border border-ivory-200 dark:border-espresso-750 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-semibold text-espresso-950 dark:text-ivory-50">
+                  Enable Google Multi-Device Cloud Sync
+                </p>
+                <p className="text-xs text-espresso-500 dark:text-ivory-400 mt-0.5 max-w-xl">
+                  Sign in with your Google account to automatically back up and access your timetable, syllabus tracker, and study streaks from any phone, tablet, or browser.
+                </p>
+              </div>
+              <button
+                onClick={signInWithGoogle}
+                className="shrink-0 flex items-center gap-2 px-4 py-2.5 rounded-xl border border-ivory-300 dark:border-espresso-700 bg-white dark:bg-espresso-850 hover:bg-ivory-50 dark:hover:bg-espresso-800 text-xs font-semibold text-espresso-900 dark:text-ivory-100 shadow-subtle transition cursor-pointer"
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+                </svg>
+                <span>Sign in with Google</span>
+              </button>
+            </div>
+          )}
+        </Card>
 
         {/* ── Profile ── */}
         <Card>
@@ -386,6 +519,7 @@ export const SettingsView: React.FC = () => {
                 </p>
               </div>
               <button
+                aria-label="Toggle Academic Countdown"
                 onClick={() => updateSettings({ showExamCountdown: !settings.showExamCountdown })}
                 className={`relative w-11 h-6 rounded-full transition-colors ${
                   settings.showExamCountdown
@@ -408,11 +542,12 @@ export const SettingsView: React.FC = () => {
                 <div>
                   <p className="text-sm font-medium text-espresso-900 dark:text-ivory-100">Focus Radio</p>
                   <p className="text-xs text-espresso-400 dark:text-espresso-500 mt-0.5">
-                    Ambient music widget — planned for Milestone 5
+                    YouTube ambient music player — shown in the Deep Focus view
                   </p>
                 </div>
               </div>
               <button
+                aria-label="Toggle Focus Radio"
                 onClick={() => updateSettings({ showFocusRadio: !settings.showFocusRadio })}
                 className={`relative w-11 h-6 rounded-full transition-colors ${
                   settings.showFocusRadio
@@ -498,6 +633,145 @@ export const SettingsView: React.FC = () => {
             </p>
           </div>
         </Card>
+
+        {/* ── Daily Question Target ── */}
+        <Card>
+          <SectionHeading
+            icon={<Target className="w-4 h-4" />}
+            title="Daily Question Target"
+            sub="Questions to attempt per study day — shown in the Planner & Dashboard"
+          />
+          <div className="space-y-3">
+            <div className="flex items-center gap-4">
+              <input
+                type="range"
+                min={5}
+                max={200}
+                step={5}
+                value={questionTarget}
+                onChange={(e) => setQuestionTarget(Number(e.target.value))}
+                className="flex-1 accent-terracotta-500 cursor-pointer"
+              />
+              <span className="font-mono text-xl font-bold text-espresso-950 dark:text-ivory-50 tabular-nums w-14 text-center">
+                {questionTarget}
+              </span>
+            </div>
+            <div className="flex justify-between text-[11px] text-espresso-400 font-mono">
+              <span>5 / day</span>
+              <span className="text-terracotta-600 dark:text-terracotta-400 font-bold">Default: 25</span>
+              <span>200 / day</span>
+            </div>
+            <button
+              onClick={() => {
+                setDailyQuestionTarget(questionTarget);
+                if (qtTimeoutRef.current) clearTimeout(qtTimeoutRef.current);
+                setQtSaved(true);
+                qtTimeoutRef.current = setTimeout(() => {
+                  if (typeof window !== 'undefined') setQtSaved(false);
+                }, 2000);
+              }}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-white text-sm font-medium hover:opacity-90 transition shadow-subtle"
+              style={{ backgroundColor: 'var(--accent)' }}
+            >
+              {qtSaved ? <><Check className="w-4 h-4" /> Saved!</> : 'Save Target'}
+            </button>
+          </div>
+        </Card>
+
+        {/* ── Spaced Review Intervals ── */}
+        <Card>
+          <SectionHeading
+            icon={<BookOpen className="w-4 h-4" />}
+            title="Spaced Review Intervals"
+            sub="Days between repetitions — comma-separated integers (e.g. 1, 3, 7, 14, 30)"
+          />
+          <div className="space-y-3">
+            <input
+              type="text"
+              value={intervalInput}
+              onChange={(e) => { setIntervalInput(e.target.value); setIntervalError(''); }}
+              placeholder="1, 3, 7, 14, 30"
+              className="w-full px-3.5 py-2.5 rounded-xl border border-ivory-300 dark:border-espresso-700 bg-ivory-50 dark:bg-espresso-900 text-espresso-900 dark:text-ivory-100 text-sm font-mono placeholder:text-espresso-400 focus:outline-none focus:ring-2 focus:ring-terracotta-400 transition"
+            />
+            {intervalError && (
+              <p className="text-xs text-red-600 dark:text-red-400">{intervalError}</p>
+            )}
+            <button
+              onClick={() => {
+                const parts = intervalInput.split(',').map((s) => parseInt(s.trim(), 10));
+                if (parts.some(isNaN) || parts.some((n) => n <= 0)) {
+                  setIntervalError('All values must be positive integers separated by commas.');
+                  return;
+                }
+                updateReviewIntervals(parts);
+                setIntervalSaved(true);
+                setTimeout(() => setIntervalSaved(false), 2000);
+              }}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-white text-sm font-medium hover:opacity-90 transition shadow-subtle"
+              style={{ backgroundColor: 'var(--accent)' }}
+            >
+              {intervalSaved ? <><Check className="w-4 h-4" /> Saved!</> : 'Save Intervals'}
+            </button>
+            <p className="text-xs text-espresso-400 dark:text-espresso-500">
+              Applied to all new spaced review schedules. Existing reviews are not retroactively changed.
+            </p>
+          </div>
+        </Card>
+
+        {/* ── Full Reset ── */}
+        <Card className="border-red-200 dark:border-red-900/50">
+          <SectionHeading
+            icon={<RotateCcw className="w-4 h-4 text-red-600 dark:text-red-400" />}
+            title="Full Reset"
+            sub="Permanently wipe ALL app data. This action cannot be undone."
+          />
+          <div className="space-y-4">
+            <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50">
+              <p className="text-xs text-red-700 dark:text-red-300 font-medium">
+                ⚠️ This will delete all subjects, attendance logs, gym workouts, food diary, focus sessions, tasks, syllabus, and settings. There is no undo.
+              </p>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-espresso-700 dark:text-espresso-300 mb-1.5 uppercase font-mono tracking-wider">
+                Type <span className="text-red-600 dark:text-red-400 font-mono">RESET</span> to confirm
+              </label>
+              <input
+                type="text"
+                value={resetText}
+                onChange={(e) => setResetText(e.target.value)}
+                placeholder="RESET"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950/20 text-espresso-900 dark:text-ivory-100 text-sm font-mono placeholder:text-espresso-400 focus:outline-none focus:ring-2 focus:ring-red-400 transition"
+              />
+            </div>
+            {resetDone ? (
+              <p className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold">✓ App data has been reset to defaults.</p>
+            ) : (
+              <button
+                disabled={resetText !== 'RESET'}
+                onClick={() => {
+                  fullReset();
+                  setResetText('');
+                  setResetDone(true);
+                  setTimeout(() => setResetDone(false), 4000);
+                }}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition disabled:opacity-30 disabled:cursor-not-allowed bg-red-600 hover:bg-red-700 text-white"
+              >
+                <RotateCcw className="w-4 h-4" />
+                Reset All Data
+              </button>
+            )}
+          </div>
+        </Card>
+
+      </div>
+
+      {/* ── App Version ── */}
+      <div className="flex items-center justify-between py-4 border-t border-ivory-300 dark:border-espresso-800 text-xs text-espresso-400 dark:text-espresso-500 font-mono">
+        <span className="flex items-center gap-1.5">
+          <Info className="w-3.5 h-3.5" />
+          TRACKER v{APP_VERSION} · Local-First · No Cloud Sync
+        </span>
+        <span>All data stored in your browser&apos;s localStorage</span>
       </div>
     </div>
   );

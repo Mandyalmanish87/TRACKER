@@ -1,78 +1,117 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { FocusWidget } from '../dashboard/FocusWidget';
-import { Card } from '../common/Card';
 import { useApp } from '../../context/AppContext';
-import { BookOpen } from 'lucide-react';
+import { SevenDayFocusChart } from '../focus/SevenDayFocusChart';
+import { FocusMetricsSummary } from '../focus/FocusMetricsSummary';
+import { ProductivityInsightsPanel } from '../focus/ProductivityInsightsPanel';
+import { SessionHistoryLedger } from '../focus/SessionHistoryLedger';
+import { JourneyHeatmap } from '../focus/JourneyHeatmap';
+import { FocusRadioPlayer } from '../focus/FocusRadioPlayer';
+import {
+  calculateSevenDayFocus,
+  calculateFocusSummaries,
+  calculateStudyStreaks,
+  calculateProductivityInsights,
+} from '../../utils/focusAnalytics';
+
 
 export const FocusView: React.FC = () => {
-  const { state } = useApp();
+  const { state, updateSettings } = useApp();
+
+  const rolloverHour = state.settings?.studyDayRolloverHour ?? 0;
+  const sessions = state.studySessions || [];
+  const showRadio = state.settings?.showFocusRadio ?? false;
+
+  // Compute all analytics synchronously
+  const sevenDayData = useMemo(
+    () => calculateSevenDayFocus(sessions, new Date(), rolloverHour),
+    [sessions, rolloverHour]
+  );
+
+  const summaries = useMemo(
+    () => calculateFocusSummaries(sessions, new Date(), rolloverHour),
+    [sessions, rolloverHour]
+  );
+
+  const streaks = useMemo(
+    () => calculateStudyStreaks(sessions, new Date(), rolloverHour),
+    [sessions, rolloverHour]
+  );
+
+  const insights = useMemo(
+    () => calculateProductivityInsights(sessions, new Date(), rolloverHour),
+    [sessions, rolloverHour]
+  );
 
   return (
-    <div className="space-y-6 pb-16">
-      <div className="border-b border-ivory-300 dark:border-espresso-800 pb-4">
-        <h1 className="font-serif text-3xl font-normal text-espresso-950 dark:text-ivory-50">
-          Deep Focus & Academic Study Logs
+    <div className="space-y-6 sm:space-y-8 pb-20">
+      {/* Editorial Header */}
+      <div className="border-b border-ivory-300 dark:border-espresso-800 pb-6">
+        <span className="text-xs font-mono font-semibold uppercase tracking-wider text-terracotta-600 dark:text-terracotta-400">
+          Cognitive Focus & Immersion
+        </span>
+        <h1 className="font-serif text-3xl sm:text-4xl font-normal text-espresso-950 dark:text-ivory-50 tracking-tight mt-1">
+          Deep Focus &amp; Cognitive Energy
         </h1>
-        <p className="text-xs text-espresso-500 dark:text-espresso-400 mt-1">
-          Distraction-free environment with Pomodoro intervals and historical log ledger.
+        <p className="text-xs sm:text-sm text-espresso-500 dark:text-espresso-400 mt-1">
+          Distraction-free Pomodoro intervals, study streaks, and empirical focus analytics.
         </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[minmax(340px,0.9fr)_minmax(0,1.1fr)] gap-6 lg:gap-8 items-start">
+      {/* 1. Quick Metrics Ribbon (Today, 7-Day Total, Streaks, Rolling Avg) */}
+      <FocusMetricsSummary summary={summaries} streaks={streaks} />
+
+      {/* 2. Main Work Area: Timer & 7-Day Distribution Chart */}
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(340px,0.85fr)_minmax(0,1.15fr)] gap-6 lg:gap-8 items-start">
+        {/* Left: Enhanced Timer Widget */}
         <div className="min-w-0">
           <FocusWidget />
         </div>
 
-        <div className="min-w-0">
-          <Card
-            eyebrow="Study Archives"
-            title="Complete Session Ledger"
-            subtitle={`${state.studySessions.length} total sessions recorded`}
-          >
-            {state.studySessions.length === 0 ? (
-              <p className="text-xs text-espresso-400 italic text-center py-8">
-                No study sessions recorded yet. Start a timer to log your first deep focus block.
-              </p>
-            ) : (
-              <div className="divide-y divide-ivory-200 dark:divide-espresso-750">
-                {state.studySessions.map((session) => (
-                  <div key={session.id} className="py-3 flex items-start justify-between gap-4">
-                    <div className="space-y-0.5">
-                      <div className="flex items-center gap-2">
-                        <BookOpen className="w-3.5 h-3.5 text-terracotta-500" />
-                        <span className="text-xs font-semibold text-espresso-900 dark:text-ivory-100">
-                          {session.subjectName || 'Self-Directed Focus'}
-                        </span>
-                        {session.isSample && (
-                          <span className="text-[9px] uppercase font-mono px-1 rounded bg-ivory-200 dark:bg-espresso-700 text-espresso-500">
-                            Demo
-                          </span>
-                        )}
-                      </div>
-                      {session.notes && (
-                        <p className="text-xs text-espresso-500 dark:text-espresso-400">
-                          {session.notes}
-                        </p>
-                      )}
-                      <p className="text-[10px] text-espresso-400 font-mono">
-                        {new Date(session.timestamp).toLocaleDateString()} at{' '}
-                        {new Date(session.timestamp).toLocaleTimeString([], {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
-                      </p>
-                    </div>
-
-                    <span className="font-mono text-sm font-bold text-terracotta-600 dark:text-terracotta-400 shrink-0">
-                      {session.durationMinutes}m
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </Card>
+        {/* Right: 7-Day Distribution Chart & Productivity Insights */}
+        <div className="min-w-0 space-y-6">
+          <SevenDayFocusChart data={sevenDayData} />
+          <ProductivityInsightsPanel insights={insights} />
         </div>
       </div>
+
+      {/* 3. Focus Radio in Deep Focus */}
+      {!showRadio && (
+        <div className="p-4 rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 shadow-subtle flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-ivory-200 dark:bg-espresso-800 text-espresso-900 dark:text-ivory-100 flex items-center justify-center font-bold text-lg shrink-0">
+              📻
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-espresso-900 dark:text-ivory-100">
+                Want ambient background audio while studying?
+              </p>
+              <p className="text-xs text-espresso-500 dark:text-espresso-400">
+                Turn on the built-in Focus Radio panel with YouTube playlists, lo-fi beats, and custom stations.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => updateSettings({ showFocusRadio: true })}
+            className="text-xs px-4 py-2 rounded-xl text-white font-semibold shadow-subtle transition hover:opacity-95 whitespace-nowrap"
+            style={{ backgroundColor: 'var(--accent)' }}
+          >
+            Enable Radio Panel
+          </button>
+        </div>
+      )}
+
+      {showRadio && (
+        <div className="w-full">
+          <FocusRadioPlayer />
+        </div>
+      )}
+
+      {/* 4. Complete Session History Ledger with Status Filters & Search */}
+      <div className="w-full">
+        <SessionHistoryLedger sessions={sessions} />
+      </div>
+      <JourneyHeatmap />
     </div>
   );
 };

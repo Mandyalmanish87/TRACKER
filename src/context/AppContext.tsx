@@ -3,6 +3,7 @@ import {
   AppStateData,
   AttendanceMark,
   StudySession,
+  SessionStatus,
   Reminder,
   Subject,
   UserProfile,
@@ -17,17 +18,65 @@ import {
   OccurrenceOverride,
   ExtraClass,
   SyllabusImportPayload,
+  PlannerTask,
+  TaskStatus,
+  SpacedReview,
+  DailyQuestionEntry,
+  FoodDiaryEntry,
+  CustomFood,
+  Recipe,
+  WeightLogEntry,
+  NutritionProfile,
+  RadioUrl,
+  RadioLoopMode,
+  CustomPlaylist,
+  CustomPlaylistItem,
+  MockTest,
+  ErrorLogEntry,
+  CalendarEvent,
 } from '../types';
 import { storageService, DEFAULT_SYLLABUS_SUBJECTS } from '../services/storage';
 import { getAttendanceRequirement } from '../utils/scheduleResolver';
+import { completeReviewStep, DEFAULT_REVIEW_INTERVALS, hasActiveReviewForTopic } from '../utils/spacedRepetitionUtils';
+import {
+  toYouTubeEmbedUrl,
+  toYouTubeEmbedUrlWithControls,
+  isYouTubePlaylistUrl,
+  isValidYouTubeUrl,
+  extractYouTubeVideoId,
+  extractYouTubePlaylistId,
+  buildCustomPlaylistEmbedUrl,
+} from '../utils/youtubeValidator';
+import { authService, AuthUser } from '../services/authService';
+import { cloudSyncService, CloudRecord } from '../services/cloudSyncService';
+import { SyncConflictModal } from '../components/common/SyncConflictModal';
 
 interface AppContextType {
   state: AppStateData;
+  // Google Auth & Cloud Synchronization
+  authUser: AuthUser | null;
+  syncStatus: 'idle' | 'syncing' | 'synced' | 'error' | 'offline';
+  lastSyncedAt: Date | null;
+  signInWithGoogle: () => Promise<void>;
+  signOut: () => Promise<void>;
+  syncNow: () => Promise<void>;
   // Attendance actions
   markAttendance: (slotId: string, status: AttendanceMark, date?: string) => void;
   markAttendanceForEvent: (occurrenceKey: string, subjectId: string, date: string, status: AttendanceMark, slotId?: string, extraClassId?: string, overrideId?: string, isPlanned?: boolean) => void;
   // Study timer actions
-  logStudySession: (durationMinutes: number, subjectId?: string, notes?: string) => void;
+  logStudySession: (
+    durationMinutes: number,
+    subjectId?: string,
+    notes?: string,
+    options?: {
+      plannedDurationMinutes?: number;
+      status?: SessionStatus;
+      startTime?: string;
+      endTime?: string;
+      id?: string;
+    }
+  ) => void;
+  deleteStudySession: (id: string) => void;
   // Gym workout actions
   toggleGymSet: (exerciseIndex: number, setIndex: number) => void;
   toggleGymWorkoutComplete: () => void;
@@ -74,6 +123,81 @@ interface AppContextType {
   importSyllabus: (payload: SyllabusImportPayload, targetSubjectId?: string) => { chaptersAdded: number; topicsAdded: number; subjectName: string };
   // Shared attendance requirement helper
   getAttendanceReq: () => number;
+  // Milestone 5: Planner Task actions
+  addTask: (task: Omit<PlannerTask, 'id' | 'createdAt'>) => string;
+  updateTask: (id: string, updates: Partial<PlannerTask>) => void;
+  deleteTask: (id: string) => void;
+  setTaskStatus: (id: string, status: TaskStatus) => void;
+  // Milestone 5: Spaced Repetition actions
+  addSpacedReview: (review: Omit<SpacedReview, 'id'>) => string;
+  updateSpacedReview: (id: string, updates: Partial<SpacedReview>) => void;
+  deleteSpacedReview: (id: string) => void;
+  completeSpacedReview: (id: string) => void;
+  rescheduleSpacedReview: (id: string, newDueDate: string) => void;
+  updateReviewIntervals: (intervals: number[]) => void;
+  // Milestone 5: Daily Questions actions
+  addDailyQuestionEntry: (entry: Omit<DailyQuestionEntry, 'id' | 'createdAt'>) => string;
+  updateDailyQuestionEntry: (id: string, updates: Partial<DailyQuestionEntry>) => void;
+  deleteDailyQuestionEntry: (id: string) => void;
+  setDailyQuestionTarget: (target: number) => void;
+  // Milestone 7: Nutrition actions
+  addFoodDiaryEntry: (entry: Omit<FoodDiaryEntry, 'id' | 'lastEditedAt'>) => string;
+  addMultipleFoodDiaryEntries: (entries: Omit<FoodDiaryEntry, 'id' | 'lastEditedAt'>[]) => void;
+  updateFoodDiaryEntry: (id: string, updates: Partial<FoodDiaryEntry>) => void;
+  deleteFoodDiaryEntry: (id: string) => void;
+  addCustomFood: (food: Omit<CustomFood, 'id' | 'isCustom' | 'createdAt'>) => string;
+  deleteCustomFood: (id: string) => void;
+  addRecipe: (recipe: Omit<Recipe, 'id' | 'createdAt'>) => string;
+  deleteRecipe: (id: string) => void;
+  logWeight: (weightKg: number, date?: string, notes?: string) => void;
+  deleteWeightLog: (id: string) => void;
+  updateNutritionProfile: (updates: Partial<NutritionProfile>) => void;
+  // Milestone 8: Focus Radio, Queue, Loop & Shuffle
+  addRadioUrl: (label: string, url: string) => void;
+  removeRadioUrl: (id: string) => void;
+  reorderRadioUrl: (id: string, direction: 'up' | 'down') => void;
+  radioQueue: RadioUrl[];
+  radioLoopMode: RadioLoopMode;
+  radioIsShuffle: boolean;
+  activeRadioStation: RadioUrl | null;
+  activeRadioIndex: number | null;
+  activeRadioSource: 'stations' | 'queue' | 'playlist';
+  setActiveRadio: (index: number | null, source?: 'stations' | 'queue' | 'playlist') => void;
+  addToRadioQueue: (item: { label: string; url: string; type?: 'video' | 'playlist' }) => void;
+  removeFromRadioQueue: (index: number) => void;
+  clearRadioQueue: () => void;
+  reorderRadioQueue: (fromIndex: number, toIndex: number) => void;
+  cycleRadioLoopMode: () => void;
+  setRadioLoopMode: (mode: RadioLoopMode) => void;
+  toggleRadioShuffle: () => void;
+  playNextTrack: () => void;
+  playPrevTrack: () => void;
+  // Milestone 8: Custom Playlists ("Make My Own Playlist")
+  customPlaylists: CustomPlaylist[];
+  activeCustomPlaylistId: string | null;
+  createCustomPlaylist: (name: string, description?: string, youtubePlaylistUrl?: string) => string;
+  deleteCustomPlaylist: (playlistId: string) => void;
+  addTrackToCustomPlaylist: (playlistId: string, track: { title: string; url: string }) => boolean;
+  removeTrackFromCustomPlaylist: (playlistId: string, trackId: string) => void;
+  reorderTrackInCustomPlaylist: (playlistId: string, fromIndex: number, toIndex: number) => void;
+  playCustomPlaylist: (playlistId: string, shuffle?: boolean) => void;
+  addPlaylistToRadioQueue: (playlistId: string) => void;
+  // Milestone 6: Mock-Test Analytics & Error Log
+  addMockTest: (test: Omit<MockTest, 'id' | 'createdAt'>) => string;
+  updateMockTest: (id: string, updates: Partial<MockTest>) => void;
+  deleteMockTest: (id: string) => void;
+  addErrorLogEntry: (entry: Omit<ErrorLogEntry, 'id' | 'createdAt' | 'reviewedCount'>) => string;
+  updateErrorLogEntry: (id: string, updates: Partial<ErrorLogEntry>) => void;
+  deleteErrorLogEntry: (id: string) => void;
+  resolveErrorLogEntry: (id: string, resolved?: boolean) => void;
+  convertErrorToPlannerTask: (errorId: string) => { success: boolean; taskId?: string; message?: string };
+  // Events & Tasks Calendar Planner
+  events: CalendarEvent[];
+  addEvent: (event: Omit<CalendarEvent, 'id' | 'createdAt'>) => string;
+  updateEvent: (id: string, updates: Partial<CalendarEvent>) => void;
+  deleteEvent: (id: string) => void;
+  toggleEventComplete: (id: string) => void;
+  fullReset: () => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -83,11 +207,157 @@ type SyllabusChapterType = SyllabusChapter;
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [state, setState] = useState<AppStateData>(() => storageService.loadData());
+  const [activeRadioIndex, setActiveRadioIndex] = useState<number | null>(null);
+  const [activeRadioSource, setActiveRadioSource] = useState<'stations' | 'queue' | 'playlist'>('stations');
+  const [activeCustomPlaylistId, setActiveCustomPlaylistId] = useState<string | null>(null);
 
   // Automatically persist to storage layer whenever state changes
   useEffect(() => {
     storageService.saveData(state);
   }, [state]);
+
+  // Google Auth & Cloud Sync States
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error' | 'offline'>('idle');
+  const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
+  const [conflictData, setConflictData] = useState<{
+    cloudRecord: CloudRecord;
+  } | null>(null);
+
+  // Handle Initial Sync when user logs in
+  const handleInitialSync = async (user: AuthUser) => {
+    setSyncStatus('syncing');
+    try {
+      const cloudRecord = await cloudSyncService.fetchCloudData(user.id);
+      if (!cloudRecord) {
+        await cloudSyncService.uploadToCloud(user.id, state);
+        setSyncStatus('synced');
+        setLastSyncedAt(new Date());
+        return;
+      }
+
+      const hasLocalCustomData = !state.hasSampleData && (
+        (state.timetable?.length || 0) > 0 || (state.tasks?.length || 0) > 0 || (state.subjects?.length || 0) > 0
+      );
+
+      if (hasLocalCustomData) {
+        setConflictData({ cloudRecord });
+        setSyncStatus('idle');
+      } else {
+        setState(cloudRecord.data);
+        storageService.saveData(cloudRecord.data);
+        setSyncStatus('synced');
+        setLastSyncedAt(new Date(cloudRecord.updatedAt));
+      }
+    } catch {
+      setSyncStatus('error');
+    }
+  };
+
+  // Initialize auth
+  useEffect(() => {
+    let mounted = true;
+    authService.getCurrentUser().then((user) => {
+      if (mounted && user) {
+        setAuthUser(user);
+        handleInitialSync(user);
+      }
+    });
+
+    const unsubscribe = authService.onAuthStateChange((user) => {
+      setAuthUser(user);
+      if (user) {
+        handleInitialSync(user);
+      } else {
+        setSyncStatus('idle');
+      }
+    });
+
+    return () => {
+      mounted = false;
+      unsubscribe();
+    };
+  }, []);
+
+  // Auto-sync debounced when state changes and user is signed in
+  useEffect(() => {
+    if (!authUser || conflictData) return;
+    const timeout = setTimeout(async () => {
+      setSyncStatus('syncing');
+      const res = await cloudSyncService.uploadToCloud(authUser.id, state);
+      if (res.success) {
+        setSyncStatus('synced');
+        setLastSyncedAt(new Date());
+      } else {
+        setSyncStatus('error');
+      }
+    }, 2500);
+
+    return () => clearTimeout(timeout);
+  }, [state, authUser, conflictData]);
+
+  const signInWithGoogle = async () => {
+    setSyncStatus('syncing');
+    const res = await authService.signInWithGoogle();
+    if (res.user) {
+      setAuthUser(res.user);
+      await handleInitialSync(res.user);
+    }
+  };
+
+  const signOut = async () => {
+    await authService.signOut();
+    setAuthUser(null);
+    setSyncStatus('idle');
+    setConflictData(null);
+  };
+
+  const syncNow = async () => {
+    if (!authUser) return;
+    setSyncStatus('syncing');
+    const res = await cloudSyncService.uploadToCloud(authUser.id, state);
+    if (res.success) {
+      setSyncStatus('synced');
+      setLastSyncedAt(new Date());
+    } else {
+      setSyncStatus('error');
+    }
+  };
+
+  const handleKeepLocal = async () => {
+    if (!authUser) return;
+    setSyncStatus('syncing');
+    await cloudSyncService.uploadToCloud(authUser.id, state);
+    setConflictData(null);
+    setSyncStatus('synced');
+    setLastSyncedAt(new Date());
+  };
+
+  const handleLoadCloud = async () => {
+    if (!conflictData) return;
+    setState(conflictData.cloudRecord.data);
+    storageService.saveData(conflictData.cloudRecord.data);
+    setConflictData(null);
+    setSyncStatus('synced');
+    setLastSyncedAt(new Date(conflictData.cloudRecord.updatedAt));
+  };
+
+  const handleMergeBoth = async () => {
+    if (!authUser || !conflictData) return;
+    setSyncStatus('syncing');
+    const merged = cloudSyncService.mergeDatasets(state, conflictData.cloudRecord.data);
+    setState(merged);
+    storageService.saveData(merged);
+    await cloudSyncService.uploadToCloud(authUser.id, merged);
+    setConflictData(null);
+    setSyncStatus('synced');
+    setLastSyncedAt(new Date());
+  };
+
+  const handleCancelConflict = async () => {
+    await signOut();
+    setConflictData(null);
+  };
 
   /** Get the shared attendance requirement */
   const getAttendanceReq = (): number => {
@@ -260,18 +530,55 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   /**
-   * Log a completed study or focus session.
+   * Log a completed or interrupted study/focus session.
    */
-  const logStudySession = (durationMinutes: number, subjectId?: string, notes?: string) => {
+  const logStudySession = (
+    durationMinutes: number,
+    subjectId?: string,
+    notes?: string,
+    options?: {
+      plannedDurationMinutes?: number;
+      status?: SessionStatus;
+      startTime?: string;
+      endTime?: string;
+      id?: string;
+    }
+  ) => {
+    const status = options?.status ?? 'completed';
+    // If cancelled or non-positive duration, don't record unless explicitly needed
+    if (status === 'cancelled') return;
     if (durationMinutes <= 0) return;
+
     setState((prev) => {
-      const subject = prev.subjects.find((s) => s.id === subjectId);
+      // Idempotency: prevent duplicates by ID if session ID is provided
+      const sessionId = options?.id || `study-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      if (prev.studySessions.some((s) => s.id === sessionId)) {
+        return prev;
+      }
+
+      // Resolve subject name from attendance subjects OR syllabus subjects
+      let subjectName: string | undefined;
+      const sub = prev.subjects.find((s) => s.id === subjectId);
+      if (sub) {
+        subjectName = `${sub.code} — ${sub.name}`;
+      } else {
+        const sylSub = (prev.syllabusSubjects || []).find((s) => s.id === subjectId);
+        if (sylSub) {
+          subjectName = sylSub.name;
+        }
+      }
+
+      const nowIso = new Date().toISOString();
       const newSession: StudySession = {
-        id: `study-${Date.now()}`,
+        id: sessionId,
         subjectId,
-        subjectName: subject ? `${subject.code} — ${subject.name}` : undefined,
-        durationMinutes,
-        timestamp: new Date().toISOString(),
+        subjectName,
+        durationMinutes: Math.max(1, Math.round(durationMinutes)),
+        plannedDurationMinutes: options?.plannedDurationMinutes,
+        timestamp: options?.endTime || nowIso,
+        startTime: options?.startTime,
+        endTime: options?.endTime || nowIso,
+        status,
         notes,
         isSample: false,
       };
@@ -281,6 +588,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         studySessions: [newSession, ...prev.studySessions],
       };
     });
+  };
+
+  /**
+   * Delete a focus study session from ledger.
+   */
+  const deleteStudySession = (id: string) => {
+    setState((prev) => ({
+      ...prev,
+      studySessions: prev.studySessions.filter((s) => s.id !== id),
+    }));
   };
 
   /**
@@ -360,12 +677,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
    * Toggle completion of a reminder task.
    */
   const toggleReminder = (id: string) => {
-    setState((prev) => ({
-      ...prev,
-      reminders: prev.reminders.map((r) =>
-        r.id === id ? { ...r, isCompleted: !r.isCompleted, isSample: false } : r
-      ),
-    }));
+    setState((prev) => {
+      const target = prev.reminders.find((r) => r.id === id);
+      const nextCompleted = target ? !target.isCompleted : false;
+      return {
+        ...prev,
+        reminders: prev.reminders.map((r) =>
+          r.id === id ? { ...r, isCompleted: !r.isCompleted, isSample: false } : r
+        ),
+        events: (prev.events || []).map((e) =>
+          e.id === id
+            ? {
+                ...e,
+                isCompleted: nextCompleted,
+                status: (nextCompleted ? 'done' : 'todo') as TaskStatus,
+                completedAt: nextCompleted ? new Date().toISOString() : undefined,
+                isSample: false,
+              }
+            : e
+        ),
+      };
+    });
   };
 
   /**
@@ -373,15 +705,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
    */
   const addReminder = (item: Omit<Reminder, 'id' | 'isCompleted'>) => {
     setState((prev) => {
+      const id = `rem-${Date.now()}`;
       const newReminder: Reminder = {
         ...item,
-        id: `rem-${Date.now()}`,
+        id,
         isCompleted: false,
+        isSample: false,
+      };
+      const mirrorEvent: CalendarEvent = {
+        id,
+        title: item.title,
+        category: 'reminder',
+        date: item.dueDate,
+        isAllDay: true,
+        priority: item.priority,
+        isCompleted: false,
+        status: 'todo',
+        createdAt: new Date().toISOString(),
         isSample: false,
       };
       return {
         ...prev,
         reminders: [newReminder, ...prev.reminders],
+        events: [mirrorEvent, ...(prev.events || [])],
       };
     });
   };
@@ -393,7 +739,117 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setState((prev) => ({
       ...prev,
       reminders: prev.reminders.filter((r) => r.id !== id),
+      events: (prev.events || []).filter((e) => e.id !== id),
     }));
+  };
+
+  /**
+   * Events & Tasks Calendar: Add Event
+   */
+  const addEvent = (item: Omit<CalendarEvent, 'id' | 'createdAt'>): string => {
+    const id = (item as any).id || `evt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const newEvent: CalendarEvent = {
+      ...item,
+      id,
+      createdAt: new Date().toISOString(),
+      isSample: false,
+      isCompleted: item.isCompleted ?? false,
+      status: item.status ?? (item.isCompleted ? 'done' : 'todo'),
+    };
+
+    setState((prev) => {
+      let updatedReminders = prev.reminders;
+      if (item.category === 'reminder') {
+        const mirrorReminder: Reminder = {
+          id,
+          title: item.title,
+          category: 'academic',
+          dueDate: item.date,
+          priority: item.priority ?? 'medium',
+          isCompleted: Boolean(item.isCompleted),
+          isSample: false,
+        };
+        updatedReminders = [mirrorReminder, ...prev.reminders];
+      }
+      return {
+        ...prev,
+        events: [newEvent, ...(prev.events || [])],
+        reminders: updatedReminders,
+      };
+    });
+    return id;
+  };
+
+  /**
+   * Events & Tasks Calendar: Update Event
+   */
+  const updateEvent = (id: string, updates: Partial<CalendarEvent>) => {
+    setState((prev) => {
+      const updatedEvents = (prev.events || []).map((evt) => {
+        if (evt.id !== id) return evt;
+        const updated = { ...evt, ...updates };
+        if (updates.isCompleted !== undefined && updates.status === undefined) {
+          updated.status = updates.isCompleted ? 'done' : 'todo';
+          updated.completedAt = updates.isCompleted ? new Date().toISOString() : undefined;
+        }
+        return updated;
+      });
+
+      const updatedReminders = prev.reminders.map((rem) => {
+        if (rem.id !== id) return rem;
+        return {
+          ...rem,
+          title: updates.title ?? rem.title,
+          dueDate: updates.date ?? rem.dueDate,
+          priority: updates.priority ?? rem.priority,
+          isCompleted: updates.isCompleted !== undefined ? updates.isCompleted : rem.isCompleted,
+        };
+      });
+
+      return {
+        ...prev,
+        events: updatedEvents,
+        reminders: updatedReminders,
+      };
+    });
+  };
+
+  /**
+   * Events & Tasks Calendar: Delete Event
+   */
+  const deleteEvent = (id: string) => {
+    setState((prev) => ({
+      ...prev,
+      events: (prev.events || []).filter((e) => e.id !== id),
+      reminders: prev.reminders.filter((r) => r.id !== id),
+    }));
+  };
+
+  /**
+   * Events & Tasks Calendar: Toggle Complete
+   */
+  const toggleEventComplete = (id: string) => {
+    setState((prev) => {
+      const target = (prev.events || []).find((e) => e.id === id);
+      const nextCompleted = target ? !target.isCompleted : false;
+      const updatedEvents = (prev.events || []).map((evt) => {
+        if (evt.id !== id) return evt;
+        return {
+          ...evt,
+          isCompleted: nextCompleted,
+          status: (nextCompleted ? 'done' : 'todo') as TaskStatus,
+          completedAt: nextCompleted ? new Date().toISOString() : undefined,
+        };
+      });
+      const updatedReminders = prev.reminders.map((r) =>
+        r.id === id ? { ...r, isCompleted: !r.isCompleted } : r
+      );
+      return {
+        ...prev,
+        events: updatedEvents,
+        reminders: updatedReminders,
+      };
+    });
   };
 
   /**
@@ -1010,6 +1466,850 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { chaptersAdded, topicsAdded, subjectName };
   };
 
+  // ─── Milestone 5: Planner Tasks ───────────────────────────────────────────
+  const addTask = (task: Omit<PlannerTask, 'id' | 'createdAt'>): string => {
+    const id = 'task-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
+    const createdAt = new Date().toISOString();
+    const newTask: PlannerTask = {
+      ...task,
+      id,
+      createdAt,
+      completedAt: task.status === 'done' ? new Date().toISOString() : undefined,
+    };
+    setState((prev) => ({
+      ...prev,
+      tasks: [newTask, ...(prev.tasks || [])],
+    }));
+    return id;
+  };
+
+  const updateTask = (id: string, updates: Partial<PlannerTask>) => {
+    setState((prev) => {
+      const existing = (prev.tasks || []).find((t) => t.id === id);
+      if (!existing) return prev;
+
+      let completedAt = updates.completedAt !== undefined ? updates.completedAt : existing.completedAt;
+      if (updates.status === 'done' && existing.status !== 'done' && !completedAt) {
+        completedAt = new Date().toISOString();
+      } else if (updates.status && updates.status !== 'done') {
+        completedAt = undefined;
+      }
+
+      const updated = (prev.tasks || []).map((t) =>
+        t.id === id ? { ...t, ...updates, completedAt } : t
+      );
+      return { ...prev, tasks: updated };
+    });
+  };
+
+  const deleteTask = (id: string) => {
+    setState((prev) => ({
+      ...prev,
+      tasks: (prev.tasks || []).filter((t) => t.id !== id),
+    }));
+  };
+
+  const setTaskStatus = (id: string, status: TaskStatus) => {
+    updateTask(id, { status });
+  };
+
+  // ─── Milestone 5: Spaced Repetition ────────────────────────────────────────
+  const addSpacedReview = (review: Omit<SpacedReview, 'id'>): string => {
+    // Duplicate prevention: if an active review for this topic exists, return its id
+    if (hasActiveReviewForTopic(state.spacedReviews || [], review.syllabusTopicId)) {
+      const existing = (state.spacedReviews || []).find(
+        (r) => r.syllabusTopicId === review.syllabusTopicId && !r.isCompleted
+      );
+      if (existing) return existing.id;
+    }
+
+    const id = 'sr-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
+    const newReview: SpacedReview = {
+      ...review,
+      id,
+      repetitionLevel: review.repetitionLevel ?? 1,
+      intervalDays: review.intervalDays ?? (state.reviewIntervals?.[0] ?? DEFAULT_REVIEW_INTERVALS[0]),
+      isCompleted: false,
+      history: review.history || [],
+    };
+
+    setState((prev) => ({
+      ...prev,
+      spacedReviews: [newReview, ...(prev.spacedReviews || [])],
+    }));
+    return id;
+  };
+
+  const updateSpacedReview = (id: string, updates: Partial<SpacedReview>) => {
+    setState((prev) => ({
+      ...prev,
+      spacedReviews: (prev.spacedReviews || []).map((r) =>
+        r.id === id ? { ...r, ...updates } : r
+      ),
+    }));
+  };
+
+  const deleteSpacedReview = (id: string) => {
+    setState((prev) => ({
+      ...prev,
+      spacedReviews: (prev.spacedReviews || []).filter((r) => r.id !== id),
+    }));
+  };
+
+  const completeSpacedReview = (id: string) => {
+    setState((prev) => {
+      const review = (prev.spacedReviews || []).find((r) => r.id === id);
+      if (!review) return prev;
+      const updated = completeReviewStep(
+        review,
+        prev.reviewIntervals || DEFAULT_REVIEW_INTERVALS,
+        new Date()
+      );
+      return {
+        ...prev,
+        spacedReviews: (prev.spacedReviews || []).map((r) => (r.id === id ? updated : r)),
+      };
+    });
+  };
+
+  const rescheduleSpacedReview = (id: string, newDueDate: string) => {
+    updateSpacedReview(id, { dueDate: newDueDate });
+  };
+
+  const updateReviewIntervals = (intervals: number[]) => {
+    setState((prev) => ({ ...prev, reviewIntervals: intervals }));
+  };
+
+  // ─── Milestone 5: Daily Questions ──────────────────────────────────────────
+  const addDailyQuestionEntry = (entry: Omit<DailyQuestionEntry, 'id' | 'createdAt'>): string => {
+    const id = 'dq-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
+    const createdAt = new Date().toISOString();
+    const newEntry: DailyQuestionEntry = {
+      ...entry,
+      id,
+      createdAt,
+    };
+    setState((prev) => ({
+      ...prev,
+      dailyQuestions: [newEntry, ...(prev.dailyQuestions || [])],
+    }));
+    return id;
+  };
+
+  const updateDailyQuestionEntry = (id: string, updates: Partial<DailyQuestionEntry>) => {
+    setState((prev) => ({
+      ...prev,
+      dailyQuestions: (prev.dailyQuestions || []).map((q) =>
+        q.id === id ? { ...q, ...updates } : q
+      ),
+    }));
+  };
+
+  const deleteDailyQuestionEntry = (id: string) => {
+    setState((prev) => ({
+      ...prev,
+      dailyQuestions: (prev.dailyQuestions || []).filter((q) => q.id !== id),
+    }));
+  };
+
+  const setDailyQuestionTarget = (target: number) => {
+    const safeTarget = Math.max(1, Math.round(target));
+    setState((prev) => ({ ...prev, dailyQuestionTarget: safeTarget }));
+  };
+
+  // --- Milestone 7: Nutrition actions ---
+  const addFoodDiaryEntry = (entry: Omit<FoodDiaryEntry, 'id' | 'lastEditedAt'>): string => {
+    const id = 'fd-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
+    const lastEditedAt = new Date().toISOString();
+    const newEntry: FoodDiaryEntry = {
+      ...entry,
+      id,
+      lastEditedAt,
+    };
+    setState((prev) => ({
+      ...prev,
+      foodDiaryEntries: [newEntry, ...(prev.foodDiaryEntries || [])],
+    }));
+    return id;
+  };
+
+  const addMultipleFoodDiaryEntries = (entries: Omit<FoodDiaryEntry, 'id' | 'lastEditedAt'>[]) => {
+    if (!entries.length) return;
+    const now = Date.now();
+    const lastEditedAt = new Date().toISOString();
+    const newEntries: FoodDiaryEntry[] = entries.map((entry, idx) => ({
+      ...entry,
+      id: 'fd-' + (now + idx) + '-' + Math.random().toString(36).slice(2, 7),
+      lastEditedAt,
+    }));
+    setState((prev) => ({
+      ...prev,
+      foodDiaryEntries: [...newEntries, ...(prev.foodDiaryEntries || [])],
+    }));
+  };
+
+  const updateFoodDiaryEntry = (id: string, updates: Partial<FoodDiaryEntry>) => {
+    const lastEditedAt = new Date().toISOString();
+    setState((prev) => ({
+      ...prev,
+      foodDiaryEntries: (prev.foodDiaryEntries || []).map((e) =>
+        e.id === id ? { ...e, ...updates, lastEditedAt } : e
+      ),
+    }));
+  };
+
+  const deleteFoodDiaryEntry = (id: string) => {
+    setState((prev) => ({
+      ...prev,
+      foodDiaryEntries: (prev.foodDiaryEntries || []).filter((e) => e.id !== id),
+    }));
+  };
+
+  const addCustomFood = (food: Omit<CustomFood, 'id' | 'isCustom' | 'createdAt'>): string => {
+    const id = 'cf-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
+    const createdAt = new Date().toISOString();
+    const newFood: CustomFood = {
+      ...food,
+      id,
+      isCustom: true,
+      createdAt,
+    };
+    setState((prev) => ({
+      ...prev,
+      customFoods: [newFood, ...(prev.customFoods || [])],
+    }));
+    return id;
+  };
+
+  const deleteCustomFood = (id: string) => {
+    setState((prev) => ({
+      ...prev,
+      customFoods: (prev.customFoods || []).filter((f) => f.id !== id),
+    }));
+  };
+
+  const addRecipe = (recipe: Omit<Recipe, 'id' | 'createdAt'>): string => {
+    const id = 'rec-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
+    const createdAt = new Date().toISOString();
+    const newRecipe: Recipe = {
+      ...recipe,
+      id,
+      createdAt,
+    };
+    setState((prev) => ({
+      ...prev,
+      recipes: [newRecipe, ...(prev.recipes || [])],
+    }));
+    return id;
+  };
+
+  const deleteRecipe = (id: string) => {
+    setState((prev) => ({
+      ...prev,
+      recipes: (prev.recipes || []).filter((r) => r.id !== id),
+    }));
+  };
+
+  const logWeight = (weightKg: number, date?: string, notes?: string) => {
+    const targetDate = date || new Date().toISOString().split('T')[0];
+    const id = 'wt-' + targetDate;
+    setState((prev) => {
+      const existing = (prev.weightLogs || []).filter((w) => w.date !== targetDate);
+      const newEntry: WeightLogEntry = {
+        id,
+        date: targetDate,
+        weightKg: Number(weightKg.toFixed(1)),
+        notes,
+      };
+      return {
+        ...prev,
+        weightLogs: [...existing, newEntry].sort(
+          (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+        ),
+      };
+    });
+  };
+
+  const deleteWeightLog = (id: string) => {
+    setState((prev) => ({
+      ...prev,
+      weightLogs: (prev.weightLogs || []).filter((w) => w.id !== id),
+    }));
+  };
+
+  const updateNutritionProfile = (updates: Partial<NutritionProfile>) => {
+    setState((prev) => {
+      const current = prev.nutritionProfile || {
+        goal: 'maintain',
+        targetCalories: 2200,
+        macroTargets: { calories: 2200, protein: 140, carbs: 260, fat: 65 },
+        updatedAt: new Date().toISOString(),
+      };
+      const updatedProfile: NutritionProfile = {
+        ...current,
+        ...updates,
+        updatedAt: new Date().toISOString(),
+      };
+      return {
+        ...prev,
+        nutritionProfile: updatedProfile,
+      };
+    });
+  };
+
+  // ── Milestone 8: Focus Radio ─────────────────────────────────────────────
+
+  const addRadioUrl = (label: string, url: string): void => {
+    const embedUrl = toYouTubeEmbedUrl(url);
+    if (!embedUrl) return;
+    const isPlaylist = isYouTubePlaylistUrl(url);
+    const newEntry: RadioUrl = {
+      id: `radio-${Date.now()}`,
+      label: label.trim() || (isPlaylist ? 'My Playlist' : 'Station'),
+      url,
+      embedUrl,
+      type: isPlaylist ? 'playlist' : 'video',
+      addedAt: new Date().toISOString(),
+    };
+    setState((prev) => ({
+      ...prev,
+      radioUrls: [...(prev.radioUrls ?? []), newEntry],
+    }));
+  };
+
+  const removeRadioUrl = (id: string): void => {
+    setState((prev) => ({
+      ...prev,
+      radioUrls: (prev.radioUrls ?? []).filter((r) => r.id !== id),
+    }));
+  };
+
+  const reorderRadioUrl = (id: string, direction: 'up' | 'down'): void => {
+    setState((prev) => {
+      const list = [...(prev.radioUrls ?? [])];
+      const idx = list.findIndex((r) => r.id === id);
+      if (idx < 0) return prev;
+      const newIdx = direction === 'up' ? idx - 1 : idx + 1;
+      if (newIdx < 0 || newIdx >= list.length) return prev;
+      [list[idx], list[newIdx]] = [list[newIdx], list[idx]];
+      return { ...prev, radioUrls: list };
+    });
+  };
+
+  const radioQueue = state.radioQueue ?? [];
+  const radioLoopMode = state.radioLoopMode ?? 'off';
+  const radioIsShuffle = state.radioIsShuffle ?? false;
+  const customPlaylists = state.customPlaylists ?? [];
+  const activeCustomPlaylist = customPlaylists.find((p) => p.id === activeCustomPlaylistId) ?? null;
+
+  const activeRadioStation: RadioUrl | null = (() => {
+    if (activeRadioSource === 'playlist' && activeCustomPlaylist) {
+      if (activeCustomPlaylist.items.length > 0) {
+        const idx =
+          activeRadioIndex !== null && activeRadioIndex < activeCustomPlaylist.items.length
+            ? activeRadioIndex
+            : 0;
+        const item = activeCustomPlaylist.items[idx];
+        const allVideoIds = activeCustomPlaylist.items.map((it) => it.videoId);
+        // Place the current track first in the playlist sequence
+        const orderedIds = [item.videoId, ...allVideoIds.filter((id) => id !== item.videoId)];
+        const embedUrl =
+          buildCustomPlaylistEmbedUrl(orderedIds, {
+            loopMode: radioLoopMode,
+          }) || '';
+        return {
+          id: item.id,
+          label: `${activeCustomPlaylist.name} — ${item.title}`,
+          url: item.url,
+          embedUrl,
+          type: 'playlist',
+          addedAt: item.addedAt,
+        };
+      }
+
+      if (activeCustomPlaylist.youtubePlaylistUrl || activeCustomPlaylist.youtubePlaylistId) {
+        const plUrl =
+          activeCustomPlaylist.youtubePlaylistUrl ||
+          `https://www.youtube.com/playlist?list=${activeCustomPlaylist.youtubePlaylistId}`;
+        const embedUrl =
+          toYouTubeEmbedUrlWithControls(plUrl, {
+            loopMode: radioLoopMode,
+            autoplay: true,
+          }) || '';
+        return {
+          id: activeCustomPlaylist.id,
+          label: activeCustomPlaylist.name,
+          url: plUrl,
+          embedUrl,
+          type: 'playlist',
+          addedAt: activeCustomPlaylist.createdAt,
+        };
+      }
+
+      return null;
+    }
+    if (activeRadioIndex === null) return null;
+    if (activeRadioSource === 'queue') {
+      return radioQueue[activeRadioIndex] ?? null;
+    }
+    return (state.radioUrls ?? [])[activeRadioIndex] ?? null;
+  })();
+
+  const setActiveRadio = (
+    index: number | null,
+    source: 'stations' | 'queue' | 'playlist' = 'stations'
+  ): void => {
+    setActiveRadioIndex(index);
+    setActiveRadioSource(source);
+  };
+
+  const addToRadioQueue = (item: { label: string; url: string; type?: 'video' | 'playlist' }): void => {
+    const embedUrl = toYouTubeEmbedUrl(item.url);
+    if (!embedUrl) return;
+    const isPlaylist = isYouTubePlaylistUrl(item.url);
+    const newEntry: RadioUrl = {
+      id: `queue-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      label: item.label.trim() || (isPlaylist ? 'My Playlist' : 'Queued Track'),
+      url: item.url,
+      embedUrl,
+      type: item.type ?? (isPlaylist ? 'playlist' : 'video'),
+      addedAt: new Date().toISOString(),
+    };
+    setState((prev) => ({
+      ...prev,
+      radioQueue: [...(prev.radioQueue ?? []), newEntry],
+    }));
+  };
+
+  const removeFromRadioQueue = (index: number): void => {
+    setState((prev) => {
+      const currentQueue = prev.radioQueue ?? [];
+      const updated = currentQueue.filter((_, i) => i !== index);
+      return { ...prev, radioQueue: updated };
+    });
+    if (activeRadioSource === 'queue') {
+      if (activeRadioIndex === index) {
+        setActiveRadioIndex(null);
+      } else if (activeRadioIndex !== null && activeRadioIndex > index) {
+        setActiveRadioIndex(activeRadioIndex - 1);
+      }
+    }
+  };
+
+  const clearRadioQueue = (): void => {
+    setState((prev) => ({ ...prev, radioQueue: [] }));
+    if (activeRadioSource === 'queue') {
+      setActiveRadioIndex(null);
+    }
+  };
+
+  const reorderRadioQueue = (fromIndex: number, toIndex: number): void => {
+    setState((prev) => {
+      const list = [...(prev.radioQueue ?? [])];
+      if (fromIndex < 0 || fromIndex >= list.length || toIndex < 0 || toIndex >= list.length) {
+        return prev;
+      }
+      const [moved] = list.splice(fromIndex, 1);
+      list.splice(toIndex, 0, moved);
+      return { ...prev, radioQueue: list };
+    });
+  };
+
+  const cycleRadioLoopMode = (): void => {
+    setState((prev) => {
+      const cur = prev.radioLoopMode ?? 'off';
+      const next: RadioLoopMode = cur === 'off' ? 'all' : cur === 'all' ? 'one' : 'off';
+      return { ...prev, radioLoopMode: next };
+    });
+  };
+
+  const setRadioLoopMode = (mode: RadioLoopMode): void => {
+    setState((prev) => ({ ...prev, radioLoopMode: mode }));
+  };
+
+  const toggleRadioShuffle = (): void => {
+    setState((prev) => ({ ...prev, radioIsShuffle: !prev.radioIsShuffle }));
+  };
+
+  const playNextTrack = (): void => {
+    if (activeRadioSource === 'playlist' && activeCustomPlaylist) {
+      const items = activeCustomPlaylist.items;
+      if (items.length === 0) return;
+      if (state.radioIsShuffle && items.length > 1) {
+        const cur = activeRadioIndex ?? 0;
+        let next = Math.floor(Math.random() * items.length);
+        if (next === cur) next = (next + 1) % items.length;
+        setActiveRadioIndex(next);
+        return;
+      }
+      const cur = activeRadioIndex ?? 0;
+      let next = cur + 1;
+      if (next >= items.length) {
+        next = 0;
+      }
+      setActiveRadioIndex(next);
+      return;
+    }
+
+    const list = activeRadioSource === 'queue' ? (state.radioQueue ?? []) : (state.radioUrls ?? []);
+    if (list.length === 0) return;
+
+    if (state.radioIsShuffle && list.length > 1) {
+      const cur = activeRadioIndex ?? 0;
+      let next = Math.floor(Math.random() * list.length);
+      if (next === cur) {
+        next = (next + 1) % list.length;
+      }
+      setActiveRadioIndex(next);
+      return;
+    }
+
+    const cur = activeRadioIndex ?? -1;
+    let next = cur + 1;
+    if (next >= list.length) {
+      next = 0;
+    }
+    setActiveRadioIndex(next);
+  };
+
+  const playPrevTrack = (): void => {
+    if (activeRadioSource === 'playlist' && activeCustomPlaylist) {
+      const items = activeCustomPlaylist.items;
+      if (items.length === 0) return;
+      const cur = activeRadioIndex ?? 0;
+      let prev = cur - 1;
+      if (prev < 0) {
+        prev = items.length - 1;
+      }
+      setActiveRadioIndex(prev);
+      return;
+    }
+
+    const list = activeRadioSource === 'queue' ? (state.radioQueue ?? []) : (state.radioUrls ?? []);
+    if (list.length === 0) return;
+
+    const cur = activeRadioIndex ?? 0;
+    let prev = cur - 1;
+    if (prev < 0) {
+      prev = list.length - 1;
+    }
+    setActiveRadioIndex(prev);
+  };
+
+  // ── Milestone 8: Custom Playlists ("Make My Own Playlist") ─────────────
+
+  const createCustomPlaylist = (name: string, description?: string, youtubePlaylistUrl?: string): string => {
+    const newId = `playlist-${Date.now()}`;
+    const ytUrl = youtubePlaylistUrl?.trim();
+    const ytId = ytUrl ? extractYouTubePlaylistId(ytUrl) || undefined : undefined;
+    const isYt = Boolean(ytId || (ytUrl && (isYouTubePlaylistUrl(ytUrl) || isValidYouTubeUrl(ytUrl))));
+
+    // If user provided a URL that has a video id, add it as a track
+    const initialItems: CustomPlaylistItem[] = [];
+    if (ytUrl) {
+      const vId = extractYouTubeVideoId(ytUrl);
+      if (vId) {
+        initialItems.push({
+          id: `track-${Date.now()}-0`,
+          title: name.trim() || 'Track 1',
+          url: ytUrl,
+          videoId: vId,
+          addedAt: new Date().toISOString(),
+        });
+      }
+    }
+
+    const newPl: CustomPlaylist = {
+      id: newId,
+      name: name.trim() || (ytId ? 'My YouTube Playlist' : 'My Focus Playlist'),
+      description: description?.trim() || '',
+      items: initialItems,
+      createdAt: new Date().toISOString(),
+      youtubePlaylistUrl: ytUrl || undefined,
+      youtubePlaylistId: ytId,
+      type: isYt ? 'youtube' : 'custom',
+    };
+    setState((prev) => ({
+      ...prev,
+      customPlaylists: [...(prev.customPlaylists ?? []), newPl],
+    }));
+    return newId;
+  };
+
+  const deleteCustomPlaylist = (playlistId: string): void => {
+    setState((prev) => ({
+      ...prev,
+      customPlaylists: (prev.customPlaylists ?? []).filter((p) => p.id !== playlistId),
+    }));
+    if (activeRadioSource === 'playlist' && activeCustomPlaylistId === playlistId) {
+      setActiveRadioIndex(null);
+      setActiveCustomPlaylistId(null);
+    }
+  };
+
+  const addTrackToCustomPlaylist = (
+    playlistId: string,
+    track: { title: string; url: string }
+  ): boolean => {
+    const videoId = extractYouTubeVideoId(track.url);
+    const playlistIdMatch = extractYouTubePlaylistId(track.url);
+
+    if (!videoId && !playlistIdMatch) return false;
+
+    if (playlistIdMatch && !videoId) {
+      // It's a pure playlist link added to this playlist
+      setState((prev) => ({
+        ...prev,
+        customPlaylists: (prev.customPlaylists ?? []).map((p) => {
+          if (p.id !== playlistId) return p;
+          return {
+            ...p,
+            youtubePlaylistUrl: track.url,
+            youtubePlaylistId: playlistIdMatch,
+            type: 'youtube',
+          };
+        }),
+      }));
+      return true;
+    }
+
+    const newItem: CustomPlaylistItem = {
+      id: `track-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      title: track.title.trim() || 'Focus Beat',
+      url: track.url,
+      videoId: videoId || 'dQw4w9WgXcQ',
+      addedAt: new Date().toISOString(),
+    };
+    setState((prev) => ({
+      ...prev,
+      customPlaylists: (prev.customPlaylists ?? []).map((p) => {
+        if (p.id !== playlistId) return p;
+        return {
+          ...p,
+          items: [...p.items, newItem],
+        };
+      }),
+    }));
+    return true;
+  };
+
+  const removeTrackFromCustomPlaylist = (playlistId: string, trackId: string): void => {
+    setState((prev) => ({
+      ...prev,
+      customPlaylists: (prev.customPlaylists ?? []).map((p) => {
+        if (p.id !== playlistId) return p;
+        return {
+          ...p,
+          items: p.items.filter((it) => it.id !== trackId),
+        };
+      }),
+    }));
+  };
+
+  const reorderTrackInCustomPlaylist = (
+    playlistId: string,
+    fromIndex: number,
+    toIndex: number
+  ): void => {
+    setState((prev) => ({
+      ...prev,
+      customPlaylists: (prev.customPlaylists ?? []).map((p) => {
+        if (p.id !== playlistId) return p;
+        const list = [...p.items];
+        if (fromIndex < 0 || fromIndex >= list.length || toIndex < 0 || toIndex >= list.length) {
+          return p;
+        }
+        const [moved] = list.splice(fromIndex, 1);
+        list.splice(toIndex, 0, moved);
+        return { ...p, items: list };
+      }),
+    }));
+  };
+
+  const playCustomPlaylist = (playlistId: string, shuffle = false): void => {
+    const pl = (state.customPlaylists ?? []).find((p) => p.id === playlistId);
+    if (!pl || (pl.items.length === 0 && !pl.youtubePlaylistUrl && !pl.youtubePlaylistId)) return;
+    setActiveCustomPlaylistId(playlistId);
+    setActiveRadioSource('playlist');
+    if (shuffle) {
+      setState((prev) => ({ ...prev, radioIsShuffle: true }));
+      if (pl.items.length > 0) {
+        const randomIdx = Math.floor(Math.random() * pl.items.length);
+        setActiveRadioIndex(randomIdx);
+      } else {
+        setActiveRadioIndex(0);
+      }
+    } else {
+      setActiveRadioIndex(0);
+    }
+  };
+
+  const addPlaylistToRadioQueue = (playlistId: string): void => {
+    const pl = (state.customPlaylists ?? []).find((p) => p.id === playlistId);
+    if (!pl) return;
+    if (pl.youtubePlaylistUrl) {
+      addToRadioQueue({
+        label: pl.name,
+        url: pl.youtubePlaylistUrl,
+        type: 'playlist',
+      });
+    } else if (pl.items.length > 0) {
+      pl.items.forEach((item) => {
+        addToRadioQueue({
+          label: `${pl.name} — ${item.title}`,
+          url: item.url,
+          type: 'video',
+        });
+      });
+    }
+  };
+
+  // ── Milestone 6: Mock-Test Analytics & Error Log ──────────────────────────
+
+  const addMockTest = (test: Omit<MockTest, 'id' | 'createdAt'>): string => {
+    const id = `test-${Date.now()}`;
+    const newTest: MockTest = {
+      ...test,
+      id,
+      createdAt: new Date().toISOString(),
+    };
+    setState((prev) => ({
+      ...prev,
+      mockTests: [newTest, ...(prev.mockTests || [])],
+    }));
+    return id;
+  };
+
+  const updateMockTest = (id: string, updates: Partial<MockTest>): void => {
+    setState((prev) => ({
+      ...prev,
+      mockTests: (prev.mockTests || []).map((t) => (t.id === id ? { ...t, ...updates } : t)),
+    }));
+  };
+
+  const deleteMockTest = (id: string): void => {
+    setState((prev) => ({
+      ...prev,
+      mockTests: (prev.mockTests || []).filter((t) => t.id !== id),
+    }));
+  };
+
+  const addErrorLogEntry = (entry: Omit<ErrorLogEntry, 'id' | 'createdAt' | 'reviewedCount'>): string => {
+    const id = `err-${Date.now()}`;
+    const newEntry: ErrorLogEntry = {
+      ...entry,
+      id,
+      reviewedCount: 0,
+      resolved: entry.resolved ?? false,
+      createdAt: new Date().toISOString(),
+    };
+    setState((prev) => ({
+      ...prev,
+      errorLogs: [newEntry, ...(prev.errorLogs || [])],
+    }));
+    return id;
+  };
+
+  const updateErrorLogEntry = (id: string, updates: Partial<ErrorLogEntry>): void => {
+    setState((prev) => ({
+      ...prev,
+      errorLogs: (prev.errorLogs || []).map((e) => (e.id === id ? { ...e, ...updates } : e)),
+    }));
+  };
+
+  const deleteErrorLogEntry = (id: string): void => {
+    setState((prev) => ({
+      ...prev,
+      errorLogs: (prev.errorLogs || []).filter((e) => e.id !== id),
+    }));
+  };
+
+  const resolveErrorLogEntry = (id: string, resolved: boolean = true): void => {
+    setState((prev) => ({
+      ...prev,
+      errorLogs: (prev.errorLogs || []).map((e) => {
+        if (e.id !== id) return e;
+        return {
+          ...e,
+          resolved,
+          reviewedCount: (e.reviewedCount || 0) + (resolved ? 1 : 0),
+          lastReviewedAt: resolved ? new Date().toISOString() : e.lastReviewedAt,
+        };
+      }),
+    }));
+  };
+
+  const convertErrorToPlannerTask = (errorId: string): { success: boolean; taskId?: string; message?: string } => {
+    const error = (state.errorLogs || []).find((e) => e.id === errorId);
+    if (!error) {
+      return { success: false, message: 'Error log entry not found' };
+    }
+
+    // Duplicate detection: check if a planner task already links to this error
+    const existingTask = (state.tasks || []).find((t) => t.errorLogId === errorId);
+    if (existingTask) {
+      return {
+        success: false,
+        taskId: existingTask.id,
+        message: 'A revision task for this error already exists in the Study Planner',
+      };
+    }
+
+    const taskId = `task-${Date.now()}`;
+    const subject = (state.syllabusSubjects || []).find((s) => s.id === error.subjectId);
+    const subjectName = subject?.name || 'Subject';
+    const notesContent = [
+      `Classification: ${error.errorType.toUpperCase()}`,
+      error.description ? `Mistake: ${error.description}` : '',
+      error.correctApproach ? `Correct Approach: ${error.correctApproach}` : '',
+    ].filter(Boolean).join('\n');
+
+    const newTask: PlannerTask = {
+      id: taskId,
+      title: `Fix Error: ${error.title} (${subjectName})`,
+      description: error.description || undefined,
+      status: 'todo',
+      priority: 'high',
+      subjectId: error.subjectId,
+      syllabusSubjectId: error.subjectId,
+      syllabusChapterId: error.syllabusChapterId,
+      syllabusTopicId: error.syllabusTopicId,
+      dueDate: new Date().toISOString().split('T')[0],
+      estimatedDuration: 30,
+      notes: notesContent,
+      errorLogId: error.id,
+      createdAt: new Date().toISOString(),
+    };
+
+    setState((prev) => ({
+      ...prev,
+      tasks: [newTask, ...(prev.tasks || [])],
+      errorLogs: (prev.errorLogs || []).map((e) =>
+        e.id === errorId
+          ? {
+              ...e,
+              reviewedCount: (e.reviewedCount || 0) + 1,
+              lastReviewedAt: new Date().toISOString(),
+            }
+          : e
+      ),
+    }));
+
+    return {
+      success: true,
+      taskId,
+      message: 'Successfully scheduled high-priority revision task in Study Planner',
+    };
+  };
+
+  // ── Milestone 8: Full Reset ──────────────────────────────────────────────
+
+  const fullReset = (): void => {
+    localStorage.clear();
+    setState(storageService.loadData());
+    setActiveRadioIndex(null);
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -1017,6 +2317,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         markAttendance,
         markAttendanceForEvent,
         logStudySession,
+        deleteStudySession,
         toggleGymSet,
         toggleGymWorkoutComplete,
         toggleReminder,
@@ -1057,8 +2358,103 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         importSyllabus,
         // Attendance requirement
         getAttendanceReq,
+        // Milestone 5: Tasks
+        addTask,
+        updateTask,
+        deleteTask,
+        setTaskStatus,
+        // Milestone 5: Spaced Repetition
+        addSpacedReview,
+        updateSpacedReview,
+        deleteSpacedReview,
+        completeSpacedReview,
+        rescheduleSpacedReview,
+        updateReviewIntervals,
+        // Milestone 5: Daily Questions
+        addDailyQuestionEntry,
+        updateDailyQuestionEntry,
+        deleteDailyQuestionEntry,
+        setDailyQuestionTarget,
+        // Milestone 7: Nutrition actions
+        addFoodDiaryEntry,
+        addMultipleFoodDiaryEntries,
+        updateFoodDiaryEntry,
+        deleteFoodDiaryEntry,
+        addCustomFood,
+        deleteCustomFood,
+        addRecipe,
+        deleteRecipe,
+        logWeight,
+        deleteWeightLog,
+        updateNutritionProfile,
+        // Milestone 8: Focus Radio, Queue, Loop & Shuffle
+        addRadioUrl,
+        removeRadioUrl,
+        reorderRadioUrl,
+        radioQueue,
+        radioLoopMode,
+        radioIsShuffle,
+        activeRadioStation,
+        activeRadioIndex,
+        activeRadioSource,
+        setActiveRadio,
+        addToRadioQueue,
+        removeFromRadioQueue,
+        clearRadioQueue,
+        reorderRadioQueue,
+        cycleRadioLoopMode,
+        setRadioLoopMode,
+        toggleRadioShuffle,
+        playNextTrack,
+        playPrevTrack,
+        // Milestone 8: Custom Playlists ("Make My Own Playlist")
+        customPlaylists,
+        activeCustomPlaylistId,
+        createCustomPlaylist,
+        deleteCustomPlaylist,
+        addTrackToCustomPlaylist,
+        removeTrackFromCustomPlaylist,
+        reorderTrackInCustomPlaylist,
+        playCustomPlaylist,
+        addPlaylistToRadioQueue,
+        // Milestone 6: Mock-Test Analytics & Error Log
+        addMockTest,
+        updateMockTest,
+        deleteMockTest,
+        addErrorLogEntry,
+        updateErrorLogEntry,
+        deleteErrorLogEntry,
+        resolveErrorLogEntry,
+        convertErrorToPlannerTask,
+        // Events & Tasks Calendar Planner
+        events: state.events || [],
+        addEvent,
+        updateEvent,
+        deleteEvent,
+        toggleEventComplete,
+        fullReset,
+        // Google Auth & Cloud Sync
+        authUser,
+        syncStatus,
+        lastSyncedAt,
+        signInWithGoogle,
+        signOut,
+        syncNow,
       }}
     >
+      {conflictData && (
+        <SyncConflictModal
+          isOpen={Boolean(conflictData)}
+          userEmail={authUser?.email || 'User'}
+          localData={state}
+          cloudData={conflictData.cloudRecord.data}
+          cloudUpdatedAt={conflictData.cloudRecord.updatedAt}
+          onKeepLocal={handleKeepLocal}
+          onLoadCloud={handleLoadCloud}
+          onMergeBoth={handleMergeBoth}
+          onCancel={handleCancelConflict}
+        />
+      )}
       {children}
     </AppContext.Provider>
   );
@@ -1071,3 +2467,50 @@ export const useApp = (): AppContextType => {
   }
   return context;
 };
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

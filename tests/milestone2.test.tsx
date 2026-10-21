@@ -171,15 +171,21 @@ describe('Milestone 2: Profile, Personalization, Appearance & Persistence', () =
     expect(screen.getByText(/Target date has passed/i)).toBeInTheDocument();
     unmount1();
 
-    // 2. Today's date
-    const todayStr = new Date().toISOString().split('T')[0];
+    // 2. Today's date (local, not UTC, to match the widget's local-midnight comparison)
+    const todayLocal = new Date();
+    const todayStr = `${todayLocal.getFullYear()}-${String(todayLocal.getMonth() + 1).padStart(2, '0')}-${String(todayLocal.getDate()).padStart(2, '0')}`;
+    const base2 = storageService.loadData();
     const todayData: AppStateData = {
-      ...storageService.loadData(),
+      ...base2,
       profile: {
         displayName: 'Student',
         targetExam: 'Major Project Viva',
         examDate: todayStr,
       },
+      settings: {
+        ...base2.settings,
+        showExamCountdown: true,
+      } as AppStateData['settings'],
     };
     saveData(todayData);
 
