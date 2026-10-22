@@ -4,6 +4,8 @@ import { AppProvider } from '../src/context/AppContext';
 import { ThemeProvider } from '../src/theme/ThemeContext';
 import { ClassSpaceProvider } from '../src/context/ClassSpaceContext';
 import { ClassSpaceView } from '../src/components/classspace/ClassSpaceView';
+import { Navigation } from '../src/components/common/Navigation';
+import { SettingsView } from '../src/components/views/SettingsView';
 import {
   generateJoinCode,
   normalizeJoinCode,
@@ -12,6 +14,7 @@ import {
   canManageSchedule,
   canModerate,
   canManageWorkspace,
+  isWorkspaceOwner,
   resolveClassSchedule,
   JOIN_CODE_CHARACTERS,
   JOIN_CODE_LENGTH,
@@ -83,7 +86,6 @@ describe('ClassSpace — Core Logic & Unit Tests', () => {
     });
 
     it('rejects files larger than 2MB', () => {
-      // 2.5 MB mock file
       const bigBlob = new Blob([new Uint8Array(2.5 * 1024 * 1024)]);
       const bigFile = new File([bigBlob], 'huge_avatar.png', { type: 'image/png' });
 
@@ -94,24 +96,29 @@ describe('ClassSpace — Core Logic & Unit Tests', () => {
   });
 
   describe('Role-Based Permissions', () => {
-    it('authorizes CR and Co-Admin to manage schedules, but denies normal members', () => {
+    it('authorizes Owner, CR, and Co-Admin to manage schedules, but denies normal members', () => {
+      expect(canManageSchedule('owner')).toBe(true);
       expect(canManageSchedule('cr')).toBe(true);
       expect(canManageSchedule('co_admin')).toBe(true);
       expect(canManageSchedule('member')).toBe(false);
       expect(canManageSchedule(undefined)).toBe(false);
     });
 
-    it('authorizes CR and Co-Admin to moderate community chat, but denies normal members', () => {
+    it('authorizes Owner, CR, and Co-Admin to moderate community chat, but denies normal members', () => {
+      expect(canModerate('owner')).toBe(true);
       expect(canModerate('cr')).toBe(true);
       expect(canModerate('co_admin')).toBe(true);
       expect(canModerate('member')).toBe(false);
       expect(canModerate(undefined)).toBe(false);
     });
 
-    it('restricts workspace-level administrative actions solely to CR', () => {
+    it('restricts workspace-level administrative actions solely to Owner and CR', () => {
+      expect(canManageWorkspace('owner')).toBe(true);
       expect(canManageWorkspace('cr')).toBe(true);
       expect(canManageWorkspace('co_admin')).toBe(false);
       expect(canManageWorkspace('member')).toBe(false);
+      expect(isWorkspaceOwner('owner')).toBe(true);
+      expect(isWorkspaceOwner('cr')).toBe(false);
     });
   });
 
@@ -135,7 +142,6 @@ describe('ClassSpace — Core Logic & Unit Tests', () => {
     ];
 
     it('generates standard recurring occurrences when no overrides exist', () => {
-      // Monday Oct 26, 2026 to Sunday Nov 1, 2026
       const start = new Date(2026, 9, 26);
       const end = new Date(2026, 10, 1);
 
@@ -213,7 +219,7 @@ describe('ClassSpace — Core Logic & Unit Tests', () => {
           id: 'ov_extra_1',
           workspaceId: 'ws_test',
           type: 'extra',
-          newDate: '2026-10-28', // Wednesday
+          newDate: '2026-10-28',
           newStartTime: '15:00',
           newEndTime: '16:30',
           newRoom: 'Auditorium',
@@ -238,20 +244,17 @@ describe('ClassSpace — Core Logic & Unit Tests', () => {
   });
 });
 
-describe('ClassSpace Service & Multi-Student Attendance Isolation', () => {
+describe('ClassSpace Service — No Mock Data & Multi-Student Attendance Isolation', () => {
   beforeEach(async () => {
     localStorage.clear();
   });
 
-  it('provides a seeded default workspace with join code CH7K2 for student demo', async () => {
-    const workspaces = await classSpaceService.getWorkspacesForUser('usr_google_student_demo');
-    expect(workspaces.length).toBeGreaterThan(0);
-    const demoWs = workspaces.find((w) => w.joinCode === 'CH7K2');
-    expect(demoWs).toBeDefined();
-    expect(demoWs?.name).toContain('B.Tech CSE');
+  it('starts completely clean with no fake demo workspaces, classes or members in production', async () => {
+    const workspaces = await classSpaceService.getWorkspacesForUser('any_user');
+    expect(workspaces).toEqual([]);
   });
 
-  it('creates new workspaces with uppercase 5-char code and sets user as CR', async () => {
+  it('creates new workspaces with uppercase 5-char code and sets creator as CR/Owner', async () => {
     const user = {
       id: 'usr_cr_test',
       email: 'cr.test@college.edu',
@@ -262,10 +265,12 @@ describe('ClassSpace Service & Multi-Student Attendance Isolation', () => {
       name: 'Electrical Engineering — Batch 2027',
       section: 'EE-1',
       department: 'Electrical Engineering',
+      institution: 'State Engineering College',
     });
 
     expect(res.workspace).toBeDefined();
     expect(res.workspace?.id).toBeDefined();
+    expect(res.workspace?.name).toBe('Electrical Engineering — Batch 2027');
     expect(res.workspace?.joinCode).toHaveLength(5);
     expect(isValidJoinCode(res.workspace!.joinCode)).toBe(true);
 
@@ -275,17 +280,28 @@ describe('ClassSpace Service & Multi-Student Attendance Isolation', () => {
     expect(crMember?.role).toBe('cr');
   });
 
-  it('allows student to join with code and prevents duplicate membership', async () => {
+  it('allows student to join real workspace with code and prevents duplicate membership', async () => {
+    const creatorUser = {
+      id: 'usr_creator',
+      email: 'creator@college.edu',
+      name: 'Creator CR',
+    };
+
+    const createRes = await classSpaceService.createWorkspace(creatorUser, {
+      name: 'Civil Engineering — Batch 2026',
+    });
+    const joinCode = createRes.workspace!.joinCode;
+
     const studentUser = {
       id: 'usr_student_alice',
       email: 'alice@college.edu',
       name: 'Alice Scholar',
     };
 
-    // Join default workspace CH7K2
-    const joinRes = await classSpaceService.joinWorkspaceByCode(studentUser, 'CH7K2');
+    // Join the newly created real workspace
+    const joinRes = await classSpaceService.joinWorkspaceByCode(studentUser, joinCode);
     expect(joinRes.workspace).toBeDefined();
-    expect(joinRes.workspace?.joinCode).toBe('CH7K2');
+    expect(joinRes.workspace?.joinCode).toBe(joinCode);
 
     const members = await classSpaceService.getMembers(joinRes.workspace!.id);
     const alice = members.find((m) => m.userId === studentUser.id);
@@ -293,7 +309,7 @@ describe('ClassSpace Service & Multi-Student Attendance Isolation', () => {
     expect(alice?.role).toBe('member');
 
     // Attempting to join again should reject gracefully with already-a-member error
-    const duplicateRes = await classSpaceService.joinWorkspaceByCode(studentUser, 'CH7K2');
+    const duplicateRes = await classSpaceService.joinWorkspaceByCode(studentUser, joinCode);
     expect(duplicateRes.error).toMatch(/Already a member/i);
   });
 
@@ -325,14 +341,18 @@ describe('ClassSpace Service & Multi-Student Attendance Isolation', () => {
     expect(lookupNew.workspace?.id).toBe(ws.id);
   });
 
-  it('strictly isolates personal attendance records between different students', async () => {
+  it('strictly isolates personal attendance records between different students in same class', async () => {
+    const creatorUser = { id: 'usr_cr', email: 'cr@c.edu', name: 'CR' };
+    const wsRes = await classSpaceService.createWorkspace(creatorUser, { name: 'Batch 2026' });
+    const wsId = wsRes.workspace!.id;
+
     const studentA = 'usr_alice';
     const studentB = 'usr_bob';
     const occurrenceKey = 'rule_1::2026-10-26';
 
     // Alice marks herself PRESENT
     await classSpaceService.setAttendanceRecord(
-      'ws_demo_cs2026',
+      wsId,
       studentA,
       occurrenceKey,
       '2026-10-26',
@@ -341,7 +361,7 @@ describe('ClassSpace Service & Multi-Student Attendance Isolation', () => {
 
     // Bob marks himself ABSENT
     await classSpaceService.setAttendanceRecord(
-      'ws_demo_cs2026',
+      wsId,
       studentB,
       occurrenceKey,
       '2026-10-26',
@@ -349,37 +369,41 @@ describe('ClassSpace Service & Multi-Student Attendance Isolation', () => {
     );
 
     // Alice queries her attendance: only sees PRESENT for herself
-    const aliceRecords = await classSpaceService.getAttendanceRecords('ws_demo_cs2026', studentA);
+    const aliceRecords = await classSpaceService.getAttendanceRecords(wsId, studentA);
     const aliceRecord = aliceRecords.find((r) => r.occurrenceKey === occurrenceKey);
     expect(aliceRecord?.status).toBe('present');
     expect(aliceRecord?.userId).toBe(studentA);
 
     // Bob queries his attendance: only sees ABSENT for himself
-    const bobRecords = await classSpaceService.getAttendanceRecords('ws_demo_cs2026', studentB);
+    const bobRecords = await classSpaceService.getAttendanceRecords(wsId, studentB);
     const bobRecord = bobRecords.find((r) => r.occurrenceKey === occurrenceKey);
     expect(bobRecord?.status).toBe('absent');
     expect(bobRecord?.userId).toBe(studentB);
 
     // Updating Alice's attendance does not mutate Bob's attendance
     await classSpaceService.setAttendanceRecord(
-      'ws_demo_cs2026',
+      wsId,
       studentA,
       occurrenceKey,
       '2026-10-26',
       'absent'
     );
 
-    const aliceUpdated = await classSpaceService.getAttendanceRecords('ws_demo_cs2026', studentA);
+    const aliceUpdated = await classSpaceService.getAttendanceRecords(wsId, studentA);
     expect(aliceUpdated.find((r) => r.occurrenceKey === occurrenceKey)?.status).toBe('absent');
 
-    const bobCheck = await classSpaceService.getAttendanceRecords('ws_demo_cs2026', studentB);
+    const bobCheck = await classSpaceService.getAttendanceRecords(wsId, studentB);
     expect(bobCheck.find((r) => r.occurrenceKey === occurrenceKey)?.status).toBe('absent');
   });
 
   describe('Community Messaging, Replies & Emoji Reactions', () => {
     it('sends messages and supports threaded quoted replies', async () => {
+      const creatorUser = { id: 'usr_cr', email: 'cr@c.edu', name: 'CR' };
+      const wsRes = await classSpaceService.createWorkspace(creatorUser, { name: 'Batch 2026' });
+      const wsId = wsRes.workspace!.id;
+
       const sendRes = await classSpaceService.sendMessage(
-        'ws_demo_cs2026',
+        wsId,
         { id: 'usr_student_1', name: 'Maya Patel' },
         'Does anyone have the lecture slides for unit 3?'
       );
@@ -388,7 +412,7 @@ describe('ClassSpace Service & Multi-Student Attendance Isolation', () => {
       expect(sendRes.message?.content).toBe('Does anyone have the lecture slides for unit 3?');
 
       const replyRes = await classSpaceService.sendMessage(
-        'ws_demo_cs2026',
+        wsId,
         { id: 'usr_cr_test', name: 'Class Rep' },
         'Uploaded to the shared Google Drive link!',
         {
@@ -403,8 +427,12 @@ describe('ClassSpace Service & Multi-Student Attendance Isolation', () => {
     });
 
     it('toggles emoji reactions cleanly per user without duplicates', async () => {
+      const creatorUser = { id: 'usr_cr', email: 'cr@c.edu', name: 'CR' };
+      const wsRes = await classSpaceService.createWorkspace(creatorUser, { name: 'Batch 2026' });
+      const wsId = wsRes.workspace!.id;
+
       const sendRes = await classSpaceService.sendMessage(
-        'ws_demo_cs2026',
+        wsId,
         { id: 'usr_test', name: 'Test' },
         'Assignment 2 deadline is postponed to Friday.'
       );
@@ -412,31 +440,31 @@ describe('ClassSpace Service & Multi-Student Attendance Isolation', () => {
 
       // User A adds thumbs up
       await classSpaceService.addReaction(msgId, 'usr_user_a', '👍');
-      let messages = await classSpaceService.getMessages('ws_demo_cs2026');
+      let messages = await classSpaceService.getMessages(wsId);
       let updatedMsg = messages.find((m) => m.id === msgId);
       expect(updatedMsg?.reactions['👍']).toContain('usr_user_a');
 
       // User B adds thumbs up
       await classSpaceService.addReaction(msgId, 'usr_user_b', '👍');
-      messages = await classSpaceService.getMessages('ws_demo_cs2026');
+      messages = await classSpaceService.getMessages(wsId);
       updatedMsg = messages.find((m) => m.id === msgId);
       expect(updatedMsg?.reactions['👍']).toHaveLength(2);
 
       // User A removes reaction
       await classSpaceService.removeReaction(msgId, 'usr_user_a', '👍');
-      messages = await classSpaceService.getMessages('ws_demo_cs2026');
+      messages = await classSpaceService.getMessages(wsId);
       updatedMsg = messages.find((m) => m.id === msgId);
       expect(updatedMsg?.reactions['👍']).toEqual(['usr_user_b']);
     });
   });
 });
 
-describe('ClassSpace UI Component Integration', () => {
+describe('ClassSpace UI Component Integration & User Mode', () => {
   beforeEach(() => {
     localStorage.clear();
   });
 
-  it('renders ClassSpace header, join code, and sub-tabs navigation', async () => {
+  it('renders welcome empty hero with Create and Join buttons when not enrolled', async () => {
     render(
       <ThemeProvider>
         <AppProvider>
@@ -447,51 +475,85 @@ describe('ClassSpace UI Component Integration', () => {
       </ThemeProvider>
     );
 
-    // Header displays workspace name and join code
+    // Displays welcome hero explaining ClassSpace with 0 fake data
     await waitFor(() => {
-      expect(screen.getByText(/B\.Tech CSE — Batch 2026/i)).toBeInTheDocument();
-      expect(screen.getByText('CH7K2')).toBeInTheDocument();
+      expect(screen.getByText(/Welcome to/i)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Create ClassSpace/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Join with Code/i })).toBeInTheDocument();
     });
 
-    // Sub-tab navigation is present
-    expect(screen.getByText('Overview')).toBeInTheDocument();
-    expect(screen.getByText('Timetable')).toBeInTheDocument();
-    expect(screen.getByText('My Attendance')).toBeInTheDocument();
-    expect(screen.getByText('Community')).toBeInTheDocument();
+    // Overview, Timetable, My Attendance, Settings tabs must NOT be present in ClassSpace
+    expect(screen.queryByText('Overview')).not.toBeInTheDocument();
+    expect(screen.queryByText('My Attendance')).not.toBeInTheDocument();
+  });
+
+  it('renders only Community and Classmates sub-tabs when user is enrolled', async () => {
+    // Seed real user-created workspace
+    const creatorUser = { id: 'usr_google_student_demo', email: 'demo@c.edu', name: 'Demo Student' };
+    await classSpaceService.createWorkspace(creatorUser, { name: 'Robotics Engineering — Sec A' });
+
+    render(
+      <ThemeProvider>
+        <AppProvider>
+          <ClassSpaceProvider>
+            <ClassSpaceView />
+          </ClassSpaceProvider>
+        </AppProvider>
+      </ThemeProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Robotics Engineering — Sec A')).toBeInTheDocument();
+    });
+
+    // Sub-tab navigation contains ONLY Community and Classmates
+    expect(screen.getByText(/Community & Notices/i)).toBeInTheDocument();
     expect(screen.getByText('Classmates')).toBeInTheDocument();
+
+    // Redundant duplicate tabs are gone
+    expect(screen.queryByText('Overview')).not.toBeInTheDocument();
+    expect(screen.queryByText('My Attendance')).not.toBeInTheDocument();
+  });
+
+  it('hides ClassSpace navigation tab when in Individual user mode', async () => {
+    render(
+      <ThemeProvider>
+        <AppProvider>
+          <Navigation currentTab="dashboard" onSelectTab={() => {}} />
+        </AppProvider>
+      </ThemeProvider>
+    );
+
+    // Default mode is Individual -> ClassSpace tab is hidden
+    expect(screen.queryByText('ClassSpace')).not.toBeInTheDocument();
+    expect(screen.getByText('Today')).toBeInTheDocument();
+    expect(screen.getByText('Timetable')).toBeInTheDocument();
+    expect(screen.getByText('Attendance')).toBeInTheDocument();
     expect(screen.getByText('Settings')).toBeInTheDocument();
   });
 
-  it('switches between ClassSpace sub-tabs smoothly', async () => {
+  it('renders User Mode selector in Settings and allows switching between Individual and Class-based', async () => {
     render(
       <ThemeProvider>
         <AppProvider>
           <ClassSpaceProvider>
-            <ClassSpaceView />
+            <SettingsView />
           </ClassSpaceProvider>
         </AppProvider>
       </ThemeProvider>
     );
 
-    await waitFor(() => {
-      expect(screen.getByText('CH7K2')).toBeInTheDocument();
-    });
+    // User Mode heading and options exist
+    expect(screen.getByText('User Mode')).toBeInTheDocument();
+    expect(screen.getByText(/Type A — Individual/i)).toBeInTheDocument();
+    expect(screen.getByText(/Type B — Class-based/i)).toBeInTheDocument();
 
-    // Switch to Classmates tab using exact tab button
-    const classmatesTab = screen.getByText('Classmates').closest('button')!;
-    fireEvent.click(classmatesTab);
-
-    await waitFor(() => {
-      expect(screen.getByPlaceholderText(/Search by student name or email/i)).toBeInTheDocument();
-    });
-
-    // Switch to Settings tab
-    const settingsTab = screen.getByText('Settings').closest('button')!;
-    fireEvent.click(settingsTab);
+    // Clicking Type B — Class-based activates Class-based mode and reveals ClassSpace settings
+    const classBasedCard = screen.getByText(/Type B — Class-based/i).closest('div')!;
+    fireEvent.click(classBasedCard);
 
     await waitFor(() => {
-      expect(screen.getByText(/ClassSpace Details/i)).toBeInTheDocument();
-      expect(screen.getByText(/Your Student Profile in this Class/i)).toBeInTheDocument();
+      expect(screen.getByText(/ClassSpace Management & Membership/i)).toBeInTheDocument();
     });
   });
 });

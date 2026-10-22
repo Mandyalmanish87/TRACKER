@@ -87,11 +87,15 @@ export const Navigation: React.FC<NavigationProps> = ({ currentTab, onSelectTab 
       badge: pendingRemindersCount > 0 ? pendingRemindersCount : undefined,
       badgeVariant: 'neutral',
     },
-    {
-      id: 'classspace',
-      label: 'ClassSpace',
-      icon: <Building className="w-4 h-4" />,
-    },
+    ...(state.settings?.userMode === 'class_based'
+      ? [
+          {
+            id: 'classspace' as NavTab,
+            label: 'ClassSpace',
+            icon: <Building className="w-4 h-4" />,
+          },
+        ]
+      : []),
     {
       id: 'settings',
       label: 'Settings',

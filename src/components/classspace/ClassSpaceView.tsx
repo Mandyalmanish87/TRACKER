@@ -1,8 +1,5 @@
 import React, { useState } from 'react';
 import {
-  LayoutDashboard,
-  Calendar,
-  CheckCircle2,
   MessageSquare,
   Users,
   Settings,
@@ -12,17 +9,13 @@ import {
 } from 'lucide-react';
 import { useClassSpace } from '../../context/ClassSpaceContext';
 import { ClassSpaceHeader } from './ClassSpaceHeader';
-import { ClassSpaceOverview } from './ClassSpaceOverview';
-import { ClassTimetableTab } from './ClassTimetableTab';
-import { ClassAttendanceTab } from './ClassAttendanceTab';
 import { ClassCommunityTab } from './ClassCommunityTab';
 import { ClassMembersTab } from './ClassMembersTab';
-import { ClassSettingsTab } from './ClassSettingsTab';
 import { CreateWorkspaceModal } from './CreateWorkspaceModal';
 import { JoinWorkspaceModal } from './JoinWorkspaceModal';
 import { ClassNotificationDrawer } from './ClassNotificationDrawer';
 
-export type ClassSpaceSubTab = 'overview' | 'timetable' | 'attendance' | 'community' | 'members' | 'settings';
+export type ClassSpaceSubTab = 'community' | 'members';
 
 interface SubTabItem {
   id: ClassSpaceSubTab;
@@ -31,27 +24,27 @@ interface SubTabItem {
   badge?: string;
 }
 
-export const ClassSpaceView: React.FC = () => {
+interface ClassSpaceViewProps {
+  onNavigateToSettings?: () => void;
+}
+
+export const ClassSpaceView: React.FC<ClassSpaceViewProps> = ({ onNavigateToSettings }) => {
   const {
     activeWorkspace,
     isLoading,
-    rules,
     members,
   } = useClassSpace();
 
-  const [activeTab, setActiveTab] = useState<ClassSpaceSubTab>('overview');
+  const [activeTab, setActiveTab] = useState<ClassSpaceSubTab>('community');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showJoinModal, setShowJoinModal] = useState(false);
   const [showNotificationDrawer, setShowNotificationDrawer] = useState(false);
 
-  // Tab configuration
+  // Tab configuration: only Community and Classmates live inside ClassSpace
+  // Timetable and Attendance live directly in the main navigation
   const tabs: SubTabItem[] = [
-    { id: 'overview', label: 'Overview', icon: LayoutDashboard },
-    { id: 'timetable', label: 'Timetable', icon: Calendar, badge: rules.length > 0 ? `${rules.length}` : undefined },
-    { id: 'attendance', label: 'My Attendance', icon: CheckCircle2 },
-    { id: 'community', label: 'Community', icon: MessageSquare },
+    { id: 'community', label: 'Community & Notices', icon: MessageSquare },
     { id: 'members', label: 'Classmates', icon: Users, badge: members.length > 0 ? `${members.length}` : undefined },
-    { id: 'settings', label: 'Settings', icon: Settings },
   ];
 
   if (isLoading) {
@@ -84,14 +77,14 @@ export const ClassSpaceView: React.FC = () => {
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
             <button
               onClick={() => setShowCreateModal(true)}
-              className="w-full sm:w-auto px-6 py-3 rounded-xl bg-primary text-primary-foreground font-semibold shadow-lg hover:bg-primary/90 transition-all flex items-center justify-center gap-2"
+              className="w-full sm:w-auto px-6 py-3 rounded-xl bg-primary text-primary-foreground font-semibold shadow-lg hover:bg-primary/90 transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
               <Plus className="w-5 h-5" />
               <span>Create ClassSpace (for CRs)</span>
             </button>
             <button
               onClick={() => setShowJoinModal(true)}
-              className="w-full sm:w-auto px-6 py-3 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground font-semibold border border-border transition-all flex items-center justify-center gap-2"
+              className="w-full sm:w-auto px-6 py-3 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground font-semibold border border-border transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
               <LogIn className="w-5 h-5" />
               <span>Join with Code</span>
@@ -100,34 +93,24 @@ export const ClassSpaceView: React.FC = () => {
         </div>
 
         {/* Feature Highlights Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-6">
           <div className="p-6 rounded-2xl border border-border bg-card shadow-sm space-y-3">
-            <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center">
-              <Calendar className="w-5 h-5" />
-            </div>
-            <h3 className="text-base font-semibold text-foreground">Authoritative Class Timetable</h3>
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              Maintained by your Class Representative. Single occurrences can be cancelled or rescheduled with notes without altering the semester schedule.
-            </p>
-          </div>
-
-          <div className="p-6 rounded-2xl border border-border bg-card shadow-sm space-y-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center">
-              <CheckCircle2 className="w-5 h-5" />
-            </div>
-            <h3 className="text-base font-semibold text-foreground">Personal Attendance Isolation</h3>
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              Track attendance directly linked to official class slots. Your present/absent record is strictly private and never visible to other students.
-            </p>
-          </div>
-
-          <div className="p-6 rounded-2xl border border-border bg-card shadow-sm space-y-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-500 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
               <MessageSquare className="w-5 h-5" />
             </div>
-            <h3 className="text-base font-semibold text-foreground">Community & Pinned Notices</h3>
+            <h3 className="text-base font-semibold text-foreground">Community &amp; Notices</h3>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Direct discussions with reactions, reply threads, and pinned announcements so nobody misses sudden exam room updates or homework deadlines.
+              Real-time discussion channel with pinned CR announcements, threaded replies, emoji reactions, and starred messages.
+            </p>
+          </div>
+
+          <div className="p-6 rounded-2xl border border-border bg-card shadow-sm space-y-3">
+            <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+              <Users className="w-5 h-5" />
+            </div>
+            <h3 className="text-base font-semibold text-foreground">Class Directory</h3>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Find classmates, view student profiles and roles, and maintain batch connections in one verified roster.
             </p>
           </div>
         </div>
@@ -146,16 +129,16 @@ export const ClassSpaceView: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6 pb-16 animate-in fade-in duration-200">
+    <div className="space-y-6 animate-in fade-in duration-200 pb-16">
       {/* 1. Header with Workspace Switcher & Actions */}
       <ClassSpaceHeader
         onCreateClick={() => setShowCreateModal(true)}
-        onJoinClick={() => setShowJoinModal(false)}
+        onJoinClick={() => setShowJoinModal(true)}
         onToggleNotifications={() => setShowNotificationDrawer(true)}
       />
 
       {/* 2. Sub-tab Navigation */}
-      <div className="border-b border-border">
+      <div className="border-b border-border flex items-center justify-between">
         <nav className="flex items-center space-x-1 sm:space-x-2 overflow-x-auto pb-px" aria-label="ClassSpace Tabs">
           {tabs.map((tab) => {
             const Icon = tab.icon;
@@ -164,7 +147,7 @@ export const ClassSpaceView: React.FC = () => {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as ClassSpaceSubTab)}
-                className={`flex items-center gap-2 py-3 px-3.5 sm:px-4 text-xs sm:text-sm font-semibold border-b-2 whitespace-nowrap transition-colors relative ${
+                className={`flex items-center gap-2 py-3 px-3.5 sm:px-4 text-xs sm:text-sm font-semibold border-b-2 whitespace-nowrap transition-colors relative cursor-pointer ${
                   isActive
                     ? 'border-primary text-primary bg-primary/5 rounded-t-lg'
                     : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/30'
@@ -187,18 +170,23 @@ export const ClassSpaceView: React.FC = () => {
             );
           })}
         </nav>
+
+        {onNavigateToSettings && (
+          <button
+            onClick={onNavigateToSettings}
+            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-secondary/60 rounded-xl transition cursor-pointer"
+            title="Configure ClassSpace settings in Settings"
+          >
+            <Settings className="w-3.5 h-3.5" />
+            <span>Workspace Settings</span>
+          </button>
+        )}
       </div>
 
       {/* 3. Sub-tab Views */}
       <main className="min-h-[500px]">
-        {activeTab === 'overview' && (
-          <ClassSpaceOverview onNavigateTab={(tab) => setActiveTab(tab)} />
-        )}
-        {activeTab === 'timetable' && <ClassTimetableTab />}
-        {activeTab === 'attendance' && <ClassAttendanceTab />}
         {activeTab === 'community' && <ClassCommunityTab />}
         {activeTab === 'members' && <ClassMembersTab />}
-        {activeTab === 'settings' && <ClassSettingsTab />}
       </main>
 
       {/* Modals & Notification Drawer */}
@@ -214,7 +202,9 @@ export const ClassSpaceView: React.FC = () => {
         isOpen={showNotificationDrawer}
         onClose={() => setShowNotificationDrawer(false)}
         onNavigateToTab={(tab) => {
-          setActiveTab(tab as ClassSpaceSubTab);
+          if (tab === 'community' || tab === 'members') {
+            setActiveTab(tab);
+          }
           setShowNotificationDrawer(false);
         }}
       />

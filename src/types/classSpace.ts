@@ -1,16 +1,18 @@
 import { DayOfWeek } from './index';
 
-export type ClassSpaceRole = 'cr' | 'co_admin' | 'member';
+export type ClassSpaceRole = 'owner' | 'cr' | 'co_admin' | 'member';
 
 export interface ClassSpaceWorkspace {
   id: string;
   name: string;
+  college?: string;
+  institution?: string;
   department?: string;
   section?: string;
   batch?: string;
   description?: string;
   joinCode: string; // 5-character uppercase alphanumeric (e.g. CH7K2)
-  createdBy: string; // userId of CR
+  createdBy: string; // userId of Owner / CR
   createdAt: string;
   updatedAt: string;
 }

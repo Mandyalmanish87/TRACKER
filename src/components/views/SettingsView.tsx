@@ -25,8 +25,18 @@ import {
   Users,
   ArrowRight,
   KeyRound,
+  Copy,
+  ShieldCheck,
+  Trash2,
+  LogOut,
+  CheckCircle2,
+  Plus,
+  LogIn,
 } from 'lucide-react';
 import { useOptionalClassSpace } from '../../context/ClassSpaceContext';
+import { CreateWorkspaceModal } from '../classspace/CreateWorkspaceModal';
+import { JoinWorkspaceModal } from '../classspace/JoinWorkspaceModal';
+import { ConfirmModal } from '../common/ConfirmModal';
 
 // ─── Accent Color Catalogue ────────────────────────────────────────────────
 const ACCENT_OPTIONS: { id: AccentColor; label: string; hex: string }[] = [
@@ -99,8 +109,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToClassSpa
   const { mode, setMode } = useTheme();
   const classSpace = useOptionalClassSpace();
   const activeWorkspace = classSpace?.activeWorkspace || null;
+  const isOwner = classSpace?.isOwner || false;
   const isCR = classSpace?.isCR || false;
+  const isCoAdmin = classSpace?.isCoAdmin || false;
   const members = classSpace?.members || [];
+
+  const [showCreateWsModal, setShowCreateWsModal] = useState(false);
+  const [showJoinWsModal, setShowJoinWsModal] = useState(false);
+  const [codeCopied, setCodeCopied] = useState(false);
+  const [confirmLeaveOpen, setConfirmLeaveOpen] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [confirmRotateOpen, setConfirmRotateOpen] = useState(false);
+  const [classActionError, setClassActionError] = useState<string | null>(null);
 
   const settings = state.settings ?? {
     themeMode: 'system' as ThemeMode,
@@ -287,70 +307,285 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToClassSpa
           )}
         </Card>
 
-        {/* ── ClassSpace Workspace ── */}
-        <Card>
+        {/* ── User Mode (Type A — Individual vs Type B — Class-based) ── */}
+        <Card className="lg:col-span-2">
           <SectionHeading
-            icon={<Building className="w-4 h-4 text-terracotta-600 dark:text-terracotta-400" />}
-            title="ClassSpace — Shared Class Workspace"
-            sub="Collaborative class timetable, reschedule notices, and student community"
+            icon={<Users className="w-4 h-4 text-terracotta-600 dark:text-terracotta-400" />}
+            title="User Mode"
+            sub="Choose your student experience: private self-study or collaborative class workspace"
           />
 
-          {activeWorkspace ? (
-            <div className="p-4 rounded-xl bg-ivory-100/70 dark:bg-espresso-800/70 border border-ivory-200 dark:border-espresso-750 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-semibold text-espresso-950 dark:text-ivory-50">
-                    {activeWorkspace.name}
-                  </h3>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-terracotta-100 dark:bg-terracotta-950/40 text-terracotta-700 dark:text-terracotta-300 border border-terracotta-200 dark:border-terracotta-800">
-                    {isCR ? 'CR / Admin' : 'Enrolled Member'}
-                  </span>
-                </div>
-                <div className="flex items-center gap-3 text-xs text-espresso-500 dark:text-espresso-400">
-                  <span className="flex items-center gap-1">
-                    <KeyRound className="w-3.5 h-3.5" />
-                    Code: <strong className="font-mono text-espresso-900 dark:text-ivory-100">{activeWorkspace.joinCode}</strong>
-                  </span>
-                  <span>&bull;</span>
-                  <span className="flex items-center gap-1">
-                    <Users className="w-3.5 h-3.5" />
-                    {members.length} classmates
-                  </span>
-                </div>
-              </div>
-
-              {onNavigateToClassSpace && (
-                <button
-                  onClick={onNavigateToClassSpace}
-                  className="shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-terracotta-600 hover:bg-terracotta-700 text-white shadow-subtle transition cursor-pointer"
-                >
-                  <span>Open ClassSpace</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
-          ) : (
-            <div className="p-4 rounded-xl bg-ivory-100/70 dark:bg-espresso-800/70 border border-ivory-200 dark:border-espresso-750 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Mode A: Individual */}
+            <div
+              onClick={() => updateSettings({ userMode: 'individual' })}
+              className={`p-4 rounded-xl border-2 transition-all cursor-pointer flex flex-col justify-between ${
+                (settings.userMode || 'individual') === 'individual'
+                  ? 'border-terracotta-500 bg-terracotta-50/40 dark:bg-terracotta-950/20 shadow-xs'
+                  : 'border-ivory-200 dark:border-espresso-750 bg-ivory-50/50 dark:bg-espresso-900/50 hover:border-ivory-300'
+              }`}
+            >
               <div>
-                <p className="text-sm font-semibold text-espresso-950 dark:text-ivory-50">
-                  Join or Create a ClassSpace
-                </p>
-                <p className="text-xs text-espresso-500 dark:text-ivory-400 mt-0.5 max-w-xl">
-                  Connect with your classmates to automatically synchronize live lectures, exam room updates, and class cancellation alerts.
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <User className="w-4 h-4 text-terracotta-600 dark:text-terracotta-400" />
+                    <h4 className="font-semibold text-sm text-espresso-950 dark:text-ivory-50">
+                      Type A — Individual
+                    </h4>
+                  </div>
+                  {(settings.userMode || 'individual') === 'individual' && (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-terracotta-600 text-white">
+                      Active
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-espresso-600 dark:text-ivory-300 leading-relaxed">
+                  For self-directed students who study independently. Manage your own private timetable, custom subjects, personal attendance, and study logs without belonging to a shared batch.
                 </p>
               </div>
-              {onNavigateToClassSpace && (
-                <button
-                  onClick={onNavigateToClassSpace}
-                  className="shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-terracotta-600 hover:bg-terracotta-700 text-white shadow-subtle transition cursor-pointer"
-                >
-                  <span>Get Started</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
-              )}
+              <div className="mt-3 pt-2 border-t border-ivory-200 dark:border-espresso-800 text-[11px] text-espresso-400 dark:text-espresso-500">
+                ClassSpace navigation and shared class controls are hidden. All personal data is 100% private.
+              </div>
             </div>
-          )}
+
+            {/* Mode B: Class-based */}
+            <div
+              onClick={() => updateSettings({ userMode: 'class_based' })}
+              className={`p-4 rounded-xl border-2 transition-all cursor-pointer flex flex-col justify-between ${
+                settings.userMode === 'class_based'
+                  ? 'border-terracotta-500 bg-terracotta-50/40 dark:bg-terracotta-950/20 shadow-xs'
+                  : 'border-ivory-200 dark:border-espresso-750 bg-ivory-50/50 dark:bg-espresso-900/50 hover:border-ivory-300'
+              }`}
+            >
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <Building className="w-4 h-4 text-terracotta-600 dark:text-terracotta-400" />
+                    <h4 className="font-semibold text-sm text-espresso-950 dark:text-ivory-50">
+                      Type B — Class-based
+                    </h4>
+                  </div>
+                  {settings.userMode === 'class_based' && (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-terracotta-600 text-white">
+                      Active
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-espresso-600 dark:text-ivory-300 leading-relaxed">
+                  For students who belong to a shared college class, section, or batch. Synchronizes the official CR timetable and class reschedule alerts, unlocks the student community and directory.
+                </p>
+              </div>
+              <div className="mt-3 pt-2 border-t border-ivory-200 dark:border-espresso-800 text-[11px] text-espresso-400 dark:text-espresso-500">
+                Personal attendance remains strictly isolated to your own account.
+              </div>
+            </div>
+          </div>
         </Card>
+
+        {/* ── ClassSpace Workspace & Configuration (Visible ONLY in Class-based mode) ── */}
+        {settings.userMode === 'class_based' && (
+          <Card className="lg:col-span-2">
+            <SectionHeading
+              icon={<Building className="w-4 h-4 text-terracotta-600 dark:text-terracotta-400" />}
+              title="ClassSpace Management & Membership"
+              sub="Manage your class workspace, Join Code, member roles, and community status"
+            />
+
+            {classActionError && (
+              <div className="mb-4 p-3 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900 text-xs text-rose-700 dark:text-rose-300 font-medium">
+                {classActionError}
+              </div>
+            )}
+
+            {activeWorkspace ? (
+              <div className="space-y-6">
+                {/* 1. Class Info & Role Banner */}
+                <div className="p-4 sm:p-5 rounded-xl bg-ivory-100/70 dark:bg-espresso-800/70 border border-ivory-200 dark:border-espresso-750 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div className="space-y-1.5 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-base font-bold text-espresso-950 dark:text-ivory-50 truncate">
+                        {activeWorkspace.name}
+                      </h3>
+                      <span className="px-2.5 py-0.5 rounded-full text-[11px] font-mono font-bold bg-terracotta-100 dark:bg-terracotta-950/60 text-terracotta-700 dark:text-terracotta-300 border border-terracotta-200 dark:border-terracotta-800">
+                        {isOwner ? 'Workspace Owner' : isCR ? 'CR / Administrator' : isCoAdmin ? 'Co-Admin' : 'Student Member'}
+                      </span>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-3 text-xs text-espresso-500 dark:text-espresso-400">
+                      {activeWorkspace.institution && (
+                        <span>{activeWorkspace.institution}</span>
+                      )}
+                      {activeWorkspace.department && (
+                        <span>{activeWorkspace.department}</span>
+                      )}
+                      {activeWorkspace.section && (
+                        <span>{activeWorkspace.section}</span>
+                      )}
+                      {activeWorkspace.batch && (
+                        <span>Batch: {activeWorkspace.batch}</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {onNavigateToClassSpace && (
+                    <button
+                      onClick={onNavigateToClassSpace}
+                      className="shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-terracotta-600 hover:bg-terracotta-700 text-white shadow-subtle transition cursor-pointer"
+                    >
+                      <span>Open Community &amp; Classmates</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                {/* 2. Permissions explanation */}
+                <div className="p-4 rounded-xl bg-ivory-50 dark:bg-espresso-900 border border-ivory-200 dark:border-espresso-800 flex items-start gap-3">
+                  <ShieldCheck className="w-5 h-5 text-terracotta-600 shrink-0 mt-0.5" />
+                  <div className="text-xs space-y-1">
+                    <p className="font-semibold text-espresso-950 dark:text-ivory-50">
+                      Permissions for your role ({isOwner ? 'Owner' : isCR ? 'CR' : isCoAdmin ? 'Co-Admin' : 'Member'}):
+                    </p>
+                    <p className="text-espresso-600 dark:text-ivory-300 leading-relaxed">
+                      {isOwner
+                        ? 'Full administrative control: You can manage official timetables, rotate join codes, manage members, and delete or archive this workspace.'
+                        : isCR || isCoAdmin
+                        ? 'Timetable & Community authority: You can add official recurring classes, add extra sessions, reschedule or cancel occurrences with reason notes, and moderate chat messages.'
+                        : 'Member access: You view the official shared timetable and receive instant reschedule alerts. Your attendance records remain strictly private to your own account.'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* 3. Join Code & Member Management */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="p-4 rounded-xl border border-ivory-200 dark:border-espresso-750 bg-white dark:bg-espresso-850 space-y-3">
+                    <span className="text-xs font-mono font-semibold uppercase tracking-wider text-espresso-500 dark:text-espresso-400 flex items-center gap-1.5">
+                      <KeyRound className="w-3.5 h-3.5 text-terracotta-600" />
+                      ClassSpace Join Code
+                    </span>
+                    <div className="flex items-center gap-3">
+                      <span className="font-mono text-2xl font-bold tracking-widest text-espresso-950 dark:text-ivory-50 bg-ivory-100 dark:bg-espresso-800 px-3 py-1 rounded-lg">
+                        {activeWorkspace.joinCode}
+                      </span>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(activeWorkspace.joinCode);
+                          setCodeCopied(true);
+                          setTimeout(() => setCodeCopied(false), 2000);
+                        }}
+                        className="px-3 py-1.5 rounded-lg border border-ivory-300 dark:border-espresso-700 text-xs font-semibold hover:bg-ivory-100 dark:hover:bg-espresso-800 transition flex items-center gap-1.5 cursor-pointer"
+                      >
+                        {codeCopied ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                        <span>{codeCopied ? 'Copied!' : 'Copy Code'}</span>
+                      </button>
+                    </div>
+                    {(isOwner || isCR) && (
+                      <div className="pt-1">
+                        <button
+                          onClick={() => setConfirmRotateOpen(true)}
+                          className="text-xs text-terracotta-600 dark:text-terracotta-400 hover:underline cursor-pointer flex items-center gap-1"
+                        >
+                          <RefreshCw className="w-3 h-3" />
+                          <span>Rotate Join Code (if compromised)</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="p-4 rounded-xl border border-ivory-200 dark:border-espresso-750 bg-white dark:bg-espresso-850 space-y-3 flex flex-col justify-between">
+                    <div>
+                      <span className="text-xs font-mono font-semibold uppercase tracking-wider text-espresso-500 dark:text-espresso-400 flex items-center gap-1.5">
+                        <Users className="w-3.5 h-3.5 text-terracotta-600" />
+                        Class Roster
+                      </span>
+                      <p className="font-semibold text-lg text-espresso-950 dark:text-ivory-50 mt-1">
+                        {members.length} enrolled student{members.length !== 1 ? 's' : ''}
+                      </p>
+                      <p className="text-xs text-espresso-500 dark:text-espresso-400">
+                        View profiles, role badges, and classmate contact information.
+                      </p>
+                    </div>
+                    {onNavigateToClassSpace && (
+                      <button
+                        onClick={onNavigateToClassSpace}
+                        className="text-xs font-semibold text-terracotta-600 dark:text-terracotta-400 hover:underline flex items-center gap-1 cursor-pointer"
+                      >
+                        <span>View Class Directory</span>
+                        <ArrowRight className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* 4. Danger Zone: Leave or Delete ClassSpace */}
+                <div className="pt-3 border-t border-ivory-200 dark:border-espresso-800 flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      onClick={() => setShowJoinWsModal(true)}
+                      className="px-3.5 py-2 rounded-xl text-xs font-semibold border border-ivory-300 dark:border-espresso-700 hover:bg-ivory-100 dark:hover:bg-espresso-800 text-espresso-800 dark:text-ivory-100 transition cursor-pointer flex items-center gap-1.5"
+                    >
+                      <LogIn className="w-3.5 h-3.5" />
+                      <span>Join Another Class</span>
+                    </button>
+                    <button
+                      onClick={() => setShowCreateWsModal(true)}
+                      className="px-3.5 py-2 rounded-xl text-xs font-semibold border border-ivory-300 dark:border-espresso-700 hover:bg-ivory-100 dark:hover:bg-espresso-800 text-espresso-800 dark:text-ivory-100 transition cursor-pointer flex items-center gap-1.5"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Create Another Class</span>
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {!isOwner ? (
+                      <button
+                        onClick={() => setConfirmLeaveOpen(true)}
+                        className="px-3.5 py-2 rounded-xl text-xs font-semibold border border-rose-200 dark:border-rose-900/60 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition cursor-pointer flex items-center gap-1.5"
+                      >
+                        <LogOut className="w-3.5 h-3.5" />
+                        <span>Leave ClassSpace</span>
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => setConfirmDeleteOpen(true)}
+                        className="px-3.5 py-2 rounded-xl text-xs font-semibold border border-rose-300 dark:border-rose-800 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition cursor-pointer flex items-center gap-1.5"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Delete ClassSpace</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="p-6 rounded-xl bg-ivory-100/70 dark:bg-espresso-800/70 border border-ivory-200 dark:border-espresso-750 text-center space-y-4">
+                <div className="max-w-md mx-auto space-y-1.5">
+                  <h4 className="text-base font-bold text-espresso-950 dark:text-ivory-50">
+                    Not Enrolled in a ClassSpace Yet
+                  </h4>
+                  <p className="text-xs text-espresso-500 dark:text-espresso-400 leading-relaxed">
+                    You have selected Class-based mode. Connect with your class batch to synchronize your daily lecture timetable and join class discussions.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+                  <button
+                    onClick={() => setShowJoinWsModal(true)}
+                    className="px-5 py-2.5 rounded-xl text-xs font-semibold bg-terracotta-600 hover:bg-terracotta-700 text-white shadow-subtle transition flex items-center gap-2 cursor-pointer"
+                  >
+                    <LogIn className="w-4 h-4" />
+                    <span>Join Class with Code</span>
+                  </button>
+                  <button
+                    onClick={() => setShowCreateWsModal(true)}
+                    className="px-5 py-2.5 rounded-xl text-xs font-semibold border border-ivory-300 dark:border-espresso-700 bg-white dark:bg-espresso-850 hover:bg-ivory-50 dark:hover:bg-espresso-800 text-espresso-900 dark:text-ivory-100 shadow-subtle transition flex items-center gap-2 cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Create ClassSpace (for CRs)</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </Card>
+        )}
 
         {/* ── Profile ── */}
         <Card>
@@ -851,6 +1086,74 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToClassSpa
         </span>
         <span>All data stored in your browser&apos;s localStorage</span>
       </div>
+
+      {/* ClassSpace Dialog Modals */}
+      <CreateWorkspaceModal
+        isOpen={showCreateWsModal}
+        onClose={() => setShowCreateWsModal(false)}
+        onCreated={() => {
+          setShowCreateWsModal(false);
+        }}
+      />
+
+      <JoinWorkspaceModal
+        isOpen={showJoinWsModal}
+        onClose={() => setShowJoinWsModal(false)}
+        onJoined={() => {
+          setShowJoinWsModal(false);
+        }}
+      />
+
+      {/* Confirm Rotate Code */}
+      <ConfirmModal
+        isOpen={confirmRotateOpen}
+        title="Rotate Join Code"
+        message="Are you sure you want to rotate the Join Code? The existing code will be immediately revoked and cannot be used by new students."
+        confirmLabel="Rotate Code"
+        variant="warning"
+        onConfirm={async () => {
+          setConfirmRotateOpen(false);
+          if (classSpace?.rotateJoinCode) {
+            const res = await classSpace.rotateJoinCode();
+            if (res.error) setClassActionError(res.error);
+          }
+        }}
+        onCancel={() => setConfirmRotateOpen(false)}
+      />
+
+      {/* Confirm Leave ClassSpace */}
+      <ConfirmModal
+        isOpen={confirmLeaveOpen}
+        title="Leave ClassSpace"
+        message="Are you sure you want to leave this ClassSpace? Your personal attendance logs and notes will remain safely preserved in your private Tracker."
+        confirmLabel="Leave Workspace"
+        variant="danger"
+        onConfirm={async () => {
+          setConfirmLeaveOpen(false);
+          if (classSpace?.leaveWorkspace) {
+            const res = await classSpace.leaveWorkspace();
+            if (res.error) setClassActionError(res.error);
+          }
+        }}
+        onCancel={() => setConfirmLeaveOpen(false)}
+      />
+
+      {/* Confirm Delete ClassSpace */}
+      <ConfirmModal
+        isOpen={confirmDeleteOpen}
+        title="Delete ClassSpace"
+        message="Are you sure you want to permanently delete this ClassSpace? This will delete the shared schedule and disconnect all enrolled classmates. This action cannot be undone."
+        confirmLabel="Delete Workspace"
+        variant="danger"
+        onConfirm={async () => {
+          setConfirmDeleteOpen(false);
+          if (classSpace?.deleteWorkspace) {
+            const res = await classSpace.deleteWorkspace();
+            if (res.error) setClassActionError(res.error);
+          }
+        }}
+        onCancel={() => setConfirmDeleteOpen(false)}
+      />
     </div>
   );
 };

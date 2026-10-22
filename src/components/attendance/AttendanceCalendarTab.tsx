@@ -10,6 +10,7 @@ import {
 import { useApp } from '../../context/AppContext';
 import { DayOfWeek, ResolvedCalendarEvent } from '../../types';
 import { resolveSchedule } from '../../utils/scheduleResolver';
+import { useOptionalClassSpace } from '../../context/ClassSpaceContext';
 
 const DAYS_OF_WEEK: { id: DayOfWeek; name: string; short: string }[] = [
   { id: 1, name: 'Monday', short: 'Mon' },
@@ -40,6 +41,8 @@ const formatDateStr = (d: Date): string => {
 
 export const AttendanceCalendarTab: React.FC = () => {
   const { state, markAttendanceForEvent } = useApp();
+  const classSpace = useOptionalClassSpace();
+  const isClassBased = state.settings?.userMode === 'class_based';
 
   const [currentDate, setCurrentDate] = useState<Date>(() => new Date());
   const [calendarView, setCalendarView] = useState<'month' | 'week'>('month');
@@ -146,6 +149,37 @@ export const AttendanceCalendarTab: React.FC = () => {
   const resolvedEventsByDate = useMemo(() => {
     if (monthDays.length === 0) return new Map<string, ResolvedCalendarEvent[]>();
 
+    // When enrolled in ClassSpace in class-based mode, use the shared authoritative occurrences
+    if (isClassBased && classSpace?.activeWorkspace && classSpace.occurrences.length > 0) {
+      const map = new Map<string, ResolvedCalendarEvent[]>();
+      for (const occ of classSpace.occurrences) {
+        if (selectedSubjectFilter !== 'all' && occ.ruleId !== selectedSubjectFilter) {
+          continue;
+        }
+        const evt: ResolvedCalendarEvent = {
+          occurrenceKey: occ.occurrenceKey,
+          slotId: occ.ruleId,
+          extraClassId: occ.source === 'extra' ? occ.overrideId : undefined,
+          overrideId: occ.overrideId,
+          subjectId: occ.ruleId || occ.overrideId || occ.occurrenceKey,
+          dayOfWeek: (new Date(occ.date).getDay() === 0 ? 7 : new Date(occ.date).getDay()) as DayOfWeek,
+          date: occ.date,
+          startTime: occ.startTime,
+          endTime: occ.endTime,
+          room: occ.room,
+          instructor: occ.instructor,
+          notes: occ.notes,
+          source: occ.source,
+          isCancelled: occ.isCancelled,
+          changeNote: occ.changeNote,
+        };
+        const list = map.get(occ.date) || [];
+        list.push(evt);
+        map.set(occ.date, list);
+      }
+      return map;
+    }
+
     const start = monthDays[0].date;
     const end = monthDays[monthDays.length - 1].date;
 
@@ -167,10 +201,23 @@ export const AttendanceCalendarTab: React.FC = () => {
       map.set(evt.date, list);
     }
     return map;
-  }, [monthDays, state.timetable, state.occurrenceOverrides, state.extraClasses, selectedSubjectFilter]);
+  }, [monthDays, isClassBased, classSpace?.activeWorkspace, classSpace?.occurrences, state.timetable, state.occurrenceOverrides, state.extraClasses, selectedSubjectFilter]);
 
   // Attendance log lookup for quick status display
   const getAttendanceForEvent = (evt: ResolvedCalendarEvent) => {
+    if (isClassBased && classSpace?.activeWorkspace) {
+      const record = classSpace.attendanceRecords.find((r) => r.occurrenceKey === evt.occurrenceKey);
+      if (record) {
+        return {
+          id: record.id,
+          date: record.date,
+          status: record.status as any,
+          subjectId: evt.subjectId,
+          isPlanned: false,
+        };
+      }
+    }
+
     return state.attendanceLogs.find((log) => {
       if (evt.extraClassId) return log.extraClassId === evt.extraClassId && log.date === evt.date;
       if (evt.slotId) return log.slotId === evt.slotId && log.date === evt.date;
@@ -178,7 +225,25 @@ export const AttendanceCalendarTab: React.FC = () => {
     });
   };
 
-  const getSubject = (id: string) => state.subjects.find((s) => s.id === id);
+  const getSubject = (id: string) => {
+    const personal = state.subjects.find((s) => s.id === id);
+    if (personal) return personal;
+    if (isClassBased && classSpace?.activeWorkspace) {
+      const occ = classSpace.occurrences.find((o) => (o.ruleId || o.overrideId || o.occurrenceKey) === id);
+      if (occ) {
+        return {
+          id: occ.ruleId || occ.overrideId || occ.occurrenceKey,
+          name: occ.subjectName,
+          code: occ.subjectCode,
+          color: occ.subjectColor,
+          targetPct: classSpace.attendanceStats.targetPercentage,
+          totalConducted: classSpace.attendanceStats.totalConducted,
+          attended: classSpace.attendanceStats.attended,
+        };
+      }
+    }
+    return undefined;
+  };
 
   const headerTitle = useMemo(() => {
     if (calendarView === 'month') {
@@ -475,6 +540,9 @@ export const AttendanceCalendarTab: React.FC = () => {
               <button
                 onClick={() => {
                   const isFuture = markingEvent.date > todayStr;
+                  if (isClassBased && classSpace?.activeWorkspace) {
+                    classSpace.markAttendance(markingEvent.occurrenceKey, markingEvent.date, 'present');
+                  }
                   markAttendanceForEvent(
                     markingEvent.occurrenceKey,
                     markingEvent.subjectId,
@@ -496,6 +564,9 @@ export const AttendanceCalendarTab: React.FC = () => {
               <button
                 onClick={() => {
                   const isFuture = markingEvent.date > todayStr;
+                  if (isClassBased && classSpace?.activeWorkspace) {
+                    classSpace.markAttendance(markingEvent.occurrenceKey, markingEvent.date, 'absent');
+                  }
                   markAttendanceForEvent(
                     markingEvent.occurrenceKey,
                     markingEvent.subjectId,
@@ -516,6 +587,9 @@ export const AttendanceCalendarTab: React.FC = () => {
 
               <button
                 onClick={() => {
+                  if (isClassBased && classSpace?.activeWorkspace) {
+                    classSpace.markAttendance(markingEvent.occurrenceKey, markingEvent.date, 'cancelled');
+                  }
                   markAttendanceForEvent(
                     markingEvent.occurrenceKey,
                     markingEvent.subjectId,

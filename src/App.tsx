@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ThemeProvider } from './theme/ThemeContext';
-import { AppProvider } from './context/AppContext';
+import { AppProvider, useApp } from './context/AppContext';
 import { AppearanceManager } from './theme/AppearanceManager';
 import { Header } from './components/common/Header';
 import { NutritionView } from './components/views/NutritionView';
@@ -22,7 +22,13 @@ import { FocusRadioProvider, MiniPlayer } from './components/focus-radio';
 import { motion } from 'motion/react';
 
 export const MainApp: React.FC = () => {
+  const { state } = useApp();
   const [currentTab, setCurrentTab] = useState<NavTab>('dashboard');
+
+  // Guard: if user is in Individual mode, redirect 'classspace' requests to dashboard
+  const effectiveTab: NavTab = currentTab === 'classspace' && state.settings?.userMode !== 'class_based'
+    ? 'dashboard'
+    : currentTab;
 
   return (
     <>
@@ -34,18 +40,18 @@ export const MainApp: React.FC = () => {
         <Header />
 
         {/* Horizontal Fast Tab Strip */}
-        <Navigation currentTab={currentTab} onSelectTab={setCurrentTab} />
+        <Navigation currentTab={effectiveTab} onSelectTab={setCurrentTab} />
 
         {/* Main Content Area */}
         <main className="flex-1 w-full max-w-[1680px] 2xl:max-w-[1840px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 py-6 sm:py-8">
           <motion.div
-            key={currentTab}
+            key={effectiveTab}
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.18, ease: 'easeOut' }}
             className="w-full"
           >
-            {currentTab === 'dashboard' && (
+            {effectiveTab === 'dashboard' && (
               <Dashboard
                 onNavigateToSyllabus={() => setCurrentTab('syllabus')}
                 onNavigateToFocus={() => setCurrentTab('focus')}
@@ -55,17 +61,17 @@ export const MainApp: React.FC = () => {
                 onSelectTab={setCurrentTab}
               />
             )}
-            {currentTab === 'timetable'  && <TimetableView />}
-            {currentTab === 'syllabus'   && <SyllabusView onNavigateToPlanner={() => setCurrentTab('planner')} />}
-            {currentTab === 'planner'    && <PlannerView onNavigateToSyllabus={() => setCurrentTab('syllabus')} />}
-            {currentTab === 'tests'      && <TestsView onNavigateToPlanner={() => setCurrentTab('planner')} />}
-            {currentTab === 'attendance' && <AttendanceView />}
-            {currentTab === 'focus'      && <FocusView />}
-            {currentTab === 'gym'        && <GymView />}
-            {currentTab === 'nutrition'  && <NutritionView />}
-            {currentTab === 'reminders'  && <RemindersView />}
-            {currentTab === 'classspace' && <ClassSpaceView />}
-            {currentTab === 'settings'   && <SettingsView onNavigateToClassSpace={() => setCurrentTab('classspace')} />}
+            {effectiveTab === 'timetable'  && <TimetableView />}
+            {effectiveTab === 'syllabus'   && <SyllabusView onNavigateToPlanner={() => setCurrentTab('planner')} />}
+            {effectiveTab === 'planner'    && <PlannerView onNavigateToSyllabus={() => setCurrentTab('syllabus')} />}
+            {effectiveTab === 'tests'      && <TestsView onNavigateToPlanner={() => setCurrentTab('planner')} />}
+            {effectiveTab === 'attendance' && <AttendanceView />}
+            {effectiveTab === 'focus'      && <FocusView />}
+            {effectiveTab === 'gym'        && <GymView />}
+            {effectiveTab === 'nutrition'  && <NutritionView />}
+            {effectiveTab === 'reminders'  && <RemindersView />}
+            {effectiveTab === 'classspace' && <ClassSpaceView onNavigateToSettings={() => setCurrentTab('settings')} />}
+            {effectiveTab === 'settings'   && <SettingsView onNavigateToClassSpace={() => setCurrentTab('classspace')} />}
           </motion.div>
         </main>
 

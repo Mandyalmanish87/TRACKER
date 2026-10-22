@@ -12,7 +12,7 @@ import {
   ClassUserProfile,
 } from '../types/classSpace';
 import { classSpaceService } from '../services/classSpaceService';
-import { resolveClassSchedule, canManageSchedule, canModerate } from '../utils/classSpaceUtils';
+import { resolveClassSchedule, canManageSchedule, canModerate, canManageWorkspace } from '../utils/classSpaceUtils';
 import { useApp } from './AppContext';
 import { AuthUser } from '../services/authService';
 
@@ -26,10 +26,12 @@ interface ClassSpaceContextType {
   isCloudConfigured: boolean;
 
   // Roles & Permissions
+  isOwner: boolean;
   isCR: boolean;
   isCoAdmin: boolean;
   canEditSchedule: boolean;
   canModerateChat: boolean;
+  canManageWorkspace: boolean;
 
   // Official Timetable & Occurrences
   rules: ClassTimetableRule[];
@@ -63,6 +65,8 @@ interface ClassSpaceContextType {
   selectWorkspace: (workspaceId: string) => void;
   createWorkspace: (details: {
     name: string;
+    institution?: string;
+    college?: string;
     department?: string;
     section?: string;
     batch?: string;
@@ -71,6 +75,7 @@ interface ClassSpaceContextType {
   joinWorkspaceByCode: (code: string) => Promise<{ workspace?: ClassSpaceWorkspace; error?: string }>;
   rotateJoinCode: () => Promise<{ newCode?: string; error?: string }>;
   leaveWorkspace: () => Promise<{ success: boolean; error?: string }>;
+  deleteWorkspace: () => Promise<{ success: boolean; error?: string }>;
 
   // Timetable Actions
   addTimetableRule: (rule: Omit<ClassTimetableRule, 'id' | 'workspaceId' | 'createdAt' | 'updatedAt' | 'createdBy'>) => Promise<{ error?: string }>;
@@ -173,10 +178,12 @@ export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     return members.find((m) => m.userId === effectiveUser.id) || null;
   }, [activeWorkspace, members, effectiveUser.id]);
 
-  const isCR = currentMember?.role === 'cr';
+  const isOwner = currentMember?.role === 'owner' || (Boolean(activeWorkspace && activeWorkspace.createdBy === effectiveUser.id));
+  const isCR = currentMember?.role === 'cr' || isOwner;
   const isCoAdmin = currentMember?.role === 'co_admin';
-  const canEditSchedule = canManageSchedule(currentMember?.role);
-  const canModerateChat = canModerate(currentMember?.role);
+  const canEditSchedule = canManageSchedule(currentMember?.role) || isOwner;
+  const canModerateChat = canModerate(currentMember?.role) || isOwner;
+  const canManageWs = canManageWorkspace(currentMember?.role) || isOwner;
 
   // 1. Fetch user's workspaces and profile
   const refreshWorkspaces = useCallback(async () => {
@@ -350,6 +357,16 @@ export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const leaveWorkspace = async () => {
     if (!activeWorkspace) return { success: false, error: 'No active ClassSpace selected.' };
     const res = await classSpaceService.leaveWorkspace(activeWorkspace.id, effectiveUser.id);
+    if (res.success) {
+      setWorkspaces((prev) => prev.filter((w) => w.id !== activeWorkspace.id));
+      setActiveWorkspace(null);
+    }
+    return res;
+  };
+
+  const deleteWorkspace = async () => {
+    if (!activeWorkspace) return { success: false, error: 'No active ClassSpace selected.' };
+    const res = await classSpaceService.deleteWorkspace(activeWorkspace.id, effectiveUser.id);
     if (res.success) {
       setWorkspaces((prev) => prev.filter((w) => w.id !== activeWorkspace.id));
       setActiveWorkspace(null);
@@ -750,10 +767,12 @@ export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         members,
         isLoading,
         isCloudConfigured: classSpaceService.isCloudConfigured,
+        isOwner,
         isCR,
         isCoAdmin,
         canEditSchedule,
         canModerateChat,
+        canManageWorkspace: canManageWs,
         rules,
         overrides,
         occurrences,
@@ -772,6 +791,7 @@ export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         joinWorkspaceByCode,
         rotateJoinCode,
         leaveWorkspace,
+        deleteWorkspace,
         addTimetableRule,
         updateTimetableRule,
         deleteTimetableRule,

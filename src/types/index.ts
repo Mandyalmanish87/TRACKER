@@ -133,6 +133,7 @@ export interface UserProfile {
 
 export type AccentColor = 'terracotta' | 'sage' | 'ochre' | 'dusty-blue' | 'plum' | 'slate';
 export type BackgroundStyle = 'minimal' | 'abstract' | 'space' | 'ocean' | 'custom';
+export type UserMode = 'individual' | 'class_based';
 
 export interface AppSettings {
   themeMode: ThemeMode;
@@ -142,6 +143,8 @@ export interface AppSettings {
   studyDayRolloverHour: number; // 0-23
   showExamCountdown: boolean;
   showFocusRadio: boolean;
+  /** User mode: 'individual' for private self-study, 'class_based' for collaborative class workspace */
+  userMode?: UserMode;
   /** Shared attendance requirement percentage (0-100). Default 75 when not set. */
   attendanceRequirement?: number;
   /** Custom arrangement of dashboard widget IDs */
@@ -293,6 +296,8 @@ export interface ResolvedCalendarEvent {
   extraClassId?: string;
   /** Whether this occurrence is cancelled */
   isCancelled?: boolean;
+  dayOfWeek?: DayOfWeek;
+  changeNote?: string;
 }
 
 export interface AppStateData {

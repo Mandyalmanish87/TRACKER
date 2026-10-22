@@ -31,6 +31,7 @@ import {
   RecurrencePromptModal,
   RescheduleProposal,
 } from '../timetable/RecurrencePromptModal';
+import { useOptionalClassSpace } from '../../context/ClassSpaceContext';
 
 export type ActivityCategory = 'all' | 'college' | 'study' | 'gym';
 
@@ -90,6 +91,7 @@ export const BlockCalendar: React.FC<BlockCalendarProps> = ({
     rescheduleOccurrence,
     updateTimetableSlot,
   } = useApp();
+  const classSpace = useOptionalClassSpace();
 
   const [selectedCategory, setSelectedCategory] = useState<ActivityCategory>('all');
   const [activeDrawerBlock, setActiveDrawerBlock] = useState<CalendarBlockItem | null>(null);
@@ -209,47 +211,96 @@ export const BlockCalendar: React.FC<BlockCalendarProps> = ({
     return { visibleStart: dayStart, visibleEnd: dayEnd };
   }, [viewMode, monthDays, weekDates, currentDate]);
 
-  // Unified items aggregator for calendar using resolveSchedule
+  // Unified items aggregator for calendar using resolveSchedule or official ClassSpace
   const allCalendarBlocks = useMemo(() => {
     const blocks: CalendarBlockItem[] = [];
+    const isClassBased = state.settings?.userMode === 'class_based';
 
-    // 1. College Classes resolved with full override & extra class logic
-    const resolvedEvents = resolveSchedule(
-      state.timetable || [],
-      state.occurrenceOverrides || [],
-      state.extraClasses || [],
-      visibleStart,
-      visibleEnd
-    );
+    if (isClassBased && classSpace?.activeWorkspace && classSpace.occurrences.length > 0) {
+      const startStr = formatDateStr(visibleStart);
+      const endStr = formatDateStr(visibleEnd);
 
-    for (const evt of resolvedEvents) {
-      if (evt.isCancelled) continue;
+      for (const occ of classSpace.occurrences) {
+        if (occ.isCancelled) continue;
+        if (occ.date < startStr || occ.date > endStr) continue;
 
-      const sub = subjectMap.get(evt.subjectId);
-      const color = sub?.color || '#C45532';
-      const isRecurring = Boolean(evt.slotId && evt.source !== 'extra');
+        blocks.push({
+          id: occ.occurrenceKey,
+          title: occ.subjectName,
+          subtitle: occ.subjectCode,
+          category: 'college',
+          startTime: occ.startTime,
+          endTime: occ.endTime,
+          dateStr: occ.date,
+          color: occ.subjectColor,
+          badgeText:
+            occ.source === 'rescheduled'
+              ? 'Rescheduled'
+              : occ.source === 'extra'
+              ? 'Extra Class'
+              : occ.subjectCode || 'Class',
+          room: occ.room,
+          instructor: occ.instructor,
+          notes: occ.changeNote ? `${occ.changeNote}${occ.notes ? ' · ' + occ.notes : ''}` : occ.notes,
+          isRecurring: occ.source === 'recurring',
+          rawEvent: {
+            occurrenceKey: occ.occurrenceKey,
+            slotId: occ.ruleId,
+            extraClassId: occ.source === 'extra' ? occ.overrideId : undefined,
+            overrideId: occ.overrideId,
+            subjectId: occ.ruleId || occ.overrideId || occ.occurrenceKey,
+            dayOfWeek: dateToDayOfWeek(new Date(occ.date)) as DayOfWeek,
+            date: occ.date,
+            startTime: occ.startTime,
+            endTime: occ.endTime,
+            room: occ.room,
+            instructor: occ.instructor,
+            notes: occ.notes,
+            source: occ.source,
+            isCancelled: occ.isCancelled,
+            changeNote: occ.changeNote,
+          },
+        });
+      }
+    } else {
+      // 1. College Classes resolved with full override & extra class logic
+      const resolvedEvents = resolveSchedule(
+        state.timetable || [],
+        state.occurrenceOverrides || [],
+        state.extraClasses || [],
+        visibleStart,
+        visibleEnd
+      );
 
-      blocks.push({
-        id: evt.occurrenceKey,
-        title: sub?.name || 'Academic Class',
-        subtitle: sub?.code || 'ACAD',
-        category: 'college',
-        startTime: evt.startTime,
-        endTime: evt.endTime,
-        dateStr: evt.date,
-        color: color,
-        badgeText:
-          evt.source === 'rescheduled'
-            ? 'Rescheduled'
-            : evt.source === 'extra'
-            ? 'Extra Class'
-            : sub?.code || 'Class',
-        room: evt.room,
-        instructor: evt.instructor,
-        notes: evt.notes,
-        isRecurring: isRecurring,
-        rawEvent: evt,
-      });
+      for (const evt of resolvedEvents) {
+        if (evt.isCancelled) continue;
+
+        const sub = subjectMap.get(evt.subjectId);
+        const color = sub?.color || '#C45532';
+        const isRecurring = Boolean(evt.slotId && evt.source !== 'extra');
+
+        blocks.push({
+          id: evt.occurrenceKey,
+          title: sub?.name || 'Academic Class',
+          subtitle: sub?.code || 'ACAD',
+          category: 'college',
+          startTime: evt.startTime,
+          endTime: evt.endTime,
+          dateStr: evt.date,
+          color: color,
+          badgeText:
+            evt.source === 'rescheduled'
+              ? 'Rescheduled'
+              : evt.source === 'extra'
+              ? 'Extra Class'
+              : sub?.code || 'Class',
+          room: evt.room,
+          instructor: evt.instructor,
+          notes: evt.notes,
+          isRecurring: isRecurring,
+          rawEvent: evt,
+        });
+      }
     }
 
     // 2. Study Tasks with due dates

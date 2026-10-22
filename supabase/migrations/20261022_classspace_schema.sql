@@ -7,6 +7,8 @@
 create table if not exists public.class_workspaces (
   id uuid primary key default gen_random_uuid(),
   name text not null,
+  college text,
+  institution text,
   department text,
   section text,
   batch text,
@@ -24,7 +26,7 @@ create table if not exists public.class_members (
   id uuid primary key default gen_random_uuid(),
   workspace_id uuid not null references public.class_workspaces(id) on delete cascade,
   user_id uuid not null references auth.users(id) on delete cascade,
-  role text not null check (role in ('cr', 'co_admin', 'member')),
+  role text not null check (role in ('owner', 'cr', 'co_admin', 'member')),
   display_name text not null,
   avatar_url text,
   is_muted boolean not null default false,
@@ -186,7 +188,7 @@ stable
 as $$
   select exists (
     select 1 from public.class_members
-    where workspace_id = ws_id and user_id = u_id and role in ('cr', 'co_admin')
+    where workspace_id = ws_id and user_id = u_id and role in ('owner', 'cr', 'co_admin')
   );
 $$;
 
@@ -198,7 +200,7 @@ stable
 as $$
   select exists (
     select 1 from public.class_members
-    where workspace_id = ws_id and user_id = u_id and role = 'cr'
+    where workspace_id = ws_id and user_id = u_id and role in ('owner', 'cr')
   );
 $$;
 

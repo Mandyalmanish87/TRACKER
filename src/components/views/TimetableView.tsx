@@ -19,6 +19,7 @@ import { GptTimetableImportModal } from '../timetable/GptTimetableImportModal';
 import { ClassOccurrenceModal } from '../timetable/ClassOccurrenceModal';
 import { ConfirmModal } from '../common/ConfirmModal';
 import { BlockCalendar } from '../calendar/BlockCalendar';
+import { useOptionalClassSpace } from '../../context/ClassSpaceContext';
 
 type CalendarViewMode = 'month' | 'week' | 'day' | 'list';
 
@@ -66,6 +67,12 @@ export const TimetableView: React.FC = () => {
   const [viewMode, setViewMode] = useState<CalendarViewMode>('month');
   const [currentDate, setCurrentDate] = useState<Date>(() => new Date());
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+
+  const classSpace = useOptionalClassSpace();
+  const isClassBased = state.settings?.userMode === 'class_based';
+  const hasClassSpace = Boolean(isClassBased && classSpace?.activeWorkspace);
+  const canManageSchedule = Boolean(classSpace?.canEditSchedule);
+  const [scheduleSource, setScheduleSource] = useState<'official' | 'personal'>('official');
 
   // Selected event for details modal (supports both recurring slot and resolved event)
   const [selectedSlot, setSelectedSlot] = useState<TimetableSlot | null>(null);
@@ -248,7 +255,7 @@ export const TimetableView: React.FC = () => {
     <div className="space-y-6 pb-20">
       {/* ── Page Header ── */}
       {/* ── Timetable Header ── */}
-      <div className="border-b border-ivory-300 dark:border-espresso-800 pb-6">
+      <div className="border-b border-ivory-300 dark:border-espresso-800 pb-6 space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <p className="text-xs uppercase tracking-wider font-mono font-semibold mb-1 text-terracotta-600 dark:text-terracotta-400">
@@ -258,45 +265,83 @@ export const TimetableView: React.FC = () => {
               Timetable &amp; Calendar
             </h1>
             <p className="text-xs sm:text-sm text-espresso-500 dark:text-espresso-400 mt-1">
-              Interactive lecture schedule with single-date overrides, cancellations, and GPT syllabus synchronization.
+              {hasClassSpace && scheduleSource === 'official'
+                ? `Official shared schedule for ${classSpace?.activeWorkspace?.name}.`
+                : 'Interactive lecture schedule with single-date overrides, cancellations, and GPT syllabus synchronization.'}
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5">
-            <button
-              onClick={() => setIsImportModalOpen(true)}
-              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-white dark:bg-espresso-850 border border-ivory-300 dark:border-espresso-700 text-espresso-800 dark:text-ivory-100 hover:bg-ivory-50 dark:hover:bg-espresso-800 shadow-subtle transition"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-terracotta-600 dark:text-terracotta-400" />
-              <span>Import Timetable (GPT)</span>
-            </button>
+            {(!hasClassSpace || scheduleSource === 'personal' || canManageSchedule) && (
+              <button
+                onClick={() => setIsImportModalOpen(true)}
+                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-white dark:bg-espresso-850 border border-ivory-300 dark:border-espresso-700 text-espresso-800 dark:text-ivory-100 hover:bg-ivory-50 dark:hover:bg-espresso-800 shadow-subtle transition cursor-pointer"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-terracotta-600 dark:text-terracotta-400" />
+                <span>Import Timetable (GPT)</span>
+              </button>
+            )}
 
-            <button
-              onClick={() => {
-                setExtraSubjectId(state.subjects[0]?.id || '');
-                setExtraDate(todayStr);
-                setExtraStartTime('10:00');
-                setExtraEndTime('11:00');
-                setExtraRoom('');
-                setExtraNotes('');
-                setIsAddExtraModalOpen(true);
-              }}
-              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-white dark:bg-espresso-850 border border-ivory-300 dark:border-espresso-700 text-espresso-800 dark:text-ivory-100 hover:bg-ivory-50 dark:hover:bg-espresso-800 shadow-subtle transition"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Add Extra Class</span>
-            </button>
+            {hasClassSpace && scheduleSource === 'official' && !canManageSchedule ? (
+              <span className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-ivory-100 dark:bg-espresso-800 border border-ivory-300 dark:border-espresso-700 text-espresso-700 dark:text-ivory-300 font-mono">
+                Official Schedule (CR Managed) · Read-Only
+              </span>
+            ) : (
+              <>
+                <button
+                  onClick={() => {
+                    setExtraSubjectId(state.subjects[0]?.id || '');
+                    setExtraDate(todayStr);
+                    setExtraStartTime('10:00');
+                    setExtraEndTime('11:00');
+                    setExtraRoom('');
+                    setExtraNotes('');
+                    setIsAddExtraModalOpen(true);
+                  }}
+                  className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-white dark:bg-espresso-850 border border-ivory-300 dark:border-espresso-700 text-espresso-800 dark:text-ivory-100 hover:bg-ivory-50 dark:hover:bg-espresso-800 shadow-subtle transition cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add Extra Class</span>
+                </button>
 
-            <button
-              onClick={() => handleOpenAddModal()}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold text-white shadow-subtle transition hover:opacity-95"
-              style={{ backgroundColor: 'var(--accent)' }}
-            >
-              <Plus className="w-4 h-4" />
-              <span>Add Recurring Class</span>
-            </button>
+                <button
+                  onClick={() => handleOpenAddModal()}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold text-white shadow-subtle transition hover:opacity-95 cursor-pointer"
+                  style={{ backgroundColor: 'var(--accent)' }}
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Add Recurring Class</span>
+                </button>
+              </>
+            )}
           </div>
         </div>
+
+        {/* Schedule Mode Switcher (Visible when enrolled in a ClassSpace) */}
+        {hasClassSpace && (
+          <div className="flex items-center gap-2 p-1 bg-ivory-100 dark:bg-espresso-800 rounded-xl border border-ivory-300 dark:border-espresso-700 w-fit">
+            <button
+              onClick={() => setScheduleSource('official')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                scheduleSource === 'official'
+                  ? 'bg-white dark:bg-espresso-700 text-espresso-950 dark:text-ivory-50 shadow-subtle'
+                  : 'text-espresso-600 dark:text-espresso-300 hover:text-espresso-900 dark:hover:text-ivory-100'
+              }`}
+            >
+              Official Class Schedule ({classSpace?.activeWorkspace?.name})
+            </button>
+            <button
+              onClick={() => setScheduleSource('personal')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                scheduleSource === 'personal'
+                  ? 'bg-white dark:bg-espresso-700 text-espresso-950 dark:text-ivory-50 shadow-subtle'
+                  : 'text-espresso-600 dark:text-espresso-300 hover:text-espresso-900 dark:hover:text-ivory-100'
+              }`}
+            >
+              Personal Timetable
+            </button>
+          </div>
+        )}
       </div>
 
       {/* ── Calendar Toolbar ── */}

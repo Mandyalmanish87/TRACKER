@@ -86,16 +86,20 @@ export function validateProfileAvatar(file: File): { valid: boolean; error?: str
 /**
  * Role permissions
  */
+export function isWorkspaceOwner(role?: ClassSpaceRole): boolean {
+  return role === 'owner';
+}
+
 export function canManageSchedule(role?: ClassSpaceRole): boolean {
-  return role === 'cr' || role === 'co_admin';
+  return role === 'owner' || role === 'cr' || role === 'co_admin';
 }
 
 export function canModerate(role?: ClassSpaceRole): boolean {
-  return role === 'cr' || role === 'co_admin';
+  return role === 'owner' || role === 'cr' || role === 'co_admin';
 }
 
 export function canManageWorkspace(role?: ClassSpaceRole): boolean {
-  return role === 'cr';
+  return role === 'owner' || role === 'cr';
 }
 
 /**
@@ -292,6 +296,19 @@ export function getAvatarColor(seed?: string): string {
 }
 
 export function getAvatarBgColor(seed?: string): string {
-  return getAvatarColor(seed);
+  const bgColors = [
+    '#FDF2E9',
+    '#EBF5EE',
+    '#FEF6E9',
+    '#EDF4F9',
+    '#F7EEF7',
+    '#EDF2F7',
+  ];
+  if (!seed) return bgColors[0];
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) {
+    hash = seed.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return bgColors[Math.abs(hash) % bgColors.length];
 }
 

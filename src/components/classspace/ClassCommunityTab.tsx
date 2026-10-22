@@ -43,9 +43,11 @@ export const ClassCommunityTab: React.FC = () => {
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
-  // Auto-scroll to bottom on new messages
+  // Auto-scroll to bottom on new messages (safeguarded against JSDOM)
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (typeof messagesEndRef.current?.scrollIntoView === 'function') {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [messages.length]);
 
   const handleSend = async (e: React.FormEvent) => {

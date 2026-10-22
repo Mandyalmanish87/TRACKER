@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
-import { X, LogIn, KeyRound, Sparkles, AlertCircle } from 'lucide-react';
-import { useClassSpace } from '../../context/ClassSpaceContext';
+import React, { useState, useEffect } from 'react';
+import { X, LogIn, KeyRound, Sparkles, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { useOptionalClassSpace } from '../../context/ClassSpaceContext';
 import { normalizeJoinCode, isValidJoinCode } from '../../utils/classSpaceUtils';
+import { classSpaceService } from '../../services/classSpaceService';
+import { ClassSpaceWorkspace } from '../../types/classSpace';
 
 interface JoinWorkspaceModalProps {
   isOpen: boolean;
@@ -14,11 +16,51 @@ export const JoinWorkspaceModal: React.FC<JoinWorkspaceModalProps> = ({
   onClose,
   onJoined,
 }) => {
-  const { joinWorkspaceByCode } = useClassSpace();
+  const classSpace = useOptionalClassSpace();
+  const joinWorkspaceByCode = classSpace?.joinWorkspaceByCode;
 
   const [code, setCode] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [previewWs, setPreviewWs] = useState<ClassSpaceWorkspace | null>(null);
+  const [isLookingUp, setIsLookingUp] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setCode('');
+      setError(null);
+      setPreviewWs(null);
+    }
+  }, [isOpen]);
+
+  // Lookup workspace when code reaches 5 valid characters
+  useEffect(() => {
+    const normalized = normalizeJoinCode(code);
+    if (normalized.length === 5 && isValidJoinCode(normalized)) {
+      let isMounted = true;
+      setIsLookingUp(true);
+      setError(null);
+      classSpaceService.lookupWorkspaceByCode(normalized)
+        .then((res) => {
+          if (!isMounted) return;
+          if (res.workspace) {
+            setPreviewWs(res.workspace);
+          } else {
+            setPreviewWs(null);
+            if (res.error) setError(res.error);
+          }
+        })
+        .catch(() => {
+          if (isMounted) setPreviewWs(null);
+        })
+        .finally(() => {
+          if (isMounted) setIsLookingUp(false);
+        });
+      return () => { isMounted = false; };
+    } else {
+      setPreviewWs(null);
+    }
+  }, [code]);
 
   if (!isOpen) return null;
 
@@ -42,6 +84,11 @@ export const JoinWorkspaceModal: React.FC<JoinWorkspaceModalProps> = ({
 
     if (!isValidJoinCode(normalized)) {
       setError('Invalid characters in join code. Must be alphanumeric characters (A-Z, 2-9).');
+      return;
+    }
+
+    if (!joinWorkspaceByCode) {
+      setError('ClassSpace context is unavailable.');
       return;
     }
 
@@ -119,6 +166,25 @@ export const JoinWorkspaceModal: React.FC<JoinWorkspaceModalProps> = ({
             <p className="text-xs text-muted-foreground">
               Codes are 5 alphanumeric characters (e.g. <span className="font-mono font-semibold">CH7K2</span>). Not case-sensitive.
             </p>
+
+            {isLookingUp && (
+              <p className="text-xs text-muted-foreground animate-pulse">Verifying code with class registry...</p>
+            )}
+
+            {previewWs && (
+              <div className="p-3.5 rounded-xl bg-primary/10 border border-primary/20 text-left space-y-1">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-primary">
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Found ClassSpace:</span>
+                </div>
+                <p className="text-sm font-bold text-foreground">{previewWs.name}</p>
+                {(previewWs.department || previewWs.section || previewWs.batch) && (
+                  <p className="text-xs text-muted-foreground">
+                    {[previewWs.department, previewWs.section, previewWs.batch].filter(Boolean).join(' · ')}
+                  </p>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="p-3 rounded-xl bg-secondary/30 border border-border text-xs text-muted-foreground space-y-1">

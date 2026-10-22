@@ -27,224 +27,54 @@ interface LocalClassSpaceData {
   profiles: Record<string, ClassUserProfile>;
 }
 
-// Starter demo workspace for offline and initial test-drive
-const INITIAL_DEMO_DATA: LocalClassSpaceData = {
-  workspaces: [
-    {
-      id: 'ws_demo_cs2026',
-      name: 'B.Tech CSE — Batch 2026 (Sec A)',
-      department: 'Computer Science & Engineering',
-      section: 'Section A',
-      batch: '2022-2026',
-      description: 'Official shared workspace for lectures, labs, CR announcements & reschedule notices.',
-      joinCode: 'CH7K2',
-      createdBy: 'usr_cr_aarav',
-      createdAt: '2026-09-01T08:00:00.000Z',
-      updatedAt: '2026-10-22T08:00:00.000Z',
-    },
-  ],
-  members: [
-    {
-      id: 'mem_1',
-      workspaceId: 'ws_demo_cs2026',
-      userId: 'usr_cr_aarav',
-      role: 'cr',
-      joinedAt: '2026-09-01T08:00:00.000Z',
-      displayName: 'Aarav Sharma (CR)',
-      avatarUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=96&h=96&fit=crop&crop=faces',
-    },
-    {
-      id: 'mem_2',
-      workspaceId: 'ws_demo_cs2026',
-      userId: 'usr_coadmin_priya',
-      role: 'co_admin',
-      joinedAt: '2026-09-02T09:30:00.000Z',
-      displayName: 'Priya Nair (Co-Admin)',
-      avatarUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=96&h=96&fit=crop&crop=faces',
-    },
-    {
-      id: 'mem_3',
-      workspaceId: 'ws_demo_cs2026',
-      userId: 'usr_google_student_demo',
-      role: 'member',
-      joinedAt: '2026-09-03T11:15:00.000Z',
-      displayName: 'Scholar Student',
-      avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=96&h=96&fit=crop&crop=faces',
-    },
-  ],
-  rules: [
-    {
-      id: 'rule_dsa',
-      workspaceId: 'ws_demo_cs2026',
-      subjectName: 'Data Structures & Algorithms',
-      subjectCode: 'CS301',
-      subjectColor: '#DE6C47',
-      dayOfWeek: 1, // Mon
-      startTime: '09:00',
-      endTime: '10:15',
-      room: 'LH-101',
-      instructor: 'Prof. V. Raman',
-      notes: 'Bring graph traversal assignments',
-      createdBy: 'usr_cr_aarav',
-      createdAt: '2026-09-01T08:00:00.000Z',
-      updatedAt: '2026-09-01T08:00:00.000Z',
-    },
-    {
-      id: 'rule_os',
-      workspaceId: 'ws_demo_cs2026',
-      subjectName: 'Operating Systems & Kernels',
-      subjectCode: 'CS302',
-      subjectColor: '#3D6A8A',
-      dayOfWeek: 3, // Wed
-      startTime: '10:30',
-      endTime: '11:45',
-      room: 'CS-Lab 2',
-      instructor: 'Dr. Anita Desai',
-      notes: 'Linux concurrency exercises',
-      createdBy: 'usr_cr_aarav',
-      createdAt: '2026-09-01T08:00:00.000Z',
-      updatedAt: '2026-09-01T08:00:00.000Z',
-    },
-    {
-      id: 'rule_dbms',
-      workspaceId: 'ws_demo_cs2026',
-      subjectName: 'Database Management Systems',
-      subjectCode: 'CS303',
-      subjectColor: '#436650',
-      dayOfWeek: 4, // Thu
-      startTime: '14:00',
-      endTime: '15:15',
-      room: 'LH-104',
-      instructor: 'Prof. K. Sen',
-      notes: 'Normalization & B+ Trees',
-      createdBy: 'usr_cr_aarav',
-      createdAt: '2026-09-01T08:00:00.000Z',
-      updatedAt: '2026-09-01T08:00:00.000Z',
-    },
-    {
-      id: 'rule_networks',
-      workspaceId: 'ws_demo_cs2026',
-      subjectName: 'Computer Networks',
-      subjectCode: 'CS304',
-      subjectColor: '#B8732E',
-      dayOfWeek: 5, // Fri
-      startTime: '11:00',
-      endTime: '12:15',
-      room: 'LH-201',
-      instructor: 'Dr. R. Gupta',
-      notes: 'TCP handshake analysis',
-      createdBy: 'usr_cr_aarav',
-      createdAt: '2026-09-01T08:00:00.000Z',
-      updatedAt: '2026-09-01T08:00:00.000Z',
-    },
-  ],
-  overrides: [
-    {
-      id: 'ov_sample_extra',
-      workspaceId: 'ws_demo_cs2026',
-      type: 'extra',
-      newDate: new Date().toISOString().split('T')[0], // today
-      newStartTime: '16:00',
-      newEndTime: '17:15',
-      newRoom: 'Seminar Hall 3',
-      subjectName: 'Special DSA Problem Solving Workshop',
-      subjectCode: 'CS301-EXTRA',
-      subjectColor: '#DE6C47',
-      changeNote: 'CR Announcement: Extra revision session on Dynamic Programming & Trees.',
-      createdBy: 'usr_cr_aarav',
-      createdAt: '2026-10-20T10:00:00.000Z',
-    },
-  ],
+// Empty local store representation for offline / local-first operation
+const EMPTY_LOCAL_DATA: LocalClassSpaceData = {
+  workspaces: [],
+  members: [],
+  rules: [],
+  overrides: [],
   attendanceRecords: [],
-  messages: [
-    {
-      id: 'msg_welcome',
-      workspaceId: 'ws_demo_cs2026',
-      senderId: 'usr_cr_aarav',
-      senderName: 'Aarav Sharma (CR)',
-      senderRole: 'cr',
-      senderAvatarUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=96&h=96&fit=crop&crop=faces',
-      content: 'Welcome to our official ClassSpace! The weekly timetable and official reschedule notices are published here.',
-      reactions: { '🙌': ['usr_cr_aarav', 'usr_coadmin_priya'], '🔥': ['usr_google_student_demo'] },
-      isPinned: true,
-      createdAt: '2026-10-21T09:00:00.000Z',
-      updatedAt: '2026-10-21T09:00:00.000Z',
-    },
-    {
-      id: 'msg_notes',
-      workspaceId: 'ws_demo_cs2026',
-      senderId: 'usr_coadmin_priya',
-      senderName: 'Priya Nair (Co-Admin)',
-      senderRole: 'co_admin',
-      senderAvatarUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=96&h=96&fit=crop&crop=faces',
-      content: 'Reminder: Operating Systems lab report deadline is this Friday at 5 PM on the department portal.',
-      reactions: { '👍': ['usr_google_student_demo'] },
-      createdAt: '2026-10-22T08:30:00.000Z',
-      updatedAt: '2026-10-22T08:30:00.000Z',
-    },
-  ],
+  messages: [],
   savedMessages: [],
-  notifications: [
-    {
-      id: 'notif_init',
-      workspaceId: 'ws_demo_cs2026',
-      userId: 'usr_google_student_demo',
-      title: 'Official Timetable Published',
-      body: 'CR Aarav Sharma has published the official semester schedule.',
-      type: 'schedule_change',
-      isRead: false,
-      createdAt: '2026-10-21T09:05:00.000Z',
-    },
-    {
-      id: 'notif_extra',
-      workspaceId: 'ws_demo_cs2026',
-      userId: 'usr_google_student_demo',
-      title: 'Extra Class Added: DSA Workshop',
-      body: 'Today at 16:00 in Seminar Hall 3.',
-      type: 'extra_class',
-      isRead: false,
-      createdAt: '2026-10-22T08:00:00.000Z',
-    },
-  ],
-  profiles: {
-    usr_google_student_demo: {
-      userId: 'usr_google_student_demo',
-      displayName: 'Scholar Student',
-      avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=96&h=96&fit=crop&crop=faces',
-      notificationPreferences: {
-        timetableAlerts: true,
-        extraClasses: true,
-        cancellations: true,
-        communityReplies: true,
-      },
-    },
-  },
+  notifications: [],
+  profiles: {},
 };
 
 /**
- * Loads raw data from local storage with initial demo data hydration
+ * Loads raw data from local storage with clean empty initialization (no fabricated demo data)
  */
 function getLocalData(): LocalClassSpaceData {
   try {
     const raw = localStorage.getItem(LOCAL_STORE_KEY);
     if (!raw) {
-      localStorage.setItem(LOCAL_STORE_KEY, JSON.stringify(INITIAL_DEMO_DATA));
-      return INITIAL_DEMO_DATA;
+      localStorage.setItem(LOCAL_STORE_KEY, JSON.stringify(EMPTY_LOCAL_DATA));
+      return { ...EMPTY_LOCAL_DATA };
     }
     const parsed = JSON.parse(raw) as Partial<LocalClassSpaceData>;
+    // Migrate away any previous demo workspace 'ws_demo_cs2026' so production is never seeded with fake data
+    const workspaces = (parsed.workspaces || []).filter((w) => w.id !== 'ws_demo_cs2026');
+    const members = (parsed.members || []).filter((m) => m.workspaceId !== 'ws_demo_cs2026');
+    const rules = (parsed.rules || []).filter((r) => r.workspaceId !== 'ws_demo_cs2026');
+    const overrides = (parsed.overrides || []).filter((o) => o.workspaceId !== 'ws_demo_cs2026');
+    const attendanceRecords = (parsed.attendanceRecords || []).filter((a) => a.workspaceId !== 'ws_demo_cs2026');
+    const messages = (parsed.messages || []).filter((m) => m.workspaceId !== 'ws_demo_cs2026');
+    const savedMessages = (parsed.savedMessages || []).filter((s) => s.workspaceId !== 'ws_demo_cs2026');
+    const notifications = (parsed.notifications || []).filter((n) => n.workspaceId !== 'ws_demo_cs2026');
+    const profiles = parsed.profiles || {};
+
     return {
-      workspaces: parsed.workspaces || INITIAL_DEMO_DATA.workspaces,
-      members: parsed.members || INITIAL_DEMO_DATA.members,
-      rules: parsed.rules || INITIAL_DEMO_DATA.rules,
-      overrides: parsed.overrides || INITIAL_DEMO_DATA.overrides,
-      attendanceRecords: parsed.attendanceRecords || [],
-      messages: parsed.messages || INITIAL_DEMO_DATA.messages,
-      savedMessages: parsed.savedMessages || [],
-      notifications: parsed.notifications || INITIAL_DEMO_DATA.notifications,
-      profiles: parsed.profiles || INITIAL_DEMO_DATA.profiles,
+      workspaces,
+      members,
+      rules,
+      overrides,
+      attendanceRecords,
+      messages,
+      savedMessages,
+      notifications,
+      profiles,
     };
   } catch {
-    return INITIAL_DEMO_DATA;
+    return { ...EMPTY_LOCAL_DATA };
   }
 }
 
@@ -301,6 +131,8 @@ export const classSpaceService = {
     user: AuthUser,
     details: {
       name: string;
+      college?: string;
+      institution?: string;
       department?: string;
       section?: string;
       batch?: string;
@@ -491,6 +323,40 @@ export const classSpaceService = {
     return { workspace, member: newMember };
   },
 
+  async lookupWorkspaceByCode(
+    rawCode: string
+  ): Promise<{ workspace?: ClassSpaceWorkspace; error?: string }> {
+    const normalized = normalizeJoinCode(rawCode);
+    if (!isValidJoinCode(normalized)) {
+      return { error: 'Invalid ClassSpace code format. Must be 5 alphanumeric characters.' };
+    }
+
+    const supabase = getSupabaseClient();
+    if (supabase && isSupabaseConfigured) {
+      try {
+        const { data: wsData, error: wsError } = await supabase
+          .from('class_workspaces')
+          .select('*')
+          .eq('join_code', normalized)
+          .single();
+
+        if (wsError || !wsData) {
+          return { error: 'No ClassSpace found with this Join Code.' };
+        }
+        return { workspace: mapWorkspaceFromDb(wsData) };
+      } catch (err) {
+        console.warn('[ClassSpaceService] lookupWorkspace error:', err);
+      }
+    }
+
+    const local = getLocalData();
+    const ws = local.workspaces.find((w) => w.joinCode === normalized);
+    if (!ws) {
+      return { error: 'No ClassSpace found with this Join Code.' };
+    }
+    return { workspace: ws };
+  },
+
   async rotateJoinCode(
     workspaceId: string,
     userId: string
@@ -500,8 +366,8 @@ export const classSpaceService = {
     if (!ws) return { error: 'ClassSpace not found.' };
 
     const member = local.members.find((m) => m.workspaceId === workspaceId && m.userId === userId);
-    if (!member || member.role !== 'cr') {
-      return { error: 'Only the Class Representative (CR) can rotate the join code.' };
+    if (!member || (member.role !== 'cr' && member.role !== 'owner')) {
+      return { error: 'Only the Class Representative (CR) or Owner can rotate the join code.' };
     }
 
     const newCode = generateJoinCode();
@@ -526,6 +392,44 @@ export const classSpaceService = {
     saveLocalData(local);
 
     return { newCode };
+  },
+
+  async deleteWorkspace(workspaceId: string, userId: string): Promise<{ success: boolean; error?: string }> {
+    const local = getLocalData();
+    const ws = local.workspaces.find((w) => w.id === workspaceId);
+    if (!ws) return { success: false, error: 'ClassSpace not found.' };
+
+    const member = local.members.find((m) => m.workspaceId === workspaceId && m.userId === userId);
+    if (ws.createdBy !== userId && member?.role !== 'owner') {
+      return { success: false, error: 'Only the ClassSpace Owner can delete this workspace.' };
+    }
+
+    const supabase = getSupabaseClient();
+    if (supabase && isSupabaseConfigured) {
+      try {
+        const { error } = await supabase
+          .from('class_workspaces')
+          .delete()
+          .eq('id', workspaceId);
+
+        if (error) return { success: false, error: error.message };
+        return { success: true };
+      } catch (err) {
+        return { success: false, error: (err as Error).message };
+      }
+    }
+
+    local.workspaces = local.workspaces.filter((w) => w.id !== workspaceId);
+    local.members = local.members.filter((m) => m.workspaceId !== workspaceId);
+    local.rules = local.rules.filter((r) => r.workspaceId !== workspaceId);
+    local.overrides = local.overrides.filter((o) => o.workspaceId !== workspaceId);
+    local.attendanceRecords = local.attendanceRecords.filter((a) => a.workspaceId !== workspaceId);
+    local.messages = local.messages.filter((m) => m.workspaceId !== workspaceId);
+    local.savedMessages = local.savedMessages.filter((s) => s.workspaceId !== workspaceId);
+    local.notifications = local.notifications.filter((n) => n.workspaceId !== workspaceId);
+    saveLocalData(local);
+
+    return { success: true };
   },
 
   async leaveWorkspace(workspaceId: string, userId: string): Promise<{ success: boolean; error?: string }> {

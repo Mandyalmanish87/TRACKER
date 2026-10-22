@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X, Sparkles, Building, Layers, Calendar, BookOpen, KeyRound } from 'lucide-react';
-import { useClassSpace } from '../../context/ClassSpaceContext';
+import { useOptionalClassSpace } from '../../context/ClassSpaceContext';
 
 interface CreateWorkspaceModalProps {
   isOpen: boolean;
@@ -13,9 +13,11 @@ export const CreateWorkspaceModal: React.FC<CreateWorkspaceModalProps> = ({
   onClose,
   onCreated,
 }) => {
-  const { createWorkspace } = useClassSpace();
+  const classSpace = useOptionalClassSpace();
+  const createWorkspace = classSpace?.createWorkspace;
 
   const [name, setName] = useState('');
+  const [institution, setInstitution] = useState('');
   const [section, setSection] = useState('');
   const [batch, setBatch] = useState('');
   const [department, setDepartment] = useState('');
@@ -32,11 +34,17 @@ export const CreateWorkspaceModal: React.FC<CreateWorkspaceModalProps> = ({
       return;
     }
 
+    if (!createWorkspace) {
+      setError('ClassSpace context is unavailable.');
+      return;
+    }
+
     setIsSubmitting(true);
     setError(null);
     try {
       const res = await createWorkspace({
         name: name.trim(),
+        institution: institution.trim() || undefined,
         section: section.trim() || undefined,
         batch: batch.trim() || undefined,
         department: department.trim() || undefined,
@@ -102,6 +110,20 @@ export const CreateWorkspaceModal: React.FC<CreateWorkspaceModalProps> = ({
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. B.Tech Computer Science — Batch 2026"
+              className="w-full px-3 py-2 text-sm rounded-lg bg-background border border-input focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all text-foreground"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5 mb-1">
+              <Building className="w-3.5 h-3.5 text-muted-foreground" />
+              College / Institution (Optional)
+            </label>
+            <input
+              type="text"
+              value={institution}
+              onChange={(e) => setInstitution(e.target.value)}
+              placeholder="e.g. National Institute of Technology"
               className="w-full px-3 py-2 text-sm rounded-lg bg-background border border-input focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all text-foreground"
             />
           </div>
