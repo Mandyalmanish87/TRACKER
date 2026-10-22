@@ -99,6 +99,33 @@ export interface ClassAttendanceRecord {
   updatedAt: string;
 }
 
+export type ClassMessageType = 'text' | 'poll' | 'resource' | 'announcement';
+
+export interface ClassPollOption {
+  id: string;
+  text: string;
+  votes: string[]; // array of userIds
+}
+
+export interface ClassPoll {
+  id: string;
+  question: string;
+  options: ClassPollOption[];
+  allowMultipleAnswers: boolean; // multi-choice support
+  isAnonymous?: boolean;
+  isClosed?: boolean;
+  totalVotes: number;
+}
+
+export type ClassResourceCategory = 'notes' | 'slides' | 'assignment' | 'reference' | 'recording';
+
+export interface ClassResourceAttachment {
+  title: string;
+  url: string;
+  category: ClassResourceCategory;
+  description?: string;
+}
+
 export interface ClassMessage {
   id: string;
   workspaceId: string;
@@ -107,6 +134,9 @@ export interface ClassMessage {
   senderRole?: ClassSpaceRole;
   senderAvatarUrl?: string;
   content: string;
+  messageType?: ClassMessageType;
+  poll?: ClassPoll;
+  resource?: ClassResourceAttachment;
   replyToId?: string;
   replyToContent?: string;
   replyToSenderName?: string;

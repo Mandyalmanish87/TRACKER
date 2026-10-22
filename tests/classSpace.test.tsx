@@ -457,6 +457,130 @@ describe('ClassSpace Service — No Mock Data & Multi-Student Attendance Isolati
       expect(updatedMsg?.reactions['👍']).toEqual(['usr_user_b']);
     });
   });
+
+  describe('Class Polls System (Single & Multi-Option) & Study Resource Tools', () => {
+    it('creates a single-choice poll and enforces exclusive single selection per voter', async () => {
+      const creatorUser = { id: 'usr_cr', email: 'cr@c.edu', name: 'CR' };
+      const wsRes = await classSpaceService.createWorkspace(creatorUser, { name: 'Batch 2026' });
+      const wsId = wsRes.workspace!.id;
+
+      // 1. Create a single-choice poll
+      const pollRes = await classSpaceService.createPoll(
+        wsId,
+        { id: 'usr_cr', name: 'CR' },
+        'When should we hold the extra DSA review?',
+        ['Friday 4 PM', 'Saturday 10 AM', 'Sunday 2 PM'],
+        false // allowMultipleAnswers = false (single choice)
+      );
+
+      expect(pollRes.message).toBeDefined();
+      expect(pollRes.message?.messageType).toBe('poll');
+      const poll = pollRes.message!.poll!;
+      expect(poll.question).toBe('When should we hold the extra DSA review?');
+      expect(poll.options).toHaveLength(3);
+      expect(poll.allowMultipleAnswers).toBe(false);
+
+      const msgId = pollRes.message!.id;
+      const opt1Id = poll.options[0].id;
+      const opt2Id = poll.options[1].id;
+
+      // 2. Student votes for Option 1
+      const vote1 = await classSpaceService.votePoll(wsId, msgId, opt1Id, 'usr_student_1');
+      expect(vote1.success).toBe(true);
+      expect(vote1.poll?.options[0].votes).toContain('usr_student_1');
+      expect(vote1.poll?.totalVotes).toBe(1);
+
+      // 3. Same student switches vote to Option 2 in single-choice mode
+      const vote2 = await classSpaceService.votePoll(wsId, msgId, opt2Id, 'usr_student_1');
+      expect(vote2.success).toBe(true);
+      expect(vote2.poll?.options[0].votes).not.toContain('usr_student_1');
+      expect(vote2.poll?.options[1].votes).toContain('usr_student_1');
+      expect(vote2.poll?.totalVotes).toBe(1);
+    });
+
+    it('creates a multi-option poll allowing students to select multiple preferred options', async () => {
+      const creatorUser = { id: 'usr_cr', email: 'cr@c.edu', name: 'CR' };
+      const wsRes = await classSpaceService.createWorkspace(creatorUser, { name: 'Batch 2026' });
+      const wsId = wsRes.workspace!.id;
+
+      // 1. Create a multi-choice poll
+      const pollRes = await classSpaceService.createPoll(
+        wsId,
+        { id: 'usr_student_leader', name: 'Aanya' },
+        'Select all topics you want covered in revision:',
+        ['Dynamic Programming', 'Graph Theory', 'Trie / Segment Tree'],
+        true // allowMultipleAnswers = true
+      );
+
+      const msgId = pollRes.message!.id;
+      const [opt1, opt2, opt3] = pollRes.message!.poll!.options;
+
+      // 2. Student votes for Option 1 and Option 2
+      await classSpaceService.votePoll(wsId, msgId, opt1.id, 'usr_student_1');
+      const voteRes = await classSpaceService.votePoll(wsId, msgId, opt2.id, 'usr_student_1');
+
+      expect(voteRes.poll?.options[0].votes).toContain('usr_student_1');
+      expect(voteRes.poll?.options[1].votes).toContain('usr_student_1');
+      expect(voteRes.poll?.options[2].votes).toHaveLength(0);
+      expect(voteRes.poll?.totalVotes).toBe(1); // 1 unique voter
+
+      // 3. Second student votes for Option 2 and Option 3
+      await classSpaceService.votePoll(wsId, msgId, opt2.id, 'usr_student_2');
+      await classSpaceService.votePoll(wsId, msgId, opt3.id, 'usr_student_2');
+
+      const messages = await classSpaceService.getMessages(wsId);
+      const updatedPoll = messages.find((m) => m.id === msgId)!.poll!;
+      expect(updatedPoll.options[1].votes).toHaveLength(2); // Option 2 has 2 votes
+      expect(updatedPoll.totalVotes).toBe(2); // 2 unique voters
+    });
+
+    it('allows closing a poll and prevents further voting', async () => {
+      const creatorUser = { id: 'usr_cr', email: 'cr@c.edu', name: 'CR' };
+      const wsRes = await classSpaceService.createWorkspace(creatorUser, { name: 'Batch 2026' });
+      const wsId = wsRes.workspace!.id;
+
+      const pollRes = await classSpaceService.createPoll(
+        wsId,
+        { id: 'usr_cr', name: 'CR', role: 'cr' },
+        'Close voting deadline test',
+        ['Yes', 'No'],
+        false
+      );
+
+      const msgId = pollRes.message!.id;
+      const optId = pollRes.message!.poll!.options[0].id;
+
+      // Close poll
+      const closeRes = await classSpaceService.closePoll(wsId, msgId, 'usr_cr', 'cr');
+      expect(closeRes.success).toBe(true);
+
+      // Attempt to vote on closed poll
+      const voteAttempt = await classSpaceService.votePoll(wsId, msgId, optId, 'usr_student_3');
+      expect(voteAttempt.success).toBe(false);
+      expect(voteAttempt.error).toMatch(/ended|closed/i);
+    });
+
+    it('shares study resources with categorized links', async () => {
+      const creatorUser = { id: 'usr_cr', email: 'cr@c.edu', name: 'CR' };
+      const wsRes = await classSpaceService.createWorkspace(creatorUser, { name: 'Batch 2026' });
+      const wsId = wsRes.workspace!.id;
+
+      const res = await classSpaceService.shareResource(
+        wsId,
+        { id: 'usr_cr', name: 'CR' },
+        'Unit 4 - Database Normalization Deck',
+        'https://drive.google.com/dbms-unit-4.pdf',
+        'slides',
+        'Essential for mid-semester exams.'
+      );
+
+      expect(res.message).toBeDefined();
+      expect(res.message?.messageType).toBe('resource');
+      expect(res.message?.resource?.title).toBe('Unit 4 - Database Normalization Deck');
+      expect(res.message?.resource?.category).toBe('slides');
+      expect(res.message?.resource?.url).toBe('https://drive.google.com/dbms-unit-4.pdf');
+    });
+  });
 });
 
 describe('ClassSpace UI Component Integration & User Mode', () => {

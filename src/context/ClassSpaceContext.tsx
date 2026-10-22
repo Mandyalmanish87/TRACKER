@@ -7,6 +7,7 @@ import {
   ResolvedClassOccurrence,
   ClassAttendanceRecord,
   ClassMessage,
+  ClassResourceCategory,
   ClassSavedMessage,
   ClassNotification,
   ClassUserProfile,
@@ -115,6 +116,20 @@ interface ClassSpaceContextType {
 
   // Community Chat Actions
   sendMessage: (content: string, replyTo?: { id: string; content: string; senderName: string }) => Promise<{ error?: string }>;
+  createPoll: (
+    question: string,
+    options: string[],
+    allowMultipleAnswers: boolean,
+    isAnonymous?: boolean
+  ) => Promise<{ error?: string }>;
+  votePoll: (messageId: string, optionId: string) => Promise<{ error?: string }>;
+  closePoll: (messageId: string) => Promise<{ error?: string }>;
+  shareResource: (
+    title: string,
+    url: string,
+    category: ClassResourceCategory,
+    description?: string
+  ) => Promise<{ error?: string }>;
   addReaction: (messageId: string, emoji: string) => Promise<void>;
   removeReaction: (messageId: string, emoji: string) => Promise<void>;
   editMessage: (messageId: string, newContent: string) => Promise<{ error?: string }>;
@@ -621,6 +636,94 @@ export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     return { error: res.error };
   };
 
+  const createPoll = async (
+    question: string,
+    options: string[],
+    allowMultipleAnswers: boolean,
+    isAnonymous: boolean = false
+  ) => {
+    if (!activeWorkspace) return { error: 'No active workspace.' };
+    const res = await classSpaceService.createPoll(
+      activeWorkspace.id,
+      {
+        id: effectiveUser.id,
+        name: currentMember?.displayName || effectiveUser.name || 'Student',
+        role: currentMember?.role,
+        avatarUrl: currentMember?.avatarUrl || effectiveUser.avatarUrl,
+      },
+      question,
+      options,
+      allowMultipleAnswers,
+      isAnonymous
+    );
+    if (res.message) {
+      setMessages((prev) => [...prev, res.message!]);
+    }
+    return { error: res.error };
+  };
+
+  const votePoll = async (messageId: string, optionId: string) => {
+    if (!activeWorkspace) return { error: 'No active workspace.' };
+    const res = await classSpaceService.votePoll(
+      activeWorkspace.id,
+      messageId,
+      optionId,
+      effectiveUser.id
+    );
+    if (res.success && res.poll) {
+      setMessages((prev) =>
+        prev.map((m) => (m.id === messageId ? { ...m, poll: res.poll } : m))
+      );
+    }
+    return { error: res.error };
+  };
+
+  const closePoll = async (messageId: string) => {
+    if (!activeWorkspace) return { error: 'No active workspace.' };
+    const res = await classSpaceService.closePoll(
+      activeWorkspace.id,
+      messageId,
+      effectiveUser.id,
+      currentMember?.role
+    );
+    if (res.success) {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === messageId && m.poll
+            ? { ...m, poll: { ...m.poll, isClosed: true } }
+            : m
+        )
+      );
+    }
+    return { error: res.error };
+  };
+
+  const shareResource = async (
+    title: string,
+    url: string,
+    category: ClassResourceCategory,
+    description?: string
+  ) => {
+    if (!activeWorkspace) return { error: 'No active workspace.' };
+    const res = await classSpaceService.shareResource(
+      activeWorkspace.id,
+      {
+        id: effectiveUser.id,
+        name: currentMember?.displayName || effectiveUser.name || 'Student',
+        role: currentMember?.role,
+        avatarUrl: currentMember?.avatarUrl || effectiveUser.avatarUrl,
+      },
+      title,
+      url,
+      category,
+      description
+    );
+    if (res.message) {
+      setMessages((prev) => [...prev, res.message!]);
+    }
+    return { error: res.error };
+  };
+
   const addReaction = async (messageId: string, emoji: string) => {
     await classSpaceService.addReaction(messageId, effectiveUser.id, emoji);
     setMessages((prev) =>
@@ -802,6 +905,10 @@ export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         copyOfficialScheduleToPersonal,
         markAttendance,
         sendMessage,
+        createPoll,
+        votePoll,
+        closePoll,
+        shareResource,
         addReaction,
         removeReaction,
         editMessage,

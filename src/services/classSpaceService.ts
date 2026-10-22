@@ -7,6 +7,11 @@ import {
   ClassTimetableOverride,
   ClassAttendanceRecord,
   ClassMessage,
+  ClassMessageType,
+  ClassPoll,
+  ClassPollOption,
+  ClassResourceAttachment,
+  ClassResourceCategory,
   ClassSavedMessage,
   ClassNotification,
   ClassUserProfile,
@@ -898,7 +903,13 @@ export const classSpaceService = {
     workspaceId: string,
     sender: { id: string; name: string; role?: ClassSpaceRole; avatarUrl?: string },
     content: string,
-    replyTo?: { id: string; content: string; senderName: string }
+    replyTo?: { id: string; content: string; senderName: string },
+    extra?: {
+      messageType?: ClassMessageType;
+      poll?: ClassPoll;
+      resource?: ClassResourceAttachment;
+      isPinned?: boolean;
+    }
   ): Promise<{ message?: ClassMessage; error?: string }> {
     if (!content || !content.trim()) {
       return { error: 'Message cannot be empty.' };
@@ -913,11 +924,14 @@ export const classSpaceService = {
       senderRole: sender.role,
       senderAvatarUrl: sender.avatarUrl,
       content: content.trim(),
+      messageType: extra?.messageType || 'text',
+      poll: extra?.poll,
+      resource: extra?.resource,
       replyToId: replyTo?.id,
       replyToContent: replyTo?.content,
       replyToSenderName: replyTo?.senderName,
       reactions: {},
-      isPinned: false,
+      isPinned: extra?.isPinned ?? false,
       isEdited: false,
       isDeleted: false,
       createdAt: now,
@@ -936,6 +950,10 @@ export const classSpaceService = {
             sender_role: sender.role,
             sender_avatar_url: sender.avatarUrl,
             content: newMsg.content,
+            message_type: newMsg.messageType,
+            poll: newMsg.poll,
+            resource: newMsg.resource,
+            is_pinned: newMsg.isPinned,
             reply_to_id: replyTo?.id,
             reply_to_content: replyTo?.content,
             reply_to_sender_name: replyTo?.senderName,
@@ -955,6 +973,187 @@ export const classSpaceService = {
     saveLocalData(local);
 
     return { message: newMsg };
+  },
+
+  async createPoll(
+    workspaceId: string,
+    sender: { id: string; name: string; role?: ClassSpaceRole; avatarUrl?: string },
+    question: string,
+    optionTexts: string[],
+    allowMultipleAnswers: boolean,
+    isAnonymous: boolean = false
+  ): Promise<{ message?: ClassMessage; error?: string }> {
+    if (!question || !question.trim()) {
+      return { error: 'Poll question cannot be empty.' };
+    }
+    const cleanOptions = optionTexts.map((t) => t.trim()).filter(Boolean);
+    if (cleanOptions.length < 2) {
+      return { error: 'A poll must have at least 2 non-empty options.' };
+    }
+
+    const pollId = 'poll_' + Math.random().toString(36).substring(2, 10);
+    const options: ClassPollOption[] = cleanOptions.map((text, idx) => ({
+      id: `opt_${idx + 1}_${Math.random().toString(36).substring(2, 6)}`,
+      text,
+      votes: [],
+    }));
+
+    const poll: ClassPoll = {
+      id: pollId,
+      question: question.trim(),
+      options,
+      allowMultipleAnswers,
+      isAnonymous,
+      isClosed: false,
+      totalVotes: 0,
+    };
+
+    return this.sendMessage(
+      workspaceId,
+      sender,
+      question.trim(),
+      undefined,
+      {
+        messageType: 'poll',
+        poll,
+      }
+    );
+  },
+
+  async votePoll(
+    workspaceId: string,
+    messageId: string,
+    optionId: string,
+    userId: string
+  ): Promise<{ success: boolean; poll?: ClassPoll; error?: string }> {
+    const local = getLocalData();
+    const msg = local.messages.find((m) => m.id === messageId && m.workspaceId === workspaceId);
+    if (!msg || !msg.poll) {
+      return { success: false, error: 'Poll message not found.' };
+    }
+
+    if (msg.poll.isClosed) {
+      return { success: false, error: 'This poll has ended.' };
+    }
+
+    const poll = msg.poll;
+    const targetOption = poll.options.find((o) => o.id === optionId);
+    if (!targetOption) {
+      return { success: false, error: 'Poll option not found.' };
+    }
+
+    if (poll.allowMultipleAnswers) {
+      // Multi-option: toggle user's vote on this option
+      if (targetOption.votes.includes(userId)) {
+        targetOption.votes = targetOption.votes.filter((uid) => uid !== userId);
+      } else {
+        targetOption.votes.push(userId);
+      }
+    } else {
+      // Single choice: if clicking already selected, toggle off; otherwise clear all and select this
+      const hasVotedThis = targetOption.votes.includes(userId);
+      poll.options.forEach((opt) => {
+        opt.votes = opt.votes.filter((uid) => uid !== userId);
+      });
+      if (!hasVotedThis) {
+        targetOption.votes.push(userId);
+      }
+    }
+
+    // Recompute total votes (unique users)
+    const uniqueVoters = new Set<string>();
+    poll.options.forEach((opt) => opt.votes.forEach((uid) => uniqueVoters.add(uid)));
+    poll.totalVotes = uniqueVoters.size;
+
+    msg.updatedAt = new Date().toISOString();
+    saveLocalData(local);
+
+    const supabase = getSupabaseClient();
+    if (supabase && isSupabaseConfigured) {
+      try {
+        await supabase
+          .from('class_messages')
+          .update({ poll, updated_at: msg.updatedAt })
+          .eq('id', messageId);
+      } catch {
+        // continue
+      }
+    }
+
+    return { success: true, poll };
+  },
+
+  async closePoll(
+    workspaceId: string,
+    messageId: string,
+    actorUserId: string,
+    actorRole?: ClassSpaceRole
+  ): Promise<{ success: boolean; error?: string }> {
+    const local = getLocalData();
+    const msg = local.messages.find((m) => m.id === messageId && m.workspaceId === workspaceId);
+    if (!msg || !msg.poll) {
+      return { success: false, error: 'Poll message not found.' };
+    }
+
+    const isAuthorized =
+      msg.senderId === actorUserId ||
+      actorRole === 'owner' ||
+      actorRole === 'cr' ||
+      actorRole === 'co_admin';
+
+    if (!isAuthorized) {
+      return { success: false, error: 'Only the poll creator or CR/Admins can close this poll.' };
+    }
+
+    msg.poll.isClosed = true;
+    msg.updatedAt = new Date().toISOString();
+    saveLocalData(local);
+
+    const supabase = getSupabaseClient();
+    if (supabase && isSupabaseConfigured) {
+      try {
+        await supabase
+          .from('class_messages')
+          .update({ poll: msg.poll, updated_at: msg.updatedAt })
+          .eq('id', messageId);
+      } catch {
+        // continue
+      }
+    }
+
+    return { success: true };
+  },
+
+  async shareResource(
+    workspaceId: string,
+    sender: { id: string; name: string; role?: ClassSpaceRole; avatarUrl?: string },
+    title: string,
+    url: string,
+    category: ClassResourceCategory,
+    description?: string
+  ): Promise<{ message?: ClassMessage; error?: string }> {
+    if (!title || !title.trim()) {
+      return { error: 'Resource title cannot be empty.' };
+    }
+    if (!url || !url.trim()) {
+      return { error: 'Resource URL cannot be empty.' };
+    }
+
+    return this.sendMessage(
+      workspaceId,
+      sender,
+      description?.trim() || title.trim(),
+      undefined,
+      {
+        messageType: 'resource',
+        resource: {
+          title: title.trim(),
+          url: url.trim(),
+          category,
+          description: description?.trim(),
+        },
+      }
+    );
   },
 
   async addReaction(
@@ -1576,6 +1775,9 @@ function mapMessageFromDb(row: any): ClassMessage {
     senderRole: row.sender_role,
     senderAvatarUrl: row.sender_avatar_url,
     content: row.content,
+    messageType: row.message_type || (row.poll ? 'poll' : row.resource ? 'resource' : 'text'),
+    poll: row.poll || undefined,
+    resource: row.resource || undefined,
     replyToId: row.reply_to_id,
     replyToContent: row.reply_to_content,
     replyToSenderName: row.reply_to_sender_name,

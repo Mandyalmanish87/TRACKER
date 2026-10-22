@@ -10,12 +10,27 @@ import {
   Search,
   X,
   CornerDownRight,
+  BarChart2,
+  Link2,
+  Megaphone,
+  Check,
+  Copy,
+  ExternalLink,
+  Lock,
+  Users,
+  FileText,
+  BookOpen,
+  Video,
 } from 'lucide-react';
 import { useClassSpace } from '../../context/ClassSpaceContext';
 import { getAvatarInitials, getAvatarColor } from '../../utils/classSpaceUtils';
 import { ClassMessage } from '../../types/classSpace';
+import { CreatePollModal } from './CreatePollModal';
+import { ShareResourceModal } from './ShareResourceModal';
 
 const EMOJI_PALETTE = ['👍', '❤️', '🔥', '🙌', '💡', '👏'];
+
+type CommunityFilter = 'all' | 'polls' | 'notices' | 'resources' | 'starred';
 
 export const ClassCommunityTab: React.FC = () => {
   const {
@@ -24,6 +39,10 @@ export const ClassCommunityTab: React.FC = () => {
     savedMessages,
     pinnedMessages,
     sendMessage,
+    createPoll,
+    votePoll,
+    closePoll,
+    shareResource,
     addReaction,
     removeReaction,
     editMessage,
@@ -39,7 +58,14 @@ export const ClassCommunityTab: React.FC = () => {
   const [editingMsg, setEditingMsg] = useState<ClassMessage | null>(null);
   const [editContent, setEditContent] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
-  const [showSavedOnly, setShowSavedOnly] = useState(false);
+  const [activeFilter, setActiveFilter] = useState<CommunityFilter>('all');
+  const [isAnnouncementMode, setIsAnnouncementMode] = useState(false);
+
+  // Modals state
+  const [showCreatePollModal, setShowCreatePollModal] = useState(false);
+  const [showShareResourceModal, setShowShareResourceModal] = useState(false);
+  const [copiedPollId, setCopiedPollId] = useState<string | null>(null);
+  const [copiedResourceId, setCopiedResourceId] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -54,14 +80,20 @@ export const ClassCommunityTab: React.FC = () => {
     e.preventDefault();
     if (!inputContent.trim()) return;
 
-    await sendMessage(inputContent.trim(), replyingTo ? {
-      id: replyingTo.id,
-      content: replyingTo.content,
-      senderName: replyingTo.senderName,
-    } : undefined);
+    await sendMessage(
+      inputContent.trim(),
+      replyingTo
+        ? {
+            id: replyingTo.id,
+            content: replyingTo.content,
+            senderName: replyingTo.senderName,
+          }
+        : undefined
+    );
 
     setInputContent('');
     setReplyingTo(null);
+    setIsAnnouncementMode(false);
   };
 
   const handleSaveEdit = async () => {
@@ -72,60 +104,170 @@ export const ClassCommunityTab: React.FC = () => {
 
   const savedMsgIdSet = new Set(savedMessages.map((s) => s.messageId));
 
+  // Category counts
+  const pollCount = messages.filter((m) => m.poll || m.messageType === 'poll').length;
+  const noticeCount = messages.filter((m) => m.isPinned || m.messageType === 'announcement').length;
+  const resourceCount = messages.filter((m) => m.resource || m.messageType === 'resource').length;
+
   const filteredMessages = messages.filter((m) => {
-    if (showSavedOnly && !savedMsgIdSet.has(m.id)) return false;
+    if (activeFilter === 'starred' && !savedMsgIdSet.has(m.id)) return false;
+    if (activeFilter === 'polls' && !m.poll && m.messageType !== 'poll') return false;
+    if (activeFilter === 'notices' && !m.isPinned && m.messageType !== 'announcement') return false;
+    if (activeFilter === 'resources' && !m.resource && m.messageType !== 'resource') return false;
+
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
-      return (
-        m.content.toLowerCase().includes(q) ||
-        m.senderName.toLowerCase().includes(q)
-      );
+      const inContent = m.content.toLowerCase().includes(q);
+      const inSender = m.senderName.toLowerCase().includes(q);
+      const inPoll =
+        m.poll?.question.toLowerCase().includes(q) ||
+        m.poll?.options.some((o) => o.text.toLowerCase().includes(q));
+      const inResource =
+        m.resource?.title.toLowerCase().includes(q) ||
+        m.resource?.description?.toLowerCase().includes(q);
+      return inContent || inSender || Boolean(inPoll) || Boolean(inResource);
     }
     return true;
   });
 
   return (
-    <div className="flex flex-col h-[750px] space-y-4">
-      {/* Top Bar: Search, Starred Filter, Stats */}
-      <div className="p-4 rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 shadow-subtle flex flex-wrap items-center justify-between gap-3 shrink-0">
-        <div className="flex items-center gap-2 flex-1 min-w-[240px]">
-          <div className="relative flex-1">
+    <div className="flex flex-col h-[750px] space-y-3">
+      {/* Top Bar: Search, Category Filters, Pinned announcements indicator */}
+      <div className="p-3.5 rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 shadow-subtle space-y-3 shrink-0">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="relative flex-1 min-w-[200px]">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-espresso-400" />
             <input
               type="text"
-              placeholder="Search class discussions..."
+              placeholder="Search polls, resources, and notices..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-ivory-300 dark:border-espresso-700 bg-ivory-50 dark:bg-espresso-900 text-espresso-950 dark:text-ivory-50 placeholder-espresso-400 focus:outline-none focus:ring-2 focus:ring-terracotta-400"
+              className="w-full pl-9 pr-8 py-2 text-xs rounded-xl border border-ivory-300 dark:border-espresso-700 bg-ivory-50 dark:bg-espresso-900 text-espresso-950 dark:text-ivory-50 placeholder-espresso-400 focus:outline-none focus:ring-2 focus:ring-terracotta-400"
             />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-espresso-400 hover:text-espresso-700"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery('')}
-              className="p-2 text-espresso-400 hover:text-espresso-700"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          )}
-        </div>
 
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowSavedOnly(!showSavedOnly)}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition ${
-              showSavedOnly
-                ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300'
-                : 'border border-ivory-300 dark:border-espresso-700 text-espresso-600 dark:text-espresso-300 hover:bg-ivory-100'
-            }`}
-          >
-            {showSavedOnly ? <BookmarkCheck className="w-3.5 h-3.5 text-amber-600" /> : <Bookmark className="w-3.5 h-3.5" />}
-            <span>Starred ({savedMessages.length})</span>
-          </button>
+          {/* Quick Filters */}
+          <div className="flex flex-wrap items-center gap-1.5 text-xs">
+            <button
+              onClick={() => setActiveFilter('all')}
+              className={`px-3 py-1.5 rounded-xl font-semibold transition cursor-pointer ${
+                activeFilter === 'all'
+                  ? 'bg-terracotta-600 text-white shadow-2xs'
+                  : 'border border-ivory-300 dark:border-espresso-700 text-espresso-700 dark:text-ivory-200 hover:bg-ivory-100 dark:hover:bg-espresso-800'
+              }`}
+            >
+              All
+            </button>
+
+            <button
+              onClick={() => setActiveFilter('polls')}
+              className={`px-3 py-1.5 rounded-xl font-semibold transition cursor-pointer flex items-center gap-1.5 ${
+                activeFilter === 'polls'
+                  ? 'bg-terracotta-600 text-white shadow-2xs'
+                  : 'border border-ivory-300 dark:border-espresso-700 text-espresso-700 dark:text-ivory-200 hover:bg-ivory-100 dark:hover:bg-espresso-800'
+              }`}
+            >
+              <BarChart2 className="w-3.5 h-3.5" />
+              <span>Polls</span>
+              {pollCount > 0 && (
+                <span
+                  className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                    activeFilter === 'polls'
+                      ? 'bg-white/30 text-white'
+                      : 'bg-ivory-200 dark:bg-espresso-750 text-espresso-800 dark:text-ivory-100'
+                  }`}
+                >
+                  {pollCount}
+                </span>
+              )}
+            </button>
+
+            <button
+              onClick={() => setActiveFilter('notices')}
+              className={`px-3 py-1.5 rounded-xl font-semibold transition cursor-pointer flex items-center gap-1.5 ${
+                activeFilter === 'notices'
+                  ? 'bg-terracotta-600 text-white shadow-2xs'
+                  : 'border border-ivory-300 dark:border-espresso-700 text-espresso-700 dark:text-ivory-200 hover:bg-ivory-100 dark:hover:bg-espresso-800'
+              }`}
+            >
+              <Pin className="w-3.5 h-3.5" />
+              <span>Notices</span>
+              {noticeCount > 0 && (
+                <span
+                  className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                    activeFilter === 'notices'
+                      ? 'bg-white/30 text-white'
+                      : 'bg-ivory-200 dark:bg-espresso-750 text-espresso-800 dark:text-ivory-100'
+                  }`}
+                >
+                  {noticeCount}
+                </span>
+              )}
+            </button>
+
+            <button
+              onClick={() => setActiveFilter('resources')}
+              className={`px-3 py-1.5 rounded-xl font-semibold transition cursor-pointer flex items-center gap-1.5 ${
+                activeFilter === 'resources'
+                  ? 'bg-terracotta-600 text-white shadow-2xs'
+                  : 'border border-ivory-300 dark:border-espresso-700 text-espresso-700 dark:text-ivory-200 hover:bg-ivory-100 dark:hover:bg-espresso-800'
+              }`}
+            >
+              <Link2 className="w-3.5 h-3.5" />
+              <span>Resources</span>
+              {resourceCount > 0 && (
+                <span
+                  className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                    activeFilter === 'resources'
+                      ? 'bg-white/30 text-white'
+                      : 'bg-ivory-200 dark:bg-espresso-750 text-espresso-800 dark:text-ivory-100'
+                  }`}
+                >
+                  {resourceCount}
+                </span>
+              )}
+            </button>
+
+            <button
+              onClick={() => setActiveFilter(activeFilter === 'starred' ? 'all' : 'starred')}
+              className={`px-3 py-1.5 rounded-xl font-semibold transition cursor-pointer flex items-center gap-1.5 ${
+                activeFilter === 'starred'
+                  ? 'bg-amber-500 text-white shadow-2xs'
+                  : 'border border-ivory-300 dark:border-espresso-700 text-espresso-700 dark:text-ivory-200 hover:bg-ivory-100 dark:hover:bg-espresso-800'
+              }`}
+            >
+              {activeFilter === 'starred' ? (
+                <BookmarkCheck className="w-3.5 h-3.5 text-white" />
+              ) : (
+                <Bookmark className="w-3.5 h-3.5 text-amber-500" />
+              )}
+              <span>Starred</span>
+              {savedMessages.length > 0 && (
+                <span
+                  className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                    activeFilter === 'starred'
+                      ? 'bg-white/30 text-white'
+                      : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                  }`}
+                >
+                  {savedMessages.length}
+                </span>
+              )}
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Pinned Announcements Drawer if any */}
-      {pinnedMessages.length > 0 && !showSavedOnly && !searchQuery && (
+      {pinnedMessages.length > 0 && activeFilter === 'all' && !searchQuery && (
         <div className="p-3.5 rounded-2xl border border-amber-200 dark:border-amber-900/60 bg-amber-50/70 dark:bg-amber-950/30 shrink-0 space-y-2">
           <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-amber-800 dark:text-amber-300">
             <Pin className="w-3.5 h-3.5" />
@@ -166,12 +308,20 @@ export const ClassCommunityTab: React.FC = () => {
           <div className="h-full flex flex-col items-center justify-center text-center p-8 space-y-2">
             <Bookmark className="w-8 h-8 text-espresso-300 dark:text-espresso-600 mb-1" />
             <p className="text-sm font-semibold text-espresso-700 dark:text-ivory-200">
-              {showSavedOnly ? 'No starred messages found.' : searchQuery ? 'No matching messages.' : 'No messages yet.'}
+              {activeFilter === 'starred'
+                ? 'No starred messages found.'
+                : activeFilter === 'polls'
+                ? 'No polls posted yet. Launch the first poll below!'
+                : activeFilter === 'resources'
+                ? 'No study materials or links shared yet.'
+                : activeFilter === 'notices'
+                ? 'No official announcements posted yet.'
+                : searchQuery
+                ? 'No matching results found.'
+                : 'No messages yet.'}
             </p>
             <p className="text-xs text-espresso-400 dark:text-espresso-500 max-w-sm">
-              {showSavedOnly
-                ? 'Star important homework links, test syllabus notes, or reminders to view them here.'
-                : 'Start the conversation! Post questions, schedule reminders, or share study materials with your classmates.'}
+              Use the tools below to launch a class poll with multi-choice options, share lecture slides, or discuss questions with classmates.
             </p>
           </div>
         ) : (
@@ -184,8 +334,10 @@ export const ClassCommunityTab: React.FC = () => {
             return (
               <div
                 key={msg.id}
-                className={`group relative flex items-start gap-3 p-2 rounded-2xl transition hover:bg-ivory-50 dark:hover:bg-espresso-800/60 ${
-                  msg.isPinned ? 'border-l-4 border-amber-500 bg-amber-50/30 dark:bg-amber-950/10' : ''
+                className={`group relative flex items-start gap-3 p-3 rounded-2xl transition hover:bg-ivory-50 dark:hover:bg-espresso-800/60 ${
+                  msg.isPinned
+                    ? 'border-l-4 border-amber-500 bg-amber-50/30 dark:bg-amber-950/10'
+                    : ''
                 }`}
               >
                 {/* Avatar */}
@@ -212,6 +364,11 @@ export const ClassCommunityTab: React.FC = () => {
                     <span className="text-xs font-bold text-espresso-950 dark:text-ivory-50">
                       {msg.senderName}
                     </span>
+                    {msg.senderRole === 'owner' && (
+                      <span className="px-1.5 py-0.2 rounded-full text-[9px] font-mono font-semibold bg-terracotta-100 dark:bg-terracotta-950/60 text-terracotta-800 dark:text-terracotta-300 border border-terracotta-300 dark:border-terracotta-800">
+                        Owner
+                      </span>
+                    )}
                     {msg.senderRole === 'cr' && (
                       <span className="px-1.5 py-0.2 rounded-full text-[9px] font-mono font-semibold bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
                         CR
@@ -223,7 +380,10 @@ export const ClassCommunityTab: React.FC = () => {
                       </span>
                     )}
                     <span className="text-[10px] font-mono text-espresso-400 dark:text-espresso-500">
-                      {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      {new Date(msg.createdAt).toLocaleTimeString([], {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
                     </span>
                     {msg.isEdited && (
                       <span className="text-[9px] italic text-espresso-400">(edited)</span>
@@ -242,7 +402,7 @@ export const ClassCommunityTab: React.FC = () => {
                     </div>
                   )}
 
-                  {/* Message Text Content */}
+                  {/* Standard Message Text Content */}
                   <div className="mt-1 text-xs text-espresso-800 dark:text-ivory-200 leading-relaxed break-words">
                     {msg.isDeleted ? (
                       <span className="italic text-espresso-400">This message was removed.</span>
@@ -250,6 +410,240 @@ export const ClassCommunityTab: React.FC = () => {
                       msg.content
                     )}
                   </div>
+
+                  {/* ── Interactive Poll Card ── */}
+                  {msg.poll && !msg.isDeleted && (
+                    <div className="mt-3 p-4 rounded-2xl border border-terracotta-200 dark:border-terracotta-900/60 bg-gradient-to-br from-terracotta-50/50 via-white to-ivory-50/60 dark:from-terracotta-950/30 dark:via-espresso-850 dark:to-espresso-900 shadow-xs space-y-3">
+                      {/* Poll Title & Meta */}
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-terracotta-100 dark:bg-terracotta-950 text-terracotta-700 dark:text-terracotta-300 border border-terracotta-200 dark:border-terracotta-800 flex items-center gap-1">
+                            <BarChart2 className="w-3 h-3" />
+                            <span>Class Poll</span>
+                          </span>
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-medium bg-ivory-100 dark:bg-espresso-800 text-espresso-600 dark:text-ivory-300">
+                            {msg.poll.allowMultipleAnswers ? 'Multi-Option (Choose Any)' : 'Single Choice'}
+                          </span>
+                        </div>
+
+                        {msg.poll.isClosed ? (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-espresso-200 dark:bg-espresso-750 text-espresso-600 dark:text-espresso-400">
+                            Closed
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-100 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                            <span>Active Voting</span>
+                          </span>
+                        )}
+                      </div>
+
+                      <h4 className="text-sm font-bold text-espresso-950 dark:text-ivory-50">
+                        {msg.poll.question}
+                      </h4>
+
+                      {/* Options List */}
+                      <div className="space-y-2 pt-1">
+                        {msg.poll.options.map((option) => {
+                          const isSelected = Boolean(
+                            currentMember && option.votes.includes(currentMember.userId)
+                          );
+                          const voteCount = option.votes.length;
+                          const total = msg.poll!.totalVotes || 0;
+                          const percent = total > 0 ? Math.round((voteCount / total) * 100) : 0;
+
+                          return (
+                            <button
+                              key={option.id}
+                              type="button"
+                              disabled={msg.poll!.isClosed}
+                              onClick={() => votePoll(msg.id, option.id)}
+                              className={`w-full relative overflow-hidden text-left p-3 rounded-xl border transition cursor-pointer flex items-center justify-between gap-3 ${
+                                isSelected
+                                  ? 'border-terracotta-500 bg-terracotta-50/70 dark:bg-terracotta-950/40 ring-1 ring-terracotta-400'
+                                  : 'border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-800 hover:border-terracotta-300 dark:hover:border-terracotta-800'
+                              } ${msg.poll!.isClosed ? 'cursor-default opacity-85' : ''}`}
+                            >
+                              {/* Background percentage fill bar */}
+                              <div
+                                className={`absolute top-0 bottom-0 left-0 transition-all duration-500 ${
+                                  isSelected
+                                    ? 'bg-terracotta-200/50 dark:bg-terracotta-900/50'
+                                    : 'bg-ivory-200/50 dark:bg-espresso-700/40'
+                                }`}
+                                style={{ width: `${percent}%` }}
+                              />
+
+                              {/* Option Selection Indicator & Text */}
+                              <div className="relative flex items-center gap-2.5 z-10 min-w-0 flex-1">
+                                {msg.poll!.allowMultipleAnswers ? (
+                                  <div
+                                    className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition ${
+                                      isSelected
+                                        ? 'border-terracotta-600 bg-terracotta-600 text-white'
+                                        : 'border-espresso-300 dark:border-espresso-600 bg-white dark:bg-espresso-900'
+                                    }`}
+                                  >
+                                    {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                                  </div>
+                                ) : (
+                                  <div
+                                    className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 transition ${
+                                      isSelected
+                                        ? 'border-terracotta-600 bg-terracotta-600 text-white'
+                                        : 'border-espresso-300 dark:border-espresso-600 bg-white dark:bg-espresso-900'
+                                    }`}
+                                  >
+                                    {isSelected && (
+                                      <div className="w-1.5 h-1.5 rounded-full bg-white" />
+                                    )}
+                                  </div>
+                                )}
+                                <span
+                                  className={`text-xs font-semibold truncate ${
+                                    isSelected
+                                      ? 'text-espresso-950 dark:text-ivory-50'
+                                      : 'text-espresso-800 dark:text-ivory-200'
+                                  }`}
+                                >
+                                  {option.text}
+                                </span>
+                              </div>
+
+                              {/* Vote Percentage & Count */}
+                              <div className="relative z-10 shrink-0 text-right font-mono text-xs">
+                                <span className="font-bold text-espresso-900 dark:text-ivory-100">
+                                  {percent}%
+                                </span>
+                                <span className="text-[11px] text-espresso-400 dark:text-espresso-500 ml-1.5">
+                                  ({voteCount})
+                                </span>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* Poll Footer */}
+                      <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-ivory-200/70 dark:border-espresso-800/80 text-[11px] text-espresso-500 dark:text-ivory-400">
+                        <div className="flex items-center gap-3">
+                          <span>
+                            {msg.poll.totalVotes} {msg.poll.totalVotes === 1 ? 'vote' : 'votes'} total
+                          </span>
+                          <span>•</span>
+                          <span className="flex items-center gap-1">
+                            {msg.poll.isAnonymous ? (
+                              <>
+                                <Lock className="w-3 h-3 text-espresso-400" /> Anonymous
+                              </>
+                            ) : (
+                              <>
+                                <Users className="w-3 h-3 text-espresso-400" /> Public
+                              </>
+                            )}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const summary = `📊 Poll: ${msg.poll!.question}\n${msg.poll!.options
+                                .map((o) => `• ${o.text}: ${o.votes.length} votes`)
+                                .join('\n')}\nTotal Votes: ${msg.poll!.totalVotes}`;
+                              navigator.clipboard.writeText(summary);
+                              setCopiedPollId(msg.id);
+                              setTimeout(() => setCopiedPollId(null), 2000);
+                            }}
+                            className="px-2.5 py-1 rounded-lg border border-ivory-300 dark:border-espresso-700 hover:bg-ivory-100 dark:hover:bg-espresso-800 text-[11px] font-medium transition cursor-pointer flex items-center gap-1"
+                          >
+                            {copiedPollId === msg.id ? (
+                              <>
+                                <Check className="w-3 h-3 text-emerald-600" /> Copied!
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="w-3 h-3" /> Copy Summary
+                              </>
+                            )}
+                          </button>
+
+                          {!msg.poll.isClosed &&
+                            (msg.senderId === currentMember?.userId || canModerateChat) && (
+                              <button
+                                type="button"
+                                onClick={() => closePoll(msg.id)}
+                                className="px-2.5 py-1 rounded-lg border border-rose-200 dark:border-rose-900/60 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 text-[11px] font-medium transition cursor-pointer"
+                              >
+                                Close Poll
+                              </button>
+                            )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Interactive Resource Card ── */}
+                  {msg.resource && !msg.isDeleted && (
+                    <div className="mt-3 p-3.5 rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-ivory-50/70 dark:bg-espresso-900/50 shadow-2xs space-y-2">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-start gap-2.5 min-w-0">
+                          <div className="p-2 rounded-xl bg-terracotta-100 dark:bg-terracotta-950/60 text-terracotta-600 dark:text-terracotta-400 shrink-0 mt-0.5">
+                            {msg.resource.category === 'slides' ? (
+                              <BookOpen className="w-4 h-4" />
+                            ) : msg.resource.category === 'recording' ? (
+                              <Video className="w-4 h-4" />
+                            ) : msg.resource.category === 'assignment' ? (
+                              <Bookmark className="w-4 h-4" />
+                            ) : (
+                              <FileText className="w-4 h-4" />
+                            )}
+                          </div>
+                          <div className="min-w-0 space-y-0.5">
+                            <span className="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold uppercase tracking-wider bg-ivory-200 dark:bg-espresso-800 text-espresso-700 dark:text-ivory-300">
+                              {msg.resource.category}
+                            </span>
+                            <h4 className="text-xs font-bold text-espresso-950 dark:text-ivory-50 truncate pt-0.5">
+                              {msg.resource.title}
+                            </h4>
+                            {msg.resource.description && (
+                              <p className="text-[11px] text-espresso-600 dark:text-ivory-300 line-clamp-2">
+                                {msg.resource.description}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText(msg.resource!.url);
+                              setCopiedResourceId(msg.id);
+                              setTimeout(() => setCopiedResourceId(null), 2000);
+                            }}
+                            className="p-1.5 rounded-lg border border-ivory-300 dark:border-espresso-700 hover:bg-ivory-100 dark:hover:bg-espresso-800 text-espresso-500 hover:text-espresso-800 transition cursor-pointer"
+                            title="Copy link"
+                          >
+                            {copiedResourceId === msg.id ? (
+                              <Check className="w-3.5 h-3.5 text-emerald-600" />
+                            ) : (
+                              <Copy className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+                          <a
+                            href={msg.resource.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-3 py-1.5 rounded-xl bg-terracotta-600 hover:bg-terracotta-700 text-white text-xs font-semibold shadow-2xs transition flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <span>Open</span>
+                            <ExternalLink className="w-3 h-3" />
+                          </a>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Emoji Reactions Bar */}
                   {!msg.isDeleted && (
@@ -310,7 +704,11 @@ export const ClassCommunityTab: React.FC = () => {
                         }`}
                         title={isSaved ? 'Starred message' : 'Star message'}
                       >
-                        {isSaved ? <BookmarkCheck className="w-3 h-3" /> : <Bookmark className="w-3 h-3" />}
+                        {isSaved ? (
+                          <BookmarkCheck className="w-3 h-3" />
+                        ) : (
+                          <Bookmark className="w-3 h-3" />
+                        )}
                       </button>
 
                       {/* Pin (CR/Admin only) */}
@@ -318,7 +716,9 @@ export const ClassCommunityTab: React.FC = () => {
                         <button
                           onClick={() => togglePinMessage(msg.id)}
                           className={`p-1 rounded text-[11px] hover:bg-ivory-100 dark:hover:bg-espresso-800 ${
-                            msg.isPinned ? 'text-terracotta-600' : 'text-espresso-400 hover:text-espresso-700'
+                            msg.isPinned
+                              ? 'text-terracotta-600'
+                              : 'text-espresso-400 hover:text-espresso-700'
                           }`}
                           title="Pin as announcement"
                         >
@@ -327,7 +727,7 @@ export const ClassCommunityTab: React.FC = () => {
                       )}
 
                       {/* Edit (Author only) */}
-                      {isMe && (
+                      {isMe && !msg.poll && (
                         <button
                           onClick={() => {
                             setEditingMsg(msg);
@@ -364,8 +764,13 @@ export const ClassCommunityTab: React.FC = () => {
       {editingMsg && (
         <div className="p-3 rounded-2xl border border-ochre-300 dark:border-ochre-800 bg-ochre-50/70 dark:bg-ochre-950/40 space-y-2 shrink-0">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-ochre-800 dark:text-ochre-300">Edit Message</span>
-            <button onClick={() => setEditingMsg(null)} className="p-1 text-espresso-400 hover:text-espresso-700">
+            <span className="text-xs font-bold text-ochre-800 dark:text-ochre-300">
+              Edit Message
+            </span>
+            <button
+              onClick={() => setEditingMsg(null)}
+              className="p-1 text-espresso-400 hover:text-espresso-700"
+            >
               <X className="w-3.5 h-3.5" />
             </button>
           </div>
@@ -392,32 +797,107 @@ export const ClassCommunityTab: React.FC = () => {
           <div className="flex items-center gap-2 min-w-0">
             <CornerDownRight className="w-3.5 h-3.5 text-terracotta-600" />
             <span className="text-xs text-espresso-700 dark:text-ivory-200 truncate">
-              Replying to <strong className="font-semibold">{replyingTo.senderName}</strong>: "{replyingTo.content}"
+              Replying to <strong className="font-semibold">{replyingTo.senderName}</strong>:{' '}
+              "{replyingTo.content}"
             </span>
           </div>
-          <button onClick={() => setReplyingTo(null)} className="p-1 text-espresso-400 hover:text-espresso-700">
+          <button
+            onClick={() => setReplyingTo(null)}
+            className="p-1 text-espresso-400 hover:text-espresso-700"
+          >
             <X className="w-3.5 h-3.5" />
           </button>
         </div>
       )}
 
-      {/* Message Input Bar */}
-      <form onSubmit={handleSend} className="flex items-center gap-2 shrink-0">
-        <input
-          type="text"
-          value={inputContent}
-          onChange={(e) => setInputContent(e.target.value)}
-          placeholder={`Message #${activeWorkspace?.name || 'ClassSpace'}...`}
-          className="flex-1 px-4 py-3 text-xs sm:text-sm rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 text-espresso-950 dark:text-ivory-50 placeholder-espresso-400 focus:outline-none focus:ring-2 focus:ring-terracotta-400 shadow-subtle"
-        />
-        <button
-          type="submit"
-          disabled={!inputContent.trim()}
-          className="p-3 rounded-2xl bg-terracotta-600 hover:bg-terracotta-700 disabled:opacity-40 text-white shadow-subtle transition cursor-pointer shrink-0"
-        >
-          <Send className="w-4 h-4" />
-        </button>
-      </form>
+      {/* Quick Tools & Message Input Bar */}
+      <div className="space-y-2 shrink-0">
+        {/* Quick Tools Toolbar */}
+        <div className="flex items-center justify-between gap-2 px-1">
+          <div className="flex items-center gap-1.5">
+            {/* Create Poll Button */}
+            <button
+              type="button"
+              onClick={() => setShowCreatePollModal(true)}
+              className="px-3 py-1.5 rounded-xl text-xs font-semibold border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 hover:bg-ivory-100 dark:hover:bg-espresso-800 text-espresso-800 dark:text-ivory-200 transition cursor-pointer flex items-center gap-1.5 shadow-2xs"
+            >
+              <BarChart2 className="w-3.5 h-3.5 text-terracotta-600" />
+              <span>Create Poll</span>
+            </button>
+
+            {/* Share Resource Button */}
+            <button
+              type="button"
+              onClick={() => setShowShareResourceModal(true)}
+              className="px-3 py-1.5 rounded-xl text-xs font-semibold border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 hover:bg-ivory-100 dark:hover:bg-espresso-800 text-espresso-800 dark:text-ivory-200 transition cursor-pointer flex items-center gap-1.5 shadow-2xs"
+            >
+              <Link2 className="w-3.5 h-3.5 text-terracotta-600" />
+              <span>Share Resource</span>
+            </button>
+
+            {/* Announcement Mode Toggle for CR/Admin */}
+            {canModerateChat && (
+              <button
+                type="button"
+                onClick={() => setIsAnnouncementMode(!isAnnouncementMode)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 shadow-2xs ${
+                  isAnnouncementMode
+                    ? 'bg-amber-500 text-white border border-amber-600 ring-1 ring-amber-400'
+                    : 'border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 text-espresso-800 dark:text-ivory-200 hover:bg-ivory-100 dark:hover:bg-espresso-800'
+                }`}
+                title="Post as official announcement pinned to the top"
+              >
+                <Megaphone className="w-3.5 h-3.5" />
+                <span>Notice Mode</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Message Input Form */}
+        <form onSubmit={handleSend} className="flex items-center gap-2">
+          <input
+            type="text"
+            value={inputContent}
+            onChange={(e) => setInputContent(e.target.value)}
+            placeholder={
+              isAnnouncementMode
+                ? '📢 Write official class notice (pinned announcement)...'
+                : `Message #${activeWorkspace?.name || 'ClassSpace'}...`
+            }
+            className={`flex-1 px-4 py-3 text-xs sm:text-sm rounded-2xl border bg-white dark:bg-espresso-850 text-espresso-950 dark:text-ivory-50 placeholder-espresso-400 focus:outline-none focus:ring-2 focus:ring-terracotta-400 shadow-subtle ${
+              isAnnouncementMode
+                ? 'border-amber-400 ring-2 ring-amber-300'
+                : 'border-ivory-300 dark:border-espresso-750'
+            }`}
+          />
+          <button
+            type="submit"
+            disabled={!inputContent.trim()}
+            className="p-3 rounded-2xl bg-terracotta-600 hover:bg-terracotta-700 disabled:opacity-40 text-white shadow-subtle transition cursor-pointer shrink-0"
+          >
+            <Send className="w-4 h-4" />
+          </button>
+        </form>
+      </div>
+
+      {/* Create Poll Modal */}
+      <CreatePollModal
+        isOpen={showCreatePollModal}
+        onClose={() => setShowCreatePollModal(false)}
+        onSubmit={async (question, options, allowMultipleAnswers, isAnonymous) => {
+          return createPoll(question, options, allowMultipleAnswers, isAnonymous);
+        }}
+      />
+
+      {/* Share Resource Modal */}
+      <ShareResourceModal
+        isOpen={showShareResourceModal}
+        onClose={() => setShowShareResourceModal(false)}
+        onSubmit={async (title, url, category, description) => {
+          return shareResource(title, url, category, description);
+        }}
+      />
     </div>
   );
 };
