@@ -4,7 +4,6 @@ import { ThemeToggle } from './ThemeToggle';
 import { Button } from './Button';
 import {
   Trash2,
-  Sparkles,
   Download,
   Upload,
   Check,
@@ -18,7 +17,6 @@ export const Header: React.FC = () => {
   const {
     state,
     clearSampleData,
-    restoreSampleData,
     exportData,
     importData,
     authUser,
@@ -100,7 +98,7 @@ export const Header: React.FC = () => {
 
         {/* Controls: Data separation banner, export/import, theme toggle */}
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-          {/* Sample Data Toggle Banner */}
+          {/* Sample Data Purge Banner / Live Mode Indicator */}
           {state.hasSampleData ? (
             <div className="flex items-center gap-2 bg-terracotta-50 dark:bg-terracotta-900/30 border border-terracotta-200 dark:border-terracotta-800/60 rounded-xl px-2.5 py-1 text-xs">
               <span className="w-1.5 h-1.5 rounded-full bg-terracotta-500 animate-pulse" />
@@ -109,7 +107,7 @@ export const Header: React.FC = () => {
               </span>
               <button
                 onClick={clearSampleData}
-                className="text-[11px] underline font-medium text-terracotta-800 dark:text-terracotta-200 hover:text-terracotta-900 ml-1 inline-flex items-center gap-0.5"
+                className="text-[11px] underline font-medium text-terracotta-800 dark:text-terracotta-200 hover:text-terracotta-900 ml-1 inline-flex items-center gap-0.5 cursor-pointer"
                 title="Purge sample data and start with an empty slate"
               >
                 <Trash2 className="w-3 h-3 inline" />
@@ -117,20 +115,7 @@ export const Header: React.FC = () => {
               </button>
             </div>
           ) : (
-            <div className="flex items-center gap-2 bg-sage-50 dark:bg-sage-700/20 border border-sage-200 dark:border-sage-700/50 rounded-xl px-2.5 py-1 text-xs">
-              <span className="w-1.5 h-1.5 rounded-full bg-sage-500" />
-              <span className="text-sage-700 dark:text-sage-200 font-medium">
-                Live Data Mode
-              </span>
-              <button
-                onClick={restoreSampleData}
-                className="text-[11px] underline font-medium text-sage-800 dark:text-sage-100 hover:text-sage-900 ml-1 inline-flex items-center gap-0.5"
-                title="Reload realistic sample demonstration data"
-              >
-                <Sparkles className="w-3 h-3 inline" />
-                Load Demo
-              </button>
-            </div>
+            <span className="sr-only">Live Data Mode</span>
           )}
 
           {/* Backup dropdown / buttons */}

@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { Calendar, Download, ListTodo, GraduationCap, Plus } from 'lucide-react';
+import { Calendar, Download, ListTodo, GraduationCap, Plus, Sparkles } from 'lucide-react';
 import { exportRemindersICS, exportCalendarEventsICS, downloadICS } from '../../utils/icsExporter';
 import { EventCalendar } from '../events/EventCalendar';
 import { TaskManagementView } from '../events/TaskManagementView';
 import { ExamsDeadlinesPanel } from '../events/ExamsDeadlinesPanel';
 import { EventModal } from '../events/EventModal';
+import { GptCalendarImportModal } from '../events/GptCalendarImportModal';
 
 type ModuleTab = 'calendar' | 'tasks' | 'exams';
 
@@ -13,6 +14,7 @@ export const RemindersView: React.FC = () => {
   const { state } = useApp();
   const [activeTab, setActiveTab] = useState<ModuleTab>('calendar');
   const [isNewEventModalOpen, setIsNewEventModalOpen] = useState(false);
+  const [isGptImportOpen, setIsGptImportOpen] = useState(false);
 
   // Compute pending and completed metrics across events and legacy reminders
   const allItems = state.events && state.events.length > 0 ? state.events : state.reminders;
@@ -44,7 +46,17 @@ export const RemindersView: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5 self-start sm:self-auto">
+        <div className="flex flex-wrap items-center gap-2.5 self-start sm:self-auto">
+          {/* GPT Calendar Import Action */}
+          <button
+            onClick={() => setIsGptImportOpen(true)}
+            className="px-3.5 py-2 rounded-xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 hover:bg-ivory-50 dark:hover:bg-espresso-800 text-espresso-800 dark:text-ivory-100 text-xs font-semibold flex items-center gap-2 shadow-subtle transition cursor-pointer"
+            title="Generate ChatGPT prompt to parse schedules and import structured calendar events"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-terracotta-500" />
+            <span>Import with ChatGPT</span>
+          </button>
+
           {/* Quick Create Action */}
           <button
             onClick={() => setIsNewEventModalOpen(true)}
@@ -116,6 +128,12 @@ export const RemindersView: React.FC = () => {
       <EventModal
         isOpen={isNewEventModalOpen}
         onClose={() => setIsNewEventModalOpen(false)}
+      />
+
+      {/* GPT-Assisted Calendar Import Modal */}
+      <GptCalendarImportModal
+        isOpen={isGptImportOpen}
+        onClose={() => setIsGptImportOpen(false)}
       />
     </div>
   );

@@ -411,18 +411,18 @@ export const SyllabusView: React.FC<SyllabusViewProps> = ({ onNavigateToPlanner 
       {/* ── Search & Filter Controls ── */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
         <div className="relative flex-1 max-w-md">
-          <Search className="w-4 h-4 text-black/40 dark:text-white/40 absolute left-3.5 top-1/2 -translate-y-1/2" />
+          <Search className="w-4 h-4 text-espresso-400 dark:text-espresso-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search subjects, chapters, or topics…"
-            className="w-full pl-10 pr-4 py-2 rounded-full border border-black/10 dark:border-white/10 bg-white dark:bg-[#161618] text-xs font-mono text-[#111111] dark:text-[#F8F6F0] placeholder:text-black/40 dark:placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-[#2B38FF]"
+            className="w-full pl-10 pr-4 py-2 rounded-xl border border-ivory-300 dark:border-espresso-700 bg-white dark:bg-espresso-900 text-xs text-espresso-900 dark:text-ivory-100 placeholder:text-espresso-400 dark:placeholder:text-espresso-500 focus:outline-none focus:ring-2 focus:ring-terracotta-400"
           />
           {searchQuery && (
             <button
               onClick={() => setSearchQuery('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-black/40 hover:text-black dark:text-white/40 dark:hover:text-white"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-espresso-400 hover:text-espresso-700 dark:text-espresso-500 dark:hover:text-ivory-200"
             >
               <X className="w-3.5 h-3.5" />
             </button>
@@ -430,7 +430,7 @@ export const SyllabusView: React.FC<SyllabusViewProps> = ({ onNavigateToPlanner 
         </div>
 
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
-          <span className="text-[11px] font-mono uppercase font-bold text-black/40 dark:text-white/40 hidden sm:inline mr-1">
+          <span className="text-[11px] font-mono uppercase font-semibold text-espresso-500 dark:text-espresso-400 hidden sm:inline mr-1">
             Filter:
           </span>
           {(['all', 'in_progress', 'done', 'revision_needed', 'deadlines'] as const).map((filter) => {

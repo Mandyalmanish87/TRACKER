@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Card } from '../common/Card';
+import { Card, useCardDensity } from '../common/Card';
 import { Badge } from '../common/Badge';
 import { Button } from '../common/Button';
 import { EmptyState } from '../common/EmptyState';
@@ -8,6 +8,8 @@ import { Plus, Check, Trash2 } from 'lucide-react';
 
 export const RemindersWidget: React.FC = () => {
   const { state, toggleReminder, addReminder, deleteReminder } = useApp();
+  const { density } = useCardDensity();
+  const isCompact = density === 'compact';
   const [isAdding, setIsAdding] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newCategory, setNewCategory] = useState<'academic' | 'fitness' | 'personal'>('academic');
@@ -99,11 +101,13 @@ export const RemindersWidget: React.FC = () => {
           onAction={() => setIsAdding(true)}
         />
       ) : (
-        <div className="space-y-2.5">
+        <div className={isCompact ? 'space-y-1.5' : 'space-y-2.5'}>
           {pending.map((item) => (
             <div
               key={item.id}
-              className="group flex items-center justify-between p-3.5 sm:p-4 rounded-2xl border border-ivory-200 dark:border-espresso-750 bg-white dark:bg-espresso-850 hover:border-ivory-300 dark:hover:border-espresso-700 transition-colors shadow-subtle"
+              className={`group flex items-center justify-between ${
+                isCompact ? 'p-2 sm:p-2.5 rounded-xl' : 'p-3.5 sm:p-4 rounded-2xl'
+              } border border-ivory-200 dark:border-espresso-750 bg-white dark:bg-espresso-850 hover:border-ivory-300 dark:hover:border-espresso-700 transition-colors shadow-subtle`}
             >
               <div className="flex items-center gap-3.5 min-w-0">
                 <button

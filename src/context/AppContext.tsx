@@ -74,6 +74,7 @@ interface AppContextType {
       startTime?: string;
       endTime?: string;
       id?: string;
+      durationSeconds?: number;
     }
   ) => void;
   deleteStudySession: (id: string) => void;
@@ -542,12 +543,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       startTime?: string;
       endTime?: string;
       id?: string;
+      durationSeconds?: number;
     }
   ) => {
     const status = options?.status ?? 'completed';
     // If cancelled or non-positive duration, don't record unless explicitly needed
     if (status === 'cancelled') return;
-    if (durationMinutes <= 0) return;
+    if (durationMinutes <= 0 && (!options?.durationSeconds || options.durationSeconds <= 0)) return;
 
     setState((prev) => {
       // Idempotency: prevent duplicates by ID if session ID is provided
@@ -569,11 +571,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       const nowIso = new Date().toISOString();
+      const finalDurationMinutes = options?.durationSeconds !== undefined
+        ? Number((options.durationSeconds / 60).toFixed(2))
+        : Number(durationMinutes.toFixed(2));
+      const finalDurationSeconds = options?.durationSeconds ?? Math.round(durationMinutes * 60);
+
       const newSession: StudySession = {
         id: sessionId,
         subjectId,
         subjectName,
-        durationMinutes: Math.max(1, Math.round(durationMinutes)),
+        durationMinutes: finalDurationMinutes,
+        durationSeconds: finalDurationSeconds,
         plannedDurationMinutes: options?.plannedDurationMinutes,
         timestamp: options?.endTime || nowIso,
         startTime: options?.startTime,

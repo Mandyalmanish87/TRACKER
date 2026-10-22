@@ -162,6 +162,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   studyDayRolloverHour: 0,
   showExamCountdown: true,
   showFocusRadio: false,
+  dashboardLayoutMode: 'bento',
+  dashboardDensity: 'compact',
 };
 
 export const DEFAULT_SYLLABUS_SUBJECTS: SyllabusSubject[] = [
@@ -377,6 +379,9 @@ export const loadData = (): AppStateData => {
             showExamCountdown: typeof parsed.settings?.showExamCountdown === 'boolean' ? parsed.settings.showExamCountdown : true,
             showFocusRadio: typeof parsed.settings?.showFocusRadio === 'boolean' ? parsed.settings.showFocusRadio : false,
             attendanceRequirement: typeof parsed.settings?.attendanceRequirement === 'number' ? parsed.settings.attendanceRequirement : undefined,
+            dashboardWidgetOrder: Array.isArray(parsed.settings?.dashboardWidgetOrder) ? parsed.settings.dashboardWidgetOrder : undefined,
+            dashboardLayoutMode: parsed.settings?.dashboardLayoutMode || 'bento',
+            dashboardDensity: parsed.settings?.dashboardDensity || 'compact',
           },
           syllabusSubjects: Array.isArray(parsed.syllabusSubjects)
             ? parsed.syllabusSubjects

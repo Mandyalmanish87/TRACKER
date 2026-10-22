@@ -15,9 +15,10 @@ import { RemindersView } from './components/views/RemindersView';
 import { PlannerView } from './components/views/PlannerView';
 import { TestsView } from './components/views/TestsView';
 import { SettingsView } from './components/views/SettingsView';
+import { ClassSpaceView } from './components/classspace/ClassSpaceView';
+import { ClassSpaceProvider } from './context/ClassSpaceContext';
 
-import { FocusRadioPopout } from './components/focus/FocusRadioPopout';
-import { Lusion3DBackdrop } from './components/canvas3d/Lusion3DBackdrop';
+import { FocusRadioProvider, MiniPlayer } from './components/focus-radio';
 import { motion } from 'motion/react';
 
 export const MainApp: React.FC = () => {
@@ -25,13 +26,10 @@ export const MainApp: React.FC = () => {
 
   return (
     <>
-      {/* 3D Scroll-reactive WebGL Ambient Canvas */}
-      <Lusion3DBackdrop />
-
       {/* Syncs accent colour + background style from settings → DOM */}
       <AppearanceManager />
 
-      <div className="min-h-screen flex flex-col bg-ivory-100 dark:bg-espresso-950 text-espresso-950 dark:text-ivory-100 transition-colors duration-200 relative z-10 selection:bg-terracotta-100 selection:text-terracotta-700">
+      <div className="min-h-screen flex flex-col bg-transparent text-espresso-950 dark:text-ivory-100 transition-colors duration-200 relative z-10 selection:bg-terracotta-100 selection:text-terracotta-700">
         {/* Clean Editorial Application Header */}
         <Header />
 
@@ -66,12 +64,13 @@ export const MainApp: React.FC = () => {
             {currentTab === 'gym'        && <GymView />}
             {currentTab === 'nutrition'  && <NutritionView />}
             {currentTab === 'reminders'  && <RemindersView />}
-            {currentTab === 'settings'   && <SettingsView />}
+            {currentTab === 'classspace' && <ClassSpaceView />}
+            {currentTab === 'settings'   && <SettingsView onNavigateToClassSpace={() => setCurrentTab('classspace')} />}
           </motion.div>
         </main>
 
-        {/* Global Persistent Popout Focus Radio Player */}
-        <FocusRadioPopout />
+        {/* Global Persistent Floating Focus Radio 2.0 */}
+        <MiniPlayer />
 
         {/* Standard Editorial Footer */}
         <footer className="border-t border-ivory-300 dark:border-espresso-800 py-6 text-center text-xs text-espresso-400 dark:text-espresso-500 font-serif italic">
@@ -88,7 +87,11 @@ export default function App() {
   return (
     <ThemeProvider>
       <AppProvider>
-        <MainApp />
+        <ClassSpaceProvider>
+          <FocusRadioProvider>
+            <MainApp />
+          </FocusRadioProvider>
+        </ClassSpaceProvider>
       </AppProvider>
     </ThemeProvider>
   );

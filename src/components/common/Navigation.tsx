@@ -1,11 +1,11 @@
 import React from 'react';
-import { LayoutDashboard, Calendar, GraduationCap, BookOpen, Flame, Dumbbell, Salad, Settings, ListTodo, Award } from 'lucide-react';
+import { LayoutDashboard, Calendar, GraduationCap, BookOpen, Flame, Dumbbell, Salad, Settings, ListTodo, Award, Building } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useApp } from '../../context/AppContext';
 import { isTaskOverdue } from '../../utils/plannerUtils';
 import { detectRecurringWeaknesses } from '../../utils/testAnalytics';
 
-export type NavTab = 'dashboard' | 'timetable' | 'attendance' | 'syllabus' | 'planner' | 'tests' | 'focus' | 'gym' | 'reminders' | 'nutrition' | 'settings';
+export type NavTab = 'dashboard' | 'timetable' | 'attendance' | 'syllabus' | 'planner' | 'tests' | 'focus' | 'gym' | 'reminders' | 'nutrition' | 'classspace' | 'settings';
 
 interface NavigationProps {
   currentTab: NavTab;
@@ -88,6 +88,11 @@ export const Navigation: React.FC<NavigationProps> = ({ currentTab, onSelectTab 
       badgeVariant: 'neutral',
     },
     {
+      id: 'classspace',
+      label: 'ClassSpace',
+      icon: <Building className="w-4 h-4" />,
+    },
+    {
       id: 'settings',
       label: 'Settings',
       icon: <Settings className="w-4 h-4" />,
@@ -102,7 +107,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentTab, onSelectTab 
           return (
             <motion.button
               key={tab.id}
-              aria-label={tab.label}
+              aria-label={tab.id === 'classspace' ? 'Classroom Hub' : tab.label}
               onClick={() => onSelectTab(tab.id)}
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}

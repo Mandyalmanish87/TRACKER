@@ -27,12 +27,12 @@ const COLUMN_CONFIG: { id: TaskStatus; label: string; dotColor: string }[] = [
   {
     id: 'todo',
     label: 'To Do',
-    dotColor: 'bg-[#FFE600]',
+    dotColor: 'bg-ochre-500',
   },
   {
     id: 'in_progress',
     label: 'In Progress',
-    dotColor: 'bg-[#2B38FF]',
+    dotColor: 'bg-terracotta-500',
   },
   {
     id: 'done',
@@ -44,15 +44,15 @@ const COLUMN_CONFIG: { id: TaskStatus; label: string; dotColor: string }[] = [
 const PRIORITY_BADGES: Record<TaskPriority, { label: string; badgeClass: string }> = {
   high: {
     label: 'High',
-    badgeClass: 'bg-[#FF3B81] text-white',
+    badgeClass: 'bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-900',
   },
   medium: {
     label: 'Medium',
-    badgeClass: 'bg-[#FFE600] text-[#111111]',
+    badgeClass: 'bg-ochre-100 dark:bg-ochre-950/60 text-ochre-800 dark:text-ochre-300 border border-ochre-200 dark:border-ochre-800',
   },
   low: {
     label: 'Low',
-    badgeClass: 'bg-black/10 dark:bg-white/10 text-black/70 dark:text-white/70',
+    badgeClass: 'bg-ivory-200 dark:bg-espresso-800 text-espresso-700 dark:text-espresso-300 border border-ivory-300 dark:border-espresso-700',
   },
 };
 
@@ -112,28 +112,28 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, onNavigateToSyl
         <div
           className={`p-4 rounded-2xl border transition-all duration-150 space-y-3 ${
           task.status === 'done'
-            ? 'bg-black/5 dark:bg-white/5 border-black/5 dark:border-white/5 opacity-80'
+            ? 'bg-ivory-100/60 dark:bg-espresso-900/40 border-ivory-200 dark:border-espresso-800 opacity-75'
             : overdue
-            ? 'bg-white dark:bg-[#1A1A1E] border-[#FF3B81]/60 shadow-sm'
-            : 'bg-white dark:bg-[#1A1A1E] border-black/10 dark:border-white/10 shadow-sm hover:border-black/30 dark:hover:border-white/30'
+            ? 'bg-white dark:bg-espresso-850 border-rose-300 dark:border-rose-800 shadow-subtle'
+            : 'bg-white dark:bg-espresso-850 border-ivory-300 dark:border-espresso-750 shadow-subtle hover:border-ivory-400 dark:hover:border-espresso-600'
         }`}
       >
         {/* Top Badges & Actions */}
         <div className="flex items-start justify-between gap-2">
           <div className="flex flex-wrap items-center gap-1.5">
             {/* Priority Badge */}
-            <span className={`text-[9px] font-mono font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full ${priorityCfg.badgeClass}`}>
+            <span className={`text-[10px] font-mono font-semibold uppercase tracking-wider px-2.5 py-0.5 rounded-full ${priorityCfg.badgeClass}`}>
               {priorityCfg.label}
             </span>
 
             {/* Overdue / Due Today Badge */}
             {overdue && (
-              <span className="text-[9px] font-mono font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-[#FF3B81] text-white flex items-center gap-1">
+              <span className="text-[10px] font-mono font-semibold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-900 flex items-center gap-1">
                 <AlertCircle className="w-2.5 h-2.5" /> Overdue
               </span>
             )}
             {!overdue && dueToday && task.status !== 'done' && (
-              <span className="text-[9px] font-mono font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-[#FFE600] text-[#111111]">
+              <span className="text-[10px] font-mono font-semibold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-ochre-100 dark:bg-ochre-950/60 text-ochre-800 dark:text-ochre-300 border border-ochre-200 dark:border-ochre-800">
                 Due Today
               </span>
             )}
@@ -145,14 +145,14 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, onNavigateToSyl
                 setTaskToEdit(task);
                 setIsTaskModalOpen(true);
               }}
-              className="p-1.5 rounded-full text-black/50 hover:text-black dark:text-white/50 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 transition"
+              className="p-1.5 rounded-full text-espresso-400 hover:text-espresso-800 dark:text-espresso-500 dark:hover:text-ivory-200 hover:bg-ivory-100 dark:hover:bg-espresso-800 transition"
               title="Edit task"
             >
               <Edit2 className="w-3 h-3" />
             </button>
             <button
               onClick={() => setTaskToDelete(task)}
-              className="p-1.5 rounded-full text-black/50 hover:text-[#FF3B81] dark:text-white/50 dark:hover:text-[#FF3B81] hover:bg-black/5 dark:hover:bg-white/5 transition"
+              className="p-1.5 rounded-full text-espresso-400 hover:text-rose-600 dark:text-espresso-500 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition"
               title="Delete task"
             >
               <Trash2 className="w-3 h-3" />
@@ -163,16 +163,16 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, onNavigateToSyl
         {/* Task Title & Description */}
         <div>
           <h4
-            className={`font-jb text-sm font-bold leading-snug ${
+            className={`text-sm font-semibold leading-snug ${
               task.status === 'done'
-                ? 'line-through text-black/40 dark:text-white/40'
-                : 'text-[#111111] dark:text-[#F8F6F0]'
+                ? 'line-through text-espresso-400 dark:text-espresso-600'
+                : 'text-espresso-950 dark:text-ivory-50'
             }`}
           >
             {task.title}
           </h4>
           {task.description && (
-            <p className="text-xs text-black/60 dark:text-white/60 mt-1 line-clamp-2 leading-relaxed">
+            <p className="text-xs text-espresso-600 dark:text-espresso-400 mt-1 line-clamp-2 leading-relaxed">
               {task.description}
             </p>
           )}
@@ -180,31 +180,31 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, onNavigateToSyl
 
         {/* Linked Syllabus Item */}
         {linkInfo && (
-          <div className="flex items-center justify-between gap-2 p-2 rounded-xl bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/5 text-[11px]">
+          <div className="flex items-center justify-between gap-2 p-2 rounded-xl bg-ivory-50 dark:bg-espresso-900/60 border border-ivory-200 dark:border-espresso-750 text-[11px]">
             <div className="flex items-center gap-1.5 min-w-0">
               <span
                 className="w-2 h-2 rounded-full shrink-0"
-                style={{ backgroundColor: linkInfo.subjectColor || '#2B38FF' }}
+                style={{ backgroundColor: linkInfo.subjectColor || 'var(--accent)' }}
               />
-              <span className="font-jb font-bold text-[#111111] dark:text-[#F8F6F0] truncate">
+              <span className="font-semibold text-espresso-900 dark:text-ivory-100 truncate">
                 {linkInfo.subjectName}
               </span>
               {linkInfo.topicName ? (
                 <>
-                  <span className="text-black/40 dark:text-white/40">›</span>
-                  <span className="text-black/60 dark:text-white/60 truncate" title={linkInfo.topicName}>
+                  <span className="text-espresso-400 dark:text-espresso-600">›</span>
+                  <span className="text-espresso-600 dark:text-espresso-400 truncate" title={linkInfo.topicName}>
                     {linkInfo.topicName}
                   </span>
                 </>
               ) : linkInfo.isTopicMissing ? (
-                <span className="text-black/40 dark:text-white/40 italic shrink-0">[Linked Topic Removed]</span>
+                <span className="text-espresso-400 dark:text-espresso-600 italic shrink-0">[Linked Topic Removed]</span>
               ) : null}
             </div>
 
             {onNavigateToSyllabus && linkInfo.subjectId && (
               <button
                 onClick={() => onNavigateToSyllabus(linkInfo.subjectId)}
-                className="text-[10px] font-jb font-bold text-[#2B38FF] dark:text-[#FFE600] hover:underline shrink-0 flex items-center gap-0.5"
+                className="text-[10px] font-semibold text-terracotta-600 dark:text-terracotta-400 hover:underline shrink-0 flex items-center gap-0.5"
                 title="View subject in Syllabus Tracker"
               >
                 <span>View</span>
@@ -215,14 +215,14 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, onNavigateToSyl
         )}
 
         {/* Metadata: Due Date & Duration */}
-        <div className="flex flex-wrap items-center gap-3 text-[11px] font-mono text-black/50 dark:text-white/50 pt-1 border-t border-black/5 dark:border-white/5">
+        <div className="flex flex-wrap items-center gap-3 text-[11px] font-mono text-espresso-500 dark:text-espresso-400 pt-1 border-t border-ivory-200 dark:border-espresso-800">
           {task.dueDate && (
             <span
               className={`flex items-center gap-1 ${
                 overdue
-                  ? 'text-[#FF3B81] font-bold'
+                  ? 'text-rose-600 dark:text-rose-400 font-semibold'
                   : dueToday && task.status !== 'done'
-                  ? 'text-[#FFE600] font-bold'
+                  ? 'text-ochre-700 dark:text-ochre-400 font-semibold'
                   : ''
               }`}
             >
@@ -242,7 +242,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, onNavigateToSyl
           )}
 
           {task.notes && (
-            <span className="text-[10px] text-black/40 dark:text-white/40 italic truncate max-w-[140px]" title={task.notes}>
+            <span className="text-[10px] text-espresso-400 dark:text-espresso-500 italic truncate max-w-[140px]" title={task.notes}>
               "{task.notes}"
             </span>
           )}
@@ -254,14 +254,14 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, onNavigateToSyl
             <div className="flex items-center gap-1.5 w-full">
               <button
                 onClick={() => setTaskStatus(task.id, 'in_progress')}
-                className="flex-1 py-1.5 px-3 rounded-full text-xs font-jb font-bold uppercase tracking-wider bg-[#2B38FF] hover:bg-[#1F2BD6] text-white transition flex items-center justify-center gap-1 shadow-sm"
+                className="flex-1 py-1.5 px-3 rounded-full text-xs font-semibold uppercase tracking-wider bg-terracotta-600 hover:bg-terracotta-700 text-white transition flex items-center justify-center gap-1 shadow-subtle"
               >
                 <span>Start</span>
                 <ArrowRight className="w-3 h-3" />
               </button>
               <button
                 onClick={() => setTaskStatus(task.id, 'done')}
-                className="py-1.5 px-3 rounded-full text-xs font-jb font-bold uppercase tracking-wider bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-[#111111] dark:text-[#F8F6F0] transition flex items-center gap-1"
+                className="py-1.5 px-3 rounded-full text-xs font-semibold uppercase tracking-wider bg-ivory-200 dark:bg-espresso-800 hover:bg-ivory-300 dark:hover:bg-espresso-750 text-espresso-800 dark:text-ivory-100 transition flex items-center gap-1"
                 title="Mark as Completed"
               >
                 <CheckCircle2 className="w-3.5 h-3.5" />
@@ -274,14 +274,14 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, onNavigateToSyl
             <div className="flex items-center gap-1.5 w-full">
               <button
                 onClick={() => setTaskStatus(task.id, 'todo')}
-                className="py-1.5 px-2.5 rounded-full text-xs font-mono text-black/60 hover:text-black dark:text-white/60 dark:hover:text-white bg-black/5 dark:bg-white/10 transition"
+                className="py-1.5 px-2.5 rounded-full text-xs font-mono text-espresso-600 hover:text-espresso-900 dark:text-espresso-300 dark:hover:text-ivory-100 bg-ivory-200 dark:bg-espresso-800 hover:bg-ivory-300 dark:hover:bg-espresso-750 transition"
                 title="Move back to To Do"
               >
                 <RotateCcw className="w-3 h-3" />
               </button>
               <button
                 onClick={() => setTaskStatus(task.id, 'done')}
-                className="flex-1 py-1.5 px-3 rounded-full text-xs font-jb font-bold uppercase tracking-wider bg-emerald-600 hover:bg-emerald-700 text-white transition flex items-center justify-center gap-1 shadow-sm"
+                className="flex-1 py-1.5 px-3 rounded-full text-xs font-semibold uppercase tracking-wider bg-emerald-600 hover:bg-emerald-700 text-white transition flex items-center justify-center gap-1 shadow-subtle"
               >
                 <CheckCircle2 className="w-3.5 h-3.5" />
                 <span>Mark Completed</span>
@@ -291,13 +291,13 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, onNavigateToSyl
 
           {task.status === 'done' && (
             <div className="flex items-center justify-between w-full">
-              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono font-bold flex items-center gap-1">
+              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono font-semibold flex items-center gap-1">
                 <CheckCircle2 className="w-3 h-3" />
                 <span>Completed</span>
               </span>
               <button
                 onClick={() => setTaskStatus(task.id, 'todo')}
-                className="text-[11px] font-jb font-bold uppercase tracking-wider text-black/60 hover:text-black dark:text-white/60 dark:hover:text-white hover:underline flex items-center gap-1"
+                className="text-[11px] font-semibold uppercase tracking-wider text-espresso-500 hover:text-espresso-800 dark:text-espresso-400 dark:hover:text-ivory-100 hover:underline flex items-center gap-1"
               >
                 <RotateCcw className="w-3 h-3" />
                 <span>Reopen</span>
@@ -313,7 +313,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, onNavigateToSyl
   return (
     <div className="space-y-4">
       {/* Mobile Column Tabs (shown on small screens only) */}
-      <div className="flex sm:hidden items-center p-1 bg-black/5 dark:bg-white/10 rounded-full border border-black/10 dark:border-white/10">
+      <div className="flex sm:hidden items-center p-1 bg-ivory-200/70 dark:bg-espresso-800/70 rounded-full border border-ivory-300 dark:border-espresso-700">
         {COLUMN_CONFIG.map((col) => {
           const colTasks = tasks.filter((t) => t.status === col.id);
           const isActive = activeMobileColumn === col.id;
@@ -321,14 +321,14 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, onNavigateToSyl
             <button
               key={col.id}
               onClick={() => setActiveMobileColumn(col.id)}
-              className={`flex-1 py-1.5 rounded-full text-xs font-jb font-bold uppercase tracking-wider transition flex items-center justify-center gap-1.5 ${
+              className={`flex-1 py-1.5 rounded-full text-xs font-semibold uppercase tracking-wider transition flex items-center justify-center gap-1.5 ${
                 isActive
-                  ? 'bg-white dark:bg-[#1A1A1E] text-[#111111] dark:text-[#F8F6F0] shadow-sm'
-                  : 'text-black/60 dark:text-white/60'
+                  ? 'bg-white dark:bg-espresso-850 text-espresso-950 dark:text-ivory-50 shadow-subtle'
+                  : 'text-espresso-600 dark:text-espresso-400'
               }`}
             >
               <span>{col.label}</span>
-              <span className="text-[10px] font-mono px-1.5 rounded-full bg-black/10 dark:bg-white/10">
+              <span className="text-[10px] font-mono px-1.5 rounded-full bg-ivory-200 dark:bg-espresso-750">
                 {colTasks.length}
               </span>
             </button>
@@ -345,18 +345,18 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, onNavigateToSyl
           return (
             <div
               key={col.id}
-              className={`rounded-2xl border border-black/10 dark:border-white/10 bg-[#F8F6F0]/70 dark:bg-[#141416] p-4 space-y-4 ${
+              className={`rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-ivory-100/70 dark:bg-espresso-900/60 p-4 space-y-4 ${
                 isHiddenOnMobile ? 'hidden sm:block' : 'block'
               }`}
             >
               {/* Column Header */}
-              <div className="flex items-center justify-between pb-3 border-b border-black/10 dark:border-white/10">
+              <div className="flex items-center justify-between pb-3 border-b border-ivory-200 dark:border-espresso-800">
                 <div className="flex items-center gap-2">
                   <span className={`w-2 h-2 rounded-full ${col.dotColor}`} />
-                  <h3 className="font-jb text-sm font-black uppercase tracking-wider text-[#111111] dark:text-[#F8F6F0]">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-espresso-900 dark:text-ivory-100">
                     {col.label}
                   </h3>
-                  <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-black/10 dark:bg-white/10 text-black/70 dark:text-white/70">
+                  <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-ivory-200 dark:bg-espresso-800 text-espresso-700 dark:text-ivory-300">
                     {colTasks.length}
                   </span>
                 </div>
@@ -367,7 +367,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, onNavigateToSyl
                       setTaskToEdit(null);
                       setIsTaskModalOpen(true);
                     }}
-                    className="p-1 rounded-full text-black/50 hover:text-black dark:text-white/50 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 transition"
+                    className="p-1 rounded-full text-espresso-400 hover:text-espresso-800 dark:text-espresso-500 dark:hover:text-ivory-100 hover:bg-ivory-200 dark:hover:bg-espresso-800 transition"
                     title="Add new task"
                   >
                     <Plus className="w-4 h-4" />
@@ -378,8 +378,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, onNavigateToSyl
               {/* Task Cards Column */}
               <div className="space-y-3 min-h-[140px]">
                 {colTasks.length === 0 ? (
-                  <div className="py-8 text-center border border-dashed border-black/10 dark:border-white/10 rounded-xl">
-                    <p className="text-xs font-mono text-black/40 dark:text-white/40">
+                  <div className="py-8 text-center border border-dashed border-ivory-300 dark:border-espresso-750 rounded-xl">
+                    <p className="text-xs font-mono text-espresso-400 dark:text-espresso-500">
                       No tasks in {col.label.toLowerCase()}
                     </p>
                     {col.id === 'todo' && (
@@ -388,7 +388,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, onNavigateToSyl
                           setTaskToEdit(null);
                           setIsTaskModalOpen(true);
                         }}
-                        className="mt-2 text-xs font-jb font-bold uppercase tracking-wider text-[#2B38FF] dark:text-[#FFE600] hover:underline inline-flex items-center gap-1"
+                        className="mt-2 text-xs font-semibold uppercase tracking-wider text-terracotta-600 dark:text-terracotta-400 hover:underline inline-flex items-center gap-1"
                       >
                         <Plus className="w-3 h-3" /> Create a task
                       </button>

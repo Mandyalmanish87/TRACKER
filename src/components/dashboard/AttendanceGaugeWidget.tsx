@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Card } from '../common/Card';
+import { Card, useCardDensity } from '../common/Card';
 import { Badge } from '../common/Badge';
 import { Button } from '../common/Button';
 import { ProgressBar } from '../common/ProgressBar';
@@ -12,6 +12,8 @@ import { Plus, AlertCircle, ShieldCheck } from 'lucide-react';
 
 export const AttendanceGaugeWidget: React.FC = () => {
   const { state, addSubject, getAttendanceReq } = useApp();
+  const { density } = useCardDensity();
+  const isCompact = density === 'compact';
   const [showAddModal, setShowAddModal] = useState(false);
   const [newCode, setNewCode] = useState('');
   const [newName, setNewName] = useState('');
@@ -108,7 +110,7 @@ export const AttendanceGaugeWidget: React.FC = () => {
       </div>
 
       {/* Subject by subject breakdown */}
-      <div className="space-y-3.5">
+      <div className={isCompact ? 'space-y-2' : 'space-y-3.5'}>
         {state.subjects.length === 0 ? (
           <p className="text-xs text-center text-espresso-400 py-6 italic">
             No subjects added yet. Add a subject above or load demo data.
@@ -124,7 +126,7 @@ export const AttendanceGaugeWidget: React.FC = () => {
             return (
               <div
                 key={sub.id}
-                className="p-4 sm:p-4.5 rounded-2xl border border-ivory-200 dark:border-espresso-750 bg-white dark:bg-espresso-850 hover:border-ivory-300 dark:hover:border-espresso-700 transition-colors shadow-subtle"
+                className={`${isCompact ? 'p-2.5 sm:p-3 rounded-xl' : 'p-4 sm:p-4.5 rounded-2xl'} border border-ivory-200 dark:border-espresso-750 bg-white dark:bg-espresso-850 hover:border-ivory-300 dark:hover:border-espresso-700 transition-colors shadow-subtle`}
               >
                 <div className="flex items-center justify-between gap-3 mb-2">
                   <div className="flex items-center gap-2.5 min-w-0">

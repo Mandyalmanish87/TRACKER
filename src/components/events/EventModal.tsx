@@ -162,7 +162,7 @@ export const EventModal: React.FC<EventModalProps> = ({
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="e.g. Mid-Term Examination or Project Report"
-              className="w-full px-3.5 py-2.5 rounded-xl text-sm border border-ivory-300 dark:border-espresso-700 bg-ivory-50 dark:bg-espresso-850 focus:outline-none focus:ring-2 focus:ring-terracotta-500"
+              className="w-full px-3.5 py-2.5 rounded-xl text-sm border border-ivory-300 dark:border-espresso-700 bg-ivory-50 dark:bg-espresso-850 text-espresso-950 dark:text-ivory-50 focus:outline-none focus:ring-2 focus:ring-terracotta-500"
               autoFocus
             />
           </div>
@@ -223,7 +223,7 @@ export const EventModal: React.FC<EventModalProps> = ({
                 required
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl text-xs sm:text-sm border border-ivory-300 dark:border-espresso-700 bg-ivory-50 dark:bg-espresso-850 focus:outline-none focus:ring-2 focus:ring-terracotta-500"
+                className="w-full px-3 py-2 rounded-xl text-xs sm:text-sm border border-ivory-300 dark:border-espresso-700 bg-ivory-50 dark:bg-espresso-850 text-espresso-950 dark:text-ivory-50 focus:outline-none focus:ring-2 focus:ring-terracotta-500"
               />
             </div>
 
@@ -252,7 +252,7 @@ export const EventModal: React.FC<EventModalProps> = ({
                   type="time"
                   value={startTime}
                   onChange={(e) => setStartTime(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl text-xs sm:text-sm border border-ivory-300 dark:border-espresso-700 bg-ivory-50 dark:bg-espresso-850 focus:outline-none focus:ring-2 focus:ring-terracotta-500"
+                  className="w-full px-3 py-2 rounded-xl text-xs sm:text-sm border border-ivory-300 dark:border-espresso-700 bg-ivory-50 dark:bg-espresso-850 text-espresso-950 dark:text-ivory-50 focus:outline-none focus:ring-2 focus:ring-terracotta-500"
                 />
               </div>
               <div>
@@ -264,7 +264,7 @@ export const EventModal: React.FC<EventModalProps> = ({
                   type="time"
                   value={endTime}
                   onChange={(e) => setEndTime(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl text-xs sm:text-sm border border-ivory-300 dark:border-espresso-700 bg-ivory-50 dark:bg-espresso-850 focus:outline-none focus:ring-2 focus:ring-terracotta-500"
+                  className="w-full px-3 py-2 rounded-xl text-xs sm:text-sm border border-ivory-300 dark:border-espresso-700 bg-ivory-50 dark:bg-espresso-850 text-espresso-950 dark:text-ivory-50 focus:outline-none focus:ring-2 focus:ring-terracotta-500"
                 />
               </div>
             </div>
@@ -279,7 +279,7 @@ export const EventModal: React.FC<EventModalProps> = ({
               <select
                 value={examType}
                 onChange={(e) => setExamType(e.target.value as ExamType)}
-                className="w-full px-3 py-2 rounded-xl text-xs sm:text-sm border border-ivory-300 dark:border-espresso-700 bg-ivory-50 dark:bg-espresso-850 focus:outline-none focus:ring-2 focus:ring-terracotta-500"
+                className="w-full px-3 py-2 rounded-xl text-xs sm:text-sm border border-ivory-300 dark:border-espresso-700 bg-ivory-50 dark:bg-espresso-850 text-espresso-950 dark:text-ivory-50 focus:outline-none focus:ring-2 focus:ring-terracotta-500"
               >
                 <option value="mid_sem">Mid-Semester Exam</option>
                 <option value="end_sem">End-Semester Exam</option>
@@ -300,7 +300,7 @@ export const EventModal: React.FC<EventModalProps> = ({
               <select
                 value={subjectId}
                 onChange={(e) => setSubjectId(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl text-xs sm:text-sm border border-ivory-300 dark:border-espresso-700 bg-ivory-50 dark:bg-espresso-850 focus:outline-none focus:ring-2 focus:ring-terracotta-500"
+                className="w-full px-3 py-2 rounded-xl text-xs sm:text-sm border border-ivory-300 dark:border-espresso-700 bg-ivory-50 dark:bg-espresso-850 text-espresso-950 dark:text-ivory-50 focus:outline-none focus:ring-2 focus:ring-terracotta-500"
               >
                 <option value="">-- No Subject Linked --</option>
                 {state.subjects.map((sub) => (
@@ -319,7 +319,7 @@ export const EventModal: React.FC<EventModalProps> = ({
               <select
                 value={priority}
                 onChange={(e) => setPriority(e.target.value as EventPriority)}
-                className="w-full px-3 py-2 rounded-xl text-xs sm:text-sm border border-ivory-300 dark:border-espresso-700 bg-ivory-50 dark:bg-espresso-850 focus:outline-none focus:ring-2 focus:ring-terracotta-500"
+                className="w-full px-3 py-2 rounded-xl text-xs sm:text-sm border border-ivory-300 dark:border-espresso-700 bg-ivory-50 dark:bg-espresso-850 text-espresso-950 dark:text-ivory-50 focus:outline-none focus:ring-2 focus:ring-terracotta-500"
               >
                 <option value="high">High Priority</option>
                 <option value="medium">Medium Priority</option>
@@ -365,7 +365,7 @@ export const EventModal: React.FC<EventModalProps> = ({
               value={location}
               onChange={(e) => setLocation(e.target.value)}
               placeholder="e.g. Hall 402, Lab 3, or Online Zoom"
-              className="w-full px-3 py-2 rounded-xl text-xs sm:text-sm border border-ivory-300 dark:border-espresso-700 bg-ivory-50 dark:bg-espresso-850 focus:outline-none focus:ring-2 focus:ring-terracotta-500"
+              className="w-full px-3 py-2 rounded-xl text-xs sm:text-sm border border-ivory-300 dark:border-espresso-700 bg-ivory-50 dark:bg-espresso-850 text-espresso-950 dark:text-ivory-50 focus:outline-none focus:ring-2 focus:ring-terracotta-500"
             />
           </div>
 
@@ -380,7 +380,7 @@ export const EventModal: React.FC<EventModalProps> = ({
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Add key notes, syllabus topics, instructions, or resources..."
-              className="w-full px-3 py-2 rounded-xl text-xs sm:text-sm border border-ivory-300 dark:border-espresso-700 bg-ivory-50 dark:bg-espresso-850 focus:outline-none focus:ring-2 focus:ring-terracotta-500 resize-none"
+              className="w-full px-3 py-2 rounded-xl text-xs sm:text-sm border border-ivory-300 dark:border-espresso-700 bg-ivory-50 dark:bg-espresso-850 text-espresso-950 dark:text-ivory-50 focus:outline-none focus:ring-2 focus:ring-terracotta-500 resize-none"
             />
           </div>
 

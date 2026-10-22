@@ -21,7 +21,12 @@ import {
   BookOpen,
   Cloud,
   RefreshCw,
+  Building,
+  Users,
+  ArrowRight,
+  KeyRound,
 } from 'lucide-react';
+import { useOptionalClassSpace } from '../../context/ClassSpaceContext';
 
 // ─── Accent Color Catalogue ────────────────────────────────────────────────
 const ACCENT_OPTIONS: { id: AccentColor; label: string; hex: string }[] = [
@@ -71,8 +76,12 @@ const Card: React.FC<{ children: React.ReactNode; className?: string }> = ({ chi
 // ─── App Version ──────────────────────────────────────────────────────────────
 const APP_VERSION = '0.8.0';
 
+interface SettingsViewProps {
+  onNavigateToClassSpace?: () => void;
+}
+
 // ─── Main SettingsView ──────────────────────────────────────────────────────
-export const SettingsView: React.FC = () => {
+export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToClassSpace }) => {
   const {
     state,
     updateSettings,
@@ -88,6 +97,10 @@ export const SettingsView: React.FC = () => {
     syncNow,
   } = useApp();
   const { mode, setMode } = useTheme();
+  const classSpace = useOptionalClassSpace();
+  const activeWorkspace = classSpace?.activeWorkspace || null;
+  const isCR = classSpace?.isCR || false;
+  const members = classSpace?.members || [];
 
   const settings = state.settings ?? {
     themeMode: 'system' as ThemeMode,
@@ -270,6 +283,71 @@ export const SettingsView: React.FC = () => {
                 </svg>
                 <span>Sign in with Google</span>
               </button>
+            </div>
+          )}
+        </Card>
+
+        {/* ── ClassSpace Workspace ── */}
+        <Card>
+          <SectionHeading
+            icon={<Building className="w-4 h-4 text-terracotta-600 dark:text-terracotta-400" />}
+            title="ClassSpace — Shared Class Workspace"
+            sub="Collaborative class timetable, reschedule notices, and student community"
+          />
+
+          {activeWorkspace ? (
+            <div className="p-4 rounded-xl bg-ivory-100/70 dark:bg-espresso-800/70 border border-ivory-200 dark:border-espresso-750 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-semibold text-espresso-950 dark:text-ivory-50">
+                    {activeWorkspace.name}
+                  </h3>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-terracotta-100 dark:bg-terracotta-950/40 text-terracotta-700 dark:text-terracotta-300 border border-terracotta-200 dark:border-terracotta-800">
+                    {isCR ? 'CR / Admin' : 'Enrolled Member'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-3 text-xs text-espresso-500 dark:text-espresso-400">
+                  <span className="flex items-center gap-1">
+                    <KeyRound className="w-3.5 h-3.5" />
+                    Code: <strong className="font-mono text-espresso-900 dark:text-ivory-100">{activeWorkspace.joinCode}</strong>
+                  </span>
+                  <span>&bull;</span>
+                  <span className="flex items-center gap-1">
+                    <Users className="w-3.5 h-3.5" />
+                    {members.length} classmates
+                  </span>
+                </div>
+              </div>
+
+              {onNavigateToClassSpace && (
+                <button
+                  onClick={onNavigateToClassSpace}
+                  className="shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-terracotta-600 hover:bg-terracotta-700 text-white shadow-subtle transition cursor-pointer"
+                >
+                  <span>Open ClassSpace</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="p-4 rounded-xl bg-ivory-100/70 dark:bg-espresso-800/70 border border-ivory-200 dark:border-espresso-750 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-semibold text-espresso-950 dark:text-ivory-50">
+                  Join or Create a ClassSpace
+                </p>
+                <p className="text-xs text-espresso-500 dark:text-ivory-400 mt-0.5 max-w-xl">
+                  Connect with your classmates to automatically synchronize live lectures, exam room updates, and class cancellation alerts.
+                </p>
+              </div>
+              {onNavigateToClassSpace && (
+                <button
+                  onClick={onNavigateToClassSpace}
+                  className="shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-terracotta-600 hover:bg-terracotta-700 text-white shadow-subtle transition cursor-pointer"
+                >
+                  <span>Get Started</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
           )}
         </Card>

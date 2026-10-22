@@ -6,7 +6,7 @@ import { FocusMetricsSummary } from '../focus/FocusMetricsSummary';
 import { ProductivityInsightsPanel } from '../focus/ProductivityInsightsPanel';
 import { SessionHistoryLedger } from '../focus/SessionHistoryLedger';
 import { JourneyHeatmap } from '../focus/JourneyHeatmap';
-import { FocusRadioPlayer } from '../focus/FocusRadioPlayer';
+import { FocusRadioDashboardCard } from '../focus-radio';
 import {
   calculateSevenDayFocus,
   calculateFocusSummaries,
@@ -103,7 +103,7 @@ export const FocusView: React.FC = () => {
 
       {showRadio && (
         <div className="w-full">
-          <FocusRadioPlayer />
+          <FocusRadioDashboardCard />
         </div>
       )}
 

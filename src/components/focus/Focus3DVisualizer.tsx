@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import confetti from 'canvas-confetti';
+import { useCardDensity } from '../common/Card';
 
 interface Focus3DVisualizerProps {
   isRunning: boolean;
@@ -28,6 +29,8 @@ export const Focus3DVisualizer: React.FC<Focus3DVisualizerProps> = ({
   mode,
   isCompleted = false,
 }) => {
+  const { density } = useCardDensity();
+  const isCompact = density === 'compact';
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
 
@@ -287,7 +290,7 @@ export const Focus3DVisualizer: React.FC<Focus3DVisualizerProps> = ({
   }, [isRunning, timeLeft, totalTime, mode, isCompleted, prefersReducedMotion]);
 
   return (
-    <div className="relative w-64 h-64 sm:w-72 sm:h-72 mx-auto flex items-center justify-center my-1 select-none">
+    <div className={`relative ${isCompact ? 'w-40 h-40 sm:w-48 sm:h-48' : 'w-64 h-64 sm:w-72 sm:h-72'} mx-auto flex items-center justify-center my-1 select-none`}>
       {/* Background radial atmosphere */}
       <div
         className="absolute inset-0 rounded-full blur-2xl opacity-30 pointer-events-none transition-all duration-700"

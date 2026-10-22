@@ -1,5 +1,5 @@
 import React from 'react';
-import { Card } from '../common/Card';
+import { Card, useCardDensity } from '../common/Card';
 import { Badge } from '../common/Badge';
 import { Button } from '../common/Button';
 import { EmptyState } from '../common/EmptyState';
@@ -9,6 +9,8 @@ import { AttendanceMark } from '../../types';
 
 export const TodayScheduleWidget: React.FC = () => {
   const { state, markAttendance } = useApp();
+  const { density } = useCardDensity();
+  const isCompact = density === 'compact';
 
   // Day 3 represents Wednesday in sample data and standard midweek
   const currentDayOfWeek = new Date().getDay() === 0 ? 7 : new Date().getDay();
@@ -58,7 +60,7 @@ export const TodayScheduleWidget: React.FC = () => {
         </Badge>
       }
     >
-      <div className="space-y-4">
+      <div className={isCompact ? 'space-y-2' : 'space-y-4'}>
         {todaySlots.map((slot) => {
           const subject = getSubject(slot.subjectId);
           const currentMark = getSlotMark(slot.id);
@@ -66,7 +68,7 @@ export const TodayScheduleWidget: React.FC = () => {
           return (
             <div
               key={slot.id}
-              className={`p-4 sm:p-5 rounded-2xl border transition-all duration-200 ${
+              className={`${isCompact ? 'p-2.5 sm:p-3 rounded-xl' : 'p-4 sm:p-5 rounded-2xl'} border transition-all duration-200 ${
                 currentMark === 'present'
                   ? 'border-sage-300 dark:border-sage-700/60 bg-sage-50/50 dark:bg-sage-950/20 shadow-subtle'
                   : currentMark === 'absent'
@@ -76,11 +78,11 @@ export const TodayScheduleWidget: React.FC = () => {
                   : 'border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 hover:border-ivory-400 dark:hover:border-espresso-700 shadow-subtle'
               }`}
             >
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
                 {/* Time & Subject Info */}
-                <div className="space-y-1.5 min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-mono tabular-nums text-xs font-semibold text-terracotta-600 dark:text-terracotta-400 flex items-center gap-1.5">
+                <div className="space-y-1 min-w-0">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="font-mono tabular-nums text-xs font-semibold text-terracotta-600 dark:text-terracotta-400 flex items-center gap-1">
                       <Clock className="w-3.5 h-3.5" />
                       {slot.startTime} — {slot.endTime}
                     </span>
@@ -90,30 +92,30 @@ export const TodayScheduleWidget: React.FC = () => {
                       </Badge>
                     )}
                     {currentMark === 'present' && (
-                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-sage-700 dark:text-sage-400">
-                        <CheckCircle2 className="w-3.5 h-3.5" /> Marked Present
+                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-sage-700 dark:text-sage-400">
+                        <CheckCircle2 className="w-3.5 h-3.5" /> Marked
                       </span>
                     )}
                     {slot.isSample && (
-                      <span className="text-xs font-mono uppercase px-2 py-0.5 rounded-full bg-ivory-200 dark:bg-espresso-750 text-espresso-600 dark:text-ivory-300 font-medium">
+                      <span className="text-[10px] font-mono uppercase px-1.5 py-0.2 rounded-full bg-ivory-200 dark:bg-espresso-750 text-espresso-600 dark:text-ivory-300 font-medium">
                         Demo
                       </span>
                     )}
                   </div>
 
-                  <h4 className="font-serif text-lg sm:text-xl font-medium text-espresso-950 dark:text-ivory-50 tracking-tight">
+                  <h4 className={`font-serif ${isCompact ? 'text-base font-semibold' : 'text-lg sm:text-xl font-medium'} text-espresso-950 dark:text-ivory-50 tracking-tight truncate`}>
                     {subject ? subject.name : 'Unknown Subject'}
                   </h4>
 
-                  <div className="flex flex-wrap items-center gap-4 text-xs sm:text-sm text-espresso-500 dark:text-espresso-400 pt-0.5">
+                  <div className="flex flex-wrap items-center gap-3 text-xs text-espresso-500 dark:text-espresso-400">
                     {slot.room && (
-                      <span className="flex items-center gap-1.5 font-medium">
+                      <span className="flex items-center gap-1 font-medium">
                         <MapPin className="w-3.5 h-3.5 text-terracotta-500" />
                         {slot.room}
                       </span>
                     )}
                     {slot.instructor && (
-                      <span className="flex items-center gap-1.5 font-medium">
+                      <span className="flex items-center gap-1 font-medium">
                         <User className="w-3.5 h-3.5 text-espresso-400 dark:text-espresso-500" />
                         {slot.instructor}
                       </span>
@@ -121,11 +123,11 @@ export const TodayScheduleWidget: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Direct Interactive Attendance Actions with easy-to-click targets */}
-                <div className="flex items-center gap-2 self-start md:self-center shrink-0 pt-1 md:pt-0">
+                {/* Direct Interactive Attendance Actions */}
+                <div className="flex items-center gap-1.5 self-start md:self-center shrink-0 pt-0.5 md:pt-0">
                   <Button
                     variant={currentMark === 'present' ? 'primary' : 'secondary'}
-                    size="md"
+                    size={isCompact ? 'sm' : 'md'}
                     onClick={() => markAttendance(slot.id, 'present')}
                     title="Mark Present (+1 attended, +1 conducted)"
                     className={
@@ -133,13 +135,13 @@ export const TodayScheduleWidget: React.FC = () => {
                         ? '!bg-sage-600 !text-white !border-transparent shadow-sm ring-2 ring-sage-400/30'
                         : ''
                     }
-                    icon={<Check className="w-4 h-4" />}
+                    icon={<Check className="w-3.5 h-3.5" />}
                   >
                     Present
                   </Button>
                   <Button
                     variant={currentMark === 'absent' ? 'danger' : 'secondary'}
-                    size="md"
+                    size={isCompact ? 'sm' : 'md'}
                     onClick={() => markAttendance(slot.id, 'absent')}
                     title="Mark Absent (+0 attended, +1 conducted)"
                     className={
@@ -147,13 +149,13 @@ export const TodayScheduleWidget: React.FC = () => {
                         ? '!bg-red-600 !text-white !border-transparent shadow-sm ring-2 ring-red-400/30'
                         : ''
                     }
-                    icon={<X className="w-4 h-4" />}
+                    icon={<X className="w-3.5 h-3.5" />}
                   >
                     Absent
                   </Button>
                   <Button
                     variant="ghost"
-                    size="md"
+                    size={isCompact ? 'sm' : 'md'}
                     onClick={() => markAttendance(slot.id, 'cancelled')}
                     title="Class Cancelled (No change to counts)"
                     className={
@@ -161,7 +163,7 @@ export const TodayScheduleWidget: React.FC = () => {
                         ? '!bg-espresso-700 !text-ivory-100 font-bold'
                         : ''
                     }
-                    icon={<Ban className="w-4 h-4" />}
+                    icon={<Ban className="w-3.5 h-3.5" />}
                   >
                     Off
                   </Button>

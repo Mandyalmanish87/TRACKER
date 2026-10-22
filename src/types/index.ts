@@ -50,7 +50,8 @@ export interface StudySession {
   id: string;
   subjectId?: string;
   subjectName?: string;
-  durationMinutes: number; // actual focused duration in minutes
+  durationMinutes: number; // actual focused duration in minutes (e.g. 0.85 for 51s, 25 for 25m)
+  durationSeconds?: number; // actual focused duration in seconds
   plannedDurationMinutes?: number; // target planned duration if timed
   timestamp: string; // ISO string
   startTime?: string; // ISO string
@@ -60,8 +61,17 @@ export interface StudySession {
   isSample?: boolean;
 }
 
+export type FocusTimerMode = 'pomodoro' | 'short_break' | 'long_break' | 'custom' | 'timer' | 'stopwatch';
+
+export interface StopwatchLap {
+  id: string;
+  lapNumber: number;
+  lapTimeSeconds: number;
+  totalTimeSeconds: number;
+}
+
 export interface ActiveTimerState {
-  mode: 'pomodoro' | 'short_break' | 'long_break' | 'custom';
+  mode: FocusTimerMode;
   plannedSeconds: number;
   accumulatedSeconds: number;
   lastStartedTimestamp: number | null;
@@ -70,6 +80,10 @@ export interface ActiveTimerState {
   subjectName?: string;
   notes?: string;
   sessionStartedAt?: string;
+  pausedAt?: number | null;
+  totalPausedSeconds?: number;
+  status?: 'idle' | 'running' | 'paused' | 'completed';
+  laps?: StopwatchLap[];
 }
 
 export interface GymExerciseSet {
@@ -130,6 +144,12 @@ export interface AppSettings {
   showFocusRadio: boolean;
   /** Shared attendance requirement percentage (0-100). Default 75 when not set. */
   attendanceRequirement?: number;
+  /** Custom arrangement of dashboard widget IDs */
+  dashboardWidgetOrder?: string[];
+  /** Custom layout style for Active Command Center */
+  dashboardLayoutMode?: 'bento' | 'masonry' | 'comfortable';
+  /** Density for dashboard command center widgets */
+  dashboardDensity?: 'compact' | 'comfortable';
 }
 
 // ----- New types for Milestone 3 (Syllabus Tracker) -----

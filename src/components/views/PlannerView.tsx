@@ -173,22 +173,22 @@ export const PlannerView: React.FC<PlannerViewProps> = ({ onNavigateToSyllabus }
       {activeTab === 'kanban' && (
         <div className="space-y-6">
           {/* Filters Bar */}
-          <div className="p-4 rounded-2xl border border-black/10 dark:border-white/10 bg-white dark:bg-[#161618] shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div className="p-4 rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 shadow-subtle flex flex-col md:flex-row md:items-center justify-between gap-3">
             {/* Search Input */}
             <div className="relative flex-1 min-w-[200px]">
-              <Search className="w-4 h-4 text-black/40 dark:text-white/40 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <Search className="w-4 h-4 text-espresso-400 dark:text-espresso-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search tasks, descriptions, or notes..."
-                className="w-full pl-10 pr-4 py-2 text-xs rounded-full border border-black/10 dark:border-white/10 bg-[#F8F6F0]/60 dark:bg-[#1E1E22] text-[#111111] dark:text-[#F8F6F0] placeholder-black/40 dark:placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-[#2B38FF]"
+                className="w-full pl-10 pr-4 py-2 text-xs rounded-xl border border-ivory-300 dark:border-espresso-700 bg-ivory-50 dark:bg-espresso-900 text-espresso-900 dark:text-ivory-100 placeholder:text-espresso-400 dark:placeholder:text-espresso-500 focus:outline-none focus:ring-2 focus:ring-terracotta-400"
               />
             </div>
 
             {/* Dropdown Filters */}
             <div className="flex flex-wrap items-center gap-2">
-              <div className="flex items-center gap-1 text-xs font-mono font-bold uppercase tracking-wider text-black/50 dark:text-white/50">
+              <div className="flex items-center gap-1 text-xs font-mono font-semibold uppercase tracking-wider text-espresso-600 dark:text-espresso-400">
                 <Filter className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">Filters:</span>
               </div>
@@ -197,7 +197,7 @@ export const PlannerView: React.FC<PlannerViewProps> = ({ onNavigateToSyllabus }
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value as TaskStatus | 'all')}
-                className="px-3 py-1.5 text-xs font-mono rounded-full border border-black/10 dark:border-white/10 bg-[#F8F6F0] dark:bg-[#1E1E22] text-[#111111] dark:text-[#F8F6F0] focus:outline-none"
+                className="px-3 py-1.5 text-xs font-mono rounded-xl border border-ivory-300 dark:border-espresso-700 bg-white dark:bg-espresso-800 text-espresso-900 dark:text-ivory-100 focus:outline-none focus:ring-2 focus:ring-terracotta-400"
               >
                 <option value="all">All Statuses</option>
                 <option value="todo">To Do</option>
@@ -209,7 +209,7 @@ export const PlannerView: React.FC<PlannerViewProps> = ({ onNavigateToSyllabus }
               <select
                 value={priorityFilter}
                 onChange={(e) => setPriorityFilter(e.target.value as TaskPriority | 'all')}
-                className="px-3 py-1.5 text-xs font-mono rounded-full border border-black/10 dark:border-white/10 bg-[#F8F6F0] dark:bg-[#1E1E22] text-[#111111] dark:text-[#F8F6F0] focus:outline-none"
+                className="px-3 py-1.5 text-xs font-mono rounded-xl border border-ivory-300 dark:border-espresso-700 bg-white dark:bg-espresso-800 text-espresso-900 dark:text-ivory-100 focus:outline-none focus:ring-2 focus:ring-terracotta-400"
               >
                 <option value="all">All Priorities</option>
                 <option value="high">High</option>
@@ -223,7 +223,7 @@ export const PlannerView: React.FC<PlannerViewProps> = ({ onNavigateToSyllabus }
                 onChange={(e) =>
                   setDueFilter(e.target.value as 'all' | 'today' | 'upcoming' | 'overdue')
                 }
-                className="px-3 py-1.5 text-xs font-mono rounded-full border border-black/10 dark:border-white/10 bg-[#F8F6F0] dark:bg-[#1E1E22] text-[#111111] dark:text-[#F8F6F0] focus:outline-none"
+                className="px-3 py-1.5 text-xs font-mono rounded-xl border border-ivory-300 dark:border-espresso-700 bg-white dark:bg-espresso-800 text-espresso-900 dark:text-ivory-100 focus:outline-none focus:ring-2 focus:ring-terracotta-400"
               >
                 <option value="all">All Dates</option>
                 <option value="today">Due Today</option>
@@ -235,7 +235,7 @@ export const PlannerView: React.FC<PlannerViewProps> = ({ onNavigateToSyllabus }
               <select
                 value={subjectFilter}
                 onChange={(e) => setSubjectFilter(e.target.value)}
-                className="px-3 py-1.5 text-xs font-mono rounded-full border border-black/10 dark:border-white/10 bg-[#F8F6F0] dark:bg-[#1E1E22] text-[#111111] dark:text-[#F8F6F0] max-w-[130px] truncate focus:outline-none"
+                className="px-3 py-1.5 text-xs font-mono rounded-xl border border-ivory-300 dark:border-espresso-700 bg-white dark:bg-espresso-800 text-espresso-900 dark:text-ivory-100 max-w-[130px] truncate focus:outline-none focus:ring-2 focus:ring-terracotta-400"
               >
                 <option value="all">All Subjects</option>
                 {syllabusSubjects.map((s) => (
@@ -265,7 +265,7 @@ export const PlannerView: React.FC<PlannerViewProps> = ({ onNavigateToSyllabus }
                     setSubjectFilter('all');
                     setSearchQuery('');
                   }}
-                  className="text-xs font-mono uppercase tracking-wider text-[#2B38FF] dark:text-[#FFE600] font-bold hover:underline"
+                  className="text-xs font-mono uppercase tracking-wider text-terracotta-600 dark:text-terracotta-400 font-bold hover:underline"
                 >
                   Reset
                 </button>
