@@ -129,6 +129,12 @@ export interface UserProfile {
   targetExam: ExamTarget;
   examDate?: string; // YYYY-MM-DD for specific date
   examYear?: number; // optional year when only year is set
+  avatarUrl?: string; // Custom profile picture (base64 data URL or external link)
+  email?: string;
+  institution?: string; // College / University / School
+  department?: string; // Branch / Section / Major
+  studentId?: string; // Roll Number / Student ID
+  bio?: string; // Short bio or academic motto
 }
 
 export type AccentColor = 'terracotta' | 'sage' | 'ochre' | 'dusty-blue' | 'plum' | 'slate';

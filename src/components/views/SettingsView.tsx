@@ -32,8 +32,14 @@ import {
   CheckCircle2,
   Plus,
   LogIn,
+  Camera,
+  Upload,
+  Mail,
+  School,
+  Hash,
 } from 'lucide-react';
 import { useOptionalClassSpace } from '../../context/ClassSpaceContext';
+import { getAvatarBgColor, getAvatarInitials } from '../../utils/classSpaceUtils';
 import { CreateWorkspaceModal } from '../classspace/CreateWorkspaceModal';
 import { JoinWorkspaceModal } from '../classspace/JoinWorkspaceModal';
 import { ConfirmModal } from '../common/ConfirmModal';
@@ -55,6 +61,16 @@ const BG_OPTIONS: { id: BackgroundStyle; label: string; desc: string }[] = [
   { id: 'space',    label: 'Space',    desc: 'Deep-space gradient' },
   { id: 'ocean',    label: 'Ocean',    desc: 'Serene coastal gradient' },
   { id: 'custom',   label: 'Custom',   desc: 'Your own image URL' },
+];
+
+// ─── Preset Avatars Catalogue ─────────────────────────────────────────────
+const PRESET_AVATARS = [
+  'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=160&h=160&fit=crop&crop=faces',
+  'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=160&h=160&fit=crop&crop=faces',
+  'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=160&h=160&fit=crop&crop=faces',
+  'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=160&h=160&fit=crop&crop=faces',
+  'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=160&h=160&fit=crop&crop=faces',
+  'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=160&h=160&fit=crop&crop=faces',
 ];
 
 // ─── Section heading helper ────────────────────────────────────────────────
@@ -134,10 +150,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToClassSpa
   const profile = state.profile ?? { displayName: '', targetExam: '' };
 
   // Local profile edit state
-  const [displayName, setDisplayName]   = useState(profile.displayName);
+  const [displayName, setDisplayName]   = useState(profile.displayName || '');
   const [targetExam,  setTargetExam]    = useState(profile.targetExam ?? '');
   const [examDate,    setExamDate]      = useState(profile.examDate ?? '');
+  const [avatarUrl,   setAvatarUrl]     = useState(profile.avatarUrl ?? '');
+  const [email,       setEmail]         = useState(profile.email ?? '');
+  const [institution, setInstitution]   = useState(profile.institution ?? '');
+  const [department,  setDepartment]    = useState(profile.department ?? '');
+  const [studentId,   setStudentId]     = useState(profile.studentId ?? '');
+  const [bio,         setBio]           = useState(profile.bio ?? '');
   const [profileSaved, setProfileSaved] = useState(false);
+  const [avatarError, setAvatarError]   = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [customBgUrl, setCustomBgUrl] = useState(settings.customBackgroundUrl ?? '');
 
@@ -161,6 +185,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToClassSpa
       setDisplayName(state.profile.displayName ?? '');
       setTargetExam(state.profile.targetExam ?? '');
       setExamDate(state.profile.examDate ?? '');
+      setAvatarUrl(state.profile.avatarUrl ?? '');
+      setEmail(state.profile.email ?? '');
+      setInstitution(state.profile.institution ?? '');
+      setDepartment(state.profile.department ?? '');
+      setStudentId(state.profile.studentId ?? '');
+      setBio(state.profile.bio ?? '');
     }
   }, [state.profile]);
 
@@ -198,12 +228,114 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToClassSpa
       displayName,
       targetExam,
       examDate: examDate || undefined,
+      avatarUrl: avatarUrl || undefined,
+      email: email || undefined,
+      institution: institution || undefined,
+      department: department || undefined,
+      studentId: studentId || undefined,
+      bio: bio || undefined,
     });
+    // Sync with ClassSpace profile if connected
+    if (classSpace?.updateProfile) {
+      classSpace.updateProfile({
+        displayName,
+        avatarUrl: avatarUrl || undefined,
+      }).catch(() => {});
+    }
     if (profileTimeoutRef.current) clearTimeout(profileTimeoutRef.current);
     setProfileSaved(true);
     profileTimeoutRef.current = setTimeout(() => {
       if (typeof window !== 'undefined') setProfileSaved(false);
     }, 2000);
+  };
+
+  const handleAvatarFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setAvatarError('Please select a valid image file (PNG, JPG, WebP, etc.)');
+      return;
+    }
+
+    if (file.size > 4 * 1024 * 1024) {
+      setAvatarError('Image must be under 4MB');
+      return;
+    }
+
+    setAvatarError(null);
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      setAvatarUrl(result);
+      updateProfile({
+        displayName,
+        targetExam,
+        examDate: examDate || undefined,
+        avatarUrl: result,
+        email: email || undefined,
+        institution: institution || undefined,
+        department: department || undefined,
+        studentId: studentId || undefined,
+        bio: bio || undefined,
+      });
+      if (classSpace?.updateProfile) {
+        classSpace.updateProfile({ displayName, avatarUrl: result }).catch(() => {});
+      }
+      setProfileSaved(true);
+      if (profileTimeoutRef.current) clearTimeout(profileTimeoutRef.current);
+      profileTimeoutRef.current = setTimeout(() => {
+        if (typeof window !== 'undefined') setProfileSaved(false);
+      }, 2000);
+    };
+    reader.onerror = () => {
+      setAvatarError('Failed to read image file');
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSelectPresetAvatar = (url: string) => {
+    setAvatarUrl(url);
+    setAvatarError(null);
+    updateProfile({
+      displayName,
+      targetExam,
+      examDate: examDate || undefined,
+      avatarUrl: url,
+      email: email || undefined,
+      institution: institution || undefined,
+      department: department || undefined,
+      studentId: studentId || undefined,
+      bio: bio || undefined,
+    });
+    if (classSpace?.updateProfile) {
+      classSpace.updateProfile({ displayName, avatarUrl: url }).catch(() => {});
+    }
+    setProfileSaved(true);
+    if (profileTimeoutRef.current) clearTimeout(profileTimeoutRef.current);
+    profileTimeoutRef.current = setTimeout(() => {
+      if (typeof window !== 'undefined') setProfileSaved(false);
+    }, 2000);
+  };
+
+  const handleRemoveAvatar = () => {
+    setAvatarUrl('');
+    setAvatarError(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    updateProfile({
+      displayName,
+      targetExam,
+      examDate: examDate || undefined,
+      avatarUrl: undefined,
+      email: email || undefined,
+      institution: institution || undefined,
+      department: department || undefined,
+      studentId: studentId || undefined,
+      bio: bio || undefined,
+    });
+    if (classSpace?.updateProfile) {
+      classSpace.updateProfile({ displayName, avatarUrl: undefined }).catch(() => {});
+    }
   };
 
   return (
@@ -587,74 +719,260 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToClassSpa
           </Card>
         )}
 
-        {/* ── Profile ── */}
-        <Card>
+        {/* ── Personal Info & Profile Picture (PFP) ── */}
+        <Card className="lg:col-span-2">
           <SectionHeading
-            icon={<User className="w-4 h-4" />}
-            title="Profile"
-            sub="Displayed across your dashboard and countdown"
+            icon={<User className="w-4 h-4 text-terracotta-600 dark:text-terracotta-400" />}
+            title="Personal Info & Profile Picture (PFP)"
+            sub="Customize your avatar photo, student details, contact info, and academic target"
           />
 
-          <div className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-espresso-700 dark:text-espresso-300 mb-1.5 uppercase font-mono tracking-wider">
-                Display Name
-              </label>
-              <input
-                type="text"
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-                onBlur={handleSaveProfile}
-                placeholder="e.g. Aanya"
-                className="w-full px-3.5 py-2.5 rounded-xl border border-ivory-300 dark:border-espresso-700 bg-ivory-50 dark:bg-espresso-900 text-espresso-900 dark:text-ivory-100 text-sm placeholder:text-espresso-400 dark:placeholder:text-espresso-600 focus:outline-none focus:ring-2 focus:ring-terracotta-400 dark:focus:ring-terracotta-600 transition"
-              />
-            </div>
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            {/* Left Column: Profile Picture (PFP) */}
+            <div className="lg:col-span-4 flex flex-col items-center p-5 rounded-2xl bg-ivory-50/70 dark:bg-espresso-900/60 border border-ivory-200 dark:border-espresso-750 text-center">
+              <span className="text-xs font-mono font-semibold uppercase tracking-wider text-espresso-500 dark:text-espresso-400 mb-3">
+                Profile Picture (PFP)
+              </span>
 
-            <div>
-              <label className="block text-xs font-semibold text-espresso-700 dark:text-espresso-300 mb-1.5 uppercase font-mono tracking-wider">
-                Academic Target / Goal
-              </label>
-              <input
-                type="text"
-                value={targetExam}
-                onChange={(e) => setTargetExam(e.target.value)}
-                onBlur={handleSaveProfile}
-                placeholder="e.g. End-Semester Exams, DSA Interview Prep…"
-                className="w-full px-3.5 py-2.5 rounded-xl border border-ivory-300 dark:border-espresso-700 bg-ivory-50 dark:bg-espresso-900 text-espresso-900 dark:text-ivory-100 text-sm placeholder:text-espresso-400 dark:placeholder:text-espresso-600 focus:outline-none focus:ring-2 focus:ring-terracotta-400 dark:focus:ring-terracotta-600 transition"
-              />
-              <p className="text-xs text-espresso-400 dark:text-espresso-500 mt-1">
-                Any personal academic goal — no exam name is required.
-              </p>
-            </div>
+              {/* Avatar Preview */}
+              <div className="relative group mb-3">
+                <div
+                  className="w-28 h-28 rounded-full overflow-hidden border-4 border-white dark:border-espresso-800 shadow-md flex items-center justify-center text-3xl font-bold transition"
+                  style={{
+                    backgroundColor: avatarUrl ? 'transparent' : getAvatarBgColor(displayName || 'Scholar'),
+                    color: '#ffffff',
+                  }}
+                >
+                  {avatarUrl ? (
+                    <img src={avatarUrl} alt={displayName || 'User'} className="w-full h-full object-cover" />
+                  ) : authUser?.avatarUrl ? (
+                    <img src={authUser.avatarUrl} alt={displayName || 'User'} className="w-full h-full object-cover" />
+                  ) : (
+                    getAvatarInitials(displayName || 'Scholar')
+                  )}
+                </div>
 
-            <div>
-              <label htmlFor="target-date" className="block text-xs font-semibold text-espresso-700 dark:text-espresso-300 mb-1.5 uppercase font-mono tracking-wider flex items-center gap-1.5">
-                <CalendarClock className="w-3.5 h-3.5" /> Target Date
-              </label>
-              <input
-                id="target-date"
-                type="date"
-                value={examDate}
-                onChange={(e) => setExamDate(e.target.value)}
-                onBlur={handleSaveProfile}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-ivory-300 dark:border-espresso-700 bg-ivory-50 dark:bg-espresso-900 text-espresso-900 dark:text-ivory-100 text-sm focus:outline-none focus:ring-2 focus:ring-terracotta-400 dark:focus:ring-terracotta-600 transition"
-              />
-              <p className="text-xs text-espresso-400 dark:text-espresso-500 mt-1">
-                Used to power the exam-countdown panel on the dashboard.
-              </p>
-            </div>
+                {/* Upload overlay button */}
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="absolute bottom-0 right-0 p-2 rounded-full bg-terracotta-600 hover:bg-terracotta-700 text-white shadow-md transition cursor-pointer"
+                  title="Upload profile picture"
+                >
+                  <Camera className="w-4 h-4" />
+                </button>
+              </div>
 
-            <button
-              onClick={handleSaveProfile}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-white text-sm font-medium hover:opacity-90 transition shadow-subtle"
-              style={{ backgroundColor: 'var(--accent)' }}
-            >
-              {profileSaved ? (
-                <><Check className="w-4 h-4" /> Saved!</>
-              ) : (
-                <>Save Profile</>
+              {/* Hidden file input */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleAvatarFileChange}
+                className="hidden"
+                aria-label="Upload profile picture"
+              />
+
+              <div className="flex flex-wrap items-center justify-center gap-2 mb-3">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="px-3 py-1.5 rounded-xl border border-ivory-300 dark:border-espresso-700 bg-white dark:bg-espresso-850 hover:bg-ivory-100 dark:hover:bg-espresso-800 text-xs font-semibold text-espresso-800 dark:text-ivory-200 shadow-xs transition cursor-pointer flex items-center gap-1.5"
+                >
+                  <Upload className="w-3.5 h-3.5 text-terracotta-600" />
+                  <span>Upload Photo</span>
+                </button>
+
+                {(avatarUrl || authUser?.avatarUrl) && (
+                  <button
+                    type="button"
+                    onClick={handleRemoveAvatar}
+                    className="px-2.5 py-1.5 rounded-xl border border-rose-200 dark:border-rose-900/50 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20 text-xs font-medium transition cursor-pointer"
+                    title="Remove custom avatar"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {avatarError && (
+                <p className="text-xs text-rose-600 dark:text-rose-400 mb-3">{avatarError}</p>
               )}
-            </button>
+
+              {/* Preset Avatars */}
+              <div className="w-full pt-3 border-t border-ivory-200 dark:border-espresso-800">
+                <p className="text-[11px] font-mono uppercase tracking-wider text-espresso-400 dark:text-espresso-500 mb-2">
+                  Or pick a preset avatar
+                </p>
+                <div className="flex items-center justify-center gap-2">
+                  {PRESET_AVATARS.map((preset, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => handleSelectPresetAvatar(preset)}
+                      className={`w-8 h-8 rounded-full overflow-hidden border-2 transition-transform hover:scale-110 cursor-pointer ${
+                        avatarUrl === preset ? 'border-terracotta-500 ring-2 ring-terracotta-300 ring-offset-1' : 'border-ivory-300 dark:border-espresso-700'
+                      }`}
+                      title={`Preset avatar ${idx + 1}`}
+                    >
+                      <img src={preset} alt={`Preset ${idx + 1}`} className="w-full h-full object-cover" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Right Column: Personal Information Fields */}
+            <div className="lg:col-span-8 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Display Name */}
+                <div>
+                  <label className="block text-xs font-semibold text-espresso-700 dark:text-espresso-300 mb-1.5 uppercase font-mono tracking-wider">
+                    Full / Display Name
+                  </label>
+                  <input
+                    type="text"
+                    value={displayName}
+                    onChange={(e) => setDisplayName(e.target.value)}
+                    onBlur={handleSaveProfile}
+                    placeholder="e.g. Aanya"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-ivory-300 dark:border-espresso-700 bg-ivory-50 dark:bg-espresso-900 text-espresso-900 dark:text-ivory-100 text-sm placeholder:text-espresso-400 dark:placeholder:text-espresso-600 focus:outline-none focus:ring-2 focus:ring-terracotta-400 dark:focus:ring-terracotta-600 transition"
+                  />
+                </div>
+
+                {/* Personal Email */}
+                <div>
+                  <label className="block text-xs font-semibold text-espresso-700 dark:text-espresso-300 mb-1.5 uppercase font-mono tracking-wider flex items-center gap-1.5">
+                    <Mail className="w-3.5 h-3.5" /> Email Address
+                  </label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    onBlur={handleSaveProfile}
+                    placeholder="e.g. student@university.edu"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-ivory-300 dark:border-espresso-700 bg-ivory-50 dark:bg-espresso-900 text-espresso-900 dark:text-ivory-100 text-sm placeholder:text-espresso-400 dark:placeholder:text-espresso-600 focus:outline-none focus:ring-2 focus:ring-terracotta-400 dark:focus:ring-terracotta-600 transition"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {/* College / Institution */}
+                <div>
+                  <label className="block text-xs font-semibold text-espresso-700 dark:text-espresso-300 mb-1.5 uppercase font-mono tracking-wider flex items-center gap-1.5">
+                    <School className="w-3.5 h-3.5" /> Institution / College
+                  </label>
+                  <input
+                    type="text"
+                    value={institution}
+                    onChange={(e) => setInstitution(e.target.value)}
+                    onBlur={handleSaveProfile}
+                    placeholder="e.g. IIT Delhi, MIT"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-ivory-300 dark:border-espresso-700 bg-ivory-50 dark:bg-espresso-900 text-espresso-900 dark:text-ivory-100 text-sm placeholder:text-espresso-400 dark:placeholder:text-espresso-600 focus:outline-none focus:ring-2 focus:ring-terracotta-400 dark:focus:ring-terracotta-600 transition"
+                  />
+                </div>
+
+                {/* Department */}
+                <div>
+                  <label className="block text-xs font-semibold text-espresso-700 dark:text-espresso-300 mb-1.5 uppercase font-mono tracking-wider flex items-center gap-1.5">
+                    <GraduationCap className="w-3.5 h-3.5" /> Major / Dept
+                  </label>
+                  <input
+                    type="text"
+                    value={department}
+                    onChange={(e) => setDepartment(e.target.value)}
+                    onBlur={handleSaveProfile}
+                    placeholder="e.g. Computer Science"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-ivory-300 dark:border-espresso-700 bg-ivory-50 dark:bg-espresso-900 text-espresso-900 dark:text-ivory-100 text-sm placeholder:text-espresso-400 dark:placeholder:text-espresso-600 focus:outline-none focus:ring-2 focus:ring-terracotta-400 dark:focus:ring-terracotta-600 transition"
+                  />
+                </div>
+
+                {/* Student ID / Roll No */}
+                <div>
+                  <label className="block text-xs font-semibold text-espresso-700 dark:text-espresso-300 mb-1.5 uppercase font-mono tracking-wider flex items-center gap-1.5">
+                    <Hash className="w-3.5 h-3.5" /> Roll / Student ID
+                  </label>
+                  <input
+                    type="text"
+                    value={studentId}
+                    onChange={(e) => setStudentId(e.target.value)}
+                    onBlur={handleSaveProfile}
+                    placeholder="e.g. 2024CS042"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-ivory-300 dark:border-espresso-700 bg-ivory-50 dark:bg-espresso-900 text-espresso-900 dark:text-ivory-100 text-sm placeholder:text-espresso-400 dark:placeholder:text-espresso-600 focus:outline-none focus:ring-2 focus:ring-terracotta-400 dark:focus:ring-terracotta-600 transition"
+                  />
+                </div>
+              </div>
+
+              {/* Bio / About */}
+              <div>
+                <label className="block text-xs font-semibold text-espresso-700 dark:text-espresso-300 mb-1.5 uppercase font-mono tracking-wider">
+                  Bio / Academic Focus
+                </label>
+                <textarea
+                  rows={2}
+                  value={bio}
+                  onChange={(e) => setBio(e.target.value)}
+                  onBlur={handleSaveProfile}
+                  placeholder="e.g. 3rd year student focusing on systems, DSA, and daily consistency."
+                  className="w-full px-3.5 py-2 rounded-xl border border-ivory-300 dark:border-espresso-700 bg-ivory-50 dark:bg-espresso-900 text-espresso-900 dark:text-ivory-100 text-sm placeholder:text-espresso-400 dark:placeholder:text-espresso-600 focus:outline-none focus:ring-2 focus:ring-terracotta-400 dark:focus:ring-terracotta-600 transition resize-none"
+                />
+              </div>
+
+              {/* Academic Target & Countdown */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-ivory-200 dark:border-espresso-800">
+                <div>
+                  <label className="block text-xs font-semibold text-espresso-700 dark:text-espresso-300 mb-1.5 uppercase font-mono tracking-wider">
+                    Academic Target / Goal
+                  </label>
+                  <input
+                    type="text"
+                    value={targetExam}
+                    onChange={(e) => setTargetExam(e.target.value)}
+                    onBlur={handleSaveProfile}
+                    placeholder="e.g. End-Semester Exams, DSA Interview Prep…"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-ivory-300 dark:border-espresso-700 bg-ivory-50 dark:bg-espresso-900 text-espresso-900 dark:text-ivory-100 text-sm placeholder:text-espresso-400 dark:placeholder:text-espresso-600 focus:outline-none focus:ring-2 focus:ring-terracotta-400 dark:focus:ring-terracotta-600 transition"
+                  />
+                  <p className="text-xs text-espresso-400 dark:text-espresso-500 mt-1">
+                    Any personal academic goal — no exam name is required.
+                  </p>
+                </div>
+
+                <div>
+                  <label htmlFor="target-date" className="block text-xs font-semibold text-espresso-700 dark:text-espresso-300 mb-1.5 uppercase font-mono tracking-wider flex items-center gap-1.5">
+                    <CalendarClock className="w-3.5 h-3.5" /> Target Date
+                  </label>
+                  <input
+                    id="target-date"
+                    type="date"
+                    value={examDate}
+                    onChange={(e) => setExamDate(e.target.value)}
+                    onBlur={handleSaveProfile}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-ivory-300 dark:border-espresso-700 bg-ivory-50 dark:bg-espresso-900 text-espresso-900 dark:text-ivory-100 text-sm focus:outline-none focus:ring-2 focus:ring-terracotta-400 dark:focus:ring-terracotta-600 transition"
+                  />
+                  <p className="text-xs text-espresso-400 dark:text-espresso-500 mt-1">
+                    Used to power the exam-countdown panel on the dashboard.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between pt-2">
+                <button
+                  type="button"
+                  onClick={handleSaveProfile}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-white text-sm font-semibold hover:opacity-90 transition shadow-subtle cursor-pointer"
+                  style={{ backgroundColor: 'var(--accent)' }}
+                >
+                  {profileSaved ? (
+                    <><Check className="w-4 h-4" /> Saved!</>
+                  ) : (
+                    <>Save Profile</>
+                  )}
+                </button>
+                <span className="text-xs text-espresso-400 dark:text-espresso-500 font-mono">
+                  Changes save automatically on exit
+                </span>
+              </div>
+            </div>
           </div>
         </Card>
 

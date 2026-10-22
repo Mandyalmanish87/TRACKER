@@ -89,8 +89,16 @@ export const Header: React.FC = () => {
 
           {/* Profile name badge */}
           {state.profile?.displayName?.trim() && (
-            <span className="hidden md:inline-flex items-center gap-1.5 text-xs font-medium text-espresso-600 dark:text-espresso-300 bg-ivory-200 dark:bg-espresso-800 rounded-lg px-2.5 py-1">
-              <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: 'var(--accent)' }} />
+            <span className="hidden md:inline-flex items-center gap-2 text-xs font-medium text-espresso-600 dark:text-espresso-300 bg-ivory-200 dark:bg-espresso-800 rounded-lg px-2.5 py-1">
+              {state.profile?.avatarUrl ? (
+                <img
+                  src={state.profile.avatarUrl}
+                  alt={state.profile.displayName}
+                  className="w-4 h-4 rounded-full object-cover"
+                />
+              ) : (
+                <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: 'var(--accent)' }} />
+              )}
               {state.profile.displayName.trim()}
             </span>
           )}
@@ -173,8 +181,8 @@ export const Header: React.FC = () => {
                 className="flex items-center gap-2 p-1.5 rounded-xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 hover:bg-ivory-50 dark:hover:bg-espresso-800 transition cursor-pointer text-xs"
               >
                 <div className="w-6 h-6 rounded-full overflow-hidden bg-terracotta-100 dark:bg-terracotta-950 flex items-center justify-center font-bold text-terracotta-700 dark:text-terracotta-300 text-xs">
-                  {authUser.avatarUrl ? (
-                    <img src={authUser.avatarUrl} alt={authUser.name || 'User'} className="w-full h-full object-cover" />
+                  {state.profile?.avatarUrl || authUser.avatarUrl ? (
+                    <img src={state.profile?.avatarUrl || authUser.avatarUrl} alt={authUser.name || 'User'} className="w-full h-full object-cover" />
                   ) : (
                     (authUser.name || authUser.email)[0].toUpperCase()
                   )}

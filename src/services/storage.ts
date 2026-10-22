@@ -369,6 +369,12 @@ export const loadData = (): AppStateData => {
             targetExam: typeof parsed.profile?.targetExam === 'string' ? parsed.profile.targetExam : '',
             examDate: parsed.profile?.examDate,
             examYear: parsed.profile?.examYear,
+            avatarUrl: typeof parsed.profile?.avatarUrl === 'string' ? parsed.profile.avatarUrl : undefined,
+            email: typeof parsed.profile?.email === 'string' ? parsed.profile.email : undefined,
+            institution: typeof parsed.profile?.institution === 'string' ? parsed.profile.institution : undefined,
+            department: typeof parsed.profile?.department === 'string' ? parsed.profile.department : undefined,
+            studentId: typeof parsed.profile?.studentId === 'string' ? parsed.profile.studentId : undefined,
+            bio: typeof parsed.profile?.bio === 'string' ? parsed.profile.bio : undefined,
           },
           settings: {
             themeMode: parsed.settings?.themeMode ?? 'system',
