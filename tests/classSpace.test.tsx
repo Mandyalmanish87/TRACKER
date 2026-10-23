@@ -685,17 +685,29 @@ describe('ClassSpace UI Component Integration & User Mode', () => {
   it('persists Type B — Class-based user mode across storage reload and page refresh', () => {
     // 1. Simulate saving state with Type B (Class-based)
     const currentState = storageService.loadData();
+    expect(currentState.settings).toBeDefined();
+    if (!currentState.settings) {
+      throw new Error('Expected currentState.settings to be defined');
+    }
     currentState.settings.userMode = 'class_based';
     storageService.saveData(currentState);
 
     // 2. Simulate page refresh / unmount & remount from storage
     const reloaded = storageService.loadData();
+    expect(reloaded.settings).toBeDefined();
+    if (!reloaded.settings) {
+      throw new Error('Expected reloaded.settings to be defined');
+    }
     expect(reloaded.settings.userMode).toBe('class_based');
 
     // 3. Switching to individual mode also persists cleanly
     reloaded.settings.userMode = 'individual';
     storageService.saveData(reloaded);
     const reloaded2 = storageService.loadData();
+    expect(reloaded2.settings).toBeDefined();
+    if (!reloaded2.settings) {
+      throw new Error('Expected reloaded2.settings to be defined');
+    }
     expect(reloaded2.settings.userMode).toBe('individual');
   });
 
@@ -703,6 +715,11 @@ describe('ClassSpace UI Component Integration & User Mode', () => {
     localStorage.clear();
     // 1. Set a distinct custom student email in profile
     const currentState = storageService.loadData();
+    expect(currentState.profile).toBeDefined();
+    expect(currentState.settings).toBeDefined();
+    if (!currentState.profile || !currentState.settings) {
+      throw new Error('Expected currentState.profile and currentState.settings to be defined');
+    }
     currentState.profile.displayName = 'Aanya Sharma';
     currentState.profile.email = 'aanya.sharma@iitd.ac.in';
     currentState.settings.userMode = 'class_based';
