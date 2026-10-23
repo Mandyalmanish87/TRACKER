@@ -164,6 +164,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   showFocusRadio: false,
   dashboardLayoutMode: 'bento',
   dashboardDensity: 'compact',
+  userMode: 'individual',
 };
 
 export const DEFAULT_SYLLABUS_SUBJECTS: SyllabusSubject[] = [
@@ -388,6 +389,7 @@ export const loadData = (): AppStateData => {
             dashboardWidgetOrder: Array.isArray(parsed.settings?.dashboardWidgetOrder) ? parsed.settings.dashboardWidgetOrder : undefined,
             dashboardLayoutMode: parsed.settings?.dashboardLayoutMode || 'bento',
             dashboardDensity: parsed.settings?.dashboardDensity || 'compact',
+            userMode: parsed.settings?.userMode === 'class_based' ? 'class_based' : 'individual',
           },
           syllabusSubjects: Array.isArray(parsed.syllabusSubjects)
             ? parsed.syllabusSubjects
@@ -520,6 +522,7 @@ export const SAMPLE_DATA: AppStateData = {
     studyDayRolloverHour: 0,
     showExamCountdown: true,
     showFocusRadio: false,
+    userMode: 'individual',
   },
   syllabusSubjects: DEFAULT_SYLLABUS_SUBJECTS,
   subjects: [

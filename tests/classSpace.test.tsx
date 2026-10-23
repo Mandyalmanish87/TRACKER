@@ -21,6 +21,7 @@ import {
 } from '../src/utils/classSpaceUtils';
 import { classSpaceService } from '../src/services/classSpaceService';
 import { ClassTimetableRule, ClassTimetableOverride } from '../src/types/classSpace';
+import { storageService } from '../src/services/storage';
 
 describe('ClassSpace — Core Logic & Unit Tests', () => {
   describe('Join Code Generation & Validation', () => {
@@ -678,6 +679,60 @@ describe('ClassSpace UI Component Integration & User Mode', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/ClassSpace Management & Membership/i)).toBeInTheDocument();
+    });
+  });
+
+  it('persists Type B — Class-based user mode across storage reload and page refresh', () => {
+    // 1. Simulate saving state with Type B (Class-based)
+    const currentState = storageService.loadData();
+    currentState.settings.userMode = 'class_based';
+    storageService.saveData(currentState);
+
+    // 2. Simulate page refresh / unmount & remount from storage
+    const reloaded = storageService.loadData();
+    expect(reloaded.settings.userMode).toBe('class_based');
+
+    // 3. Switching to individual mode also persists cleanly
+    reloaded.settings.userMode = 'individual';
+    storageService.saveData(reloaded);
+    const reloaded2 = storageService.loadData();
+    expect(reloaded2.settings.userMode).toBe('individual');
+  });
+
+  it('synchronizes email between main Settings profile and ClassSpace directory', async () => {
+    localStorage.clear();
+    // 1. Set a distinct custom student email in profile
+    const currentState = storageService.loadData();
+    currentState.profile.displayName = 'Aanya Sharma';
+    currentState.profile.email = 'aanya.sharma@iitd.ac.in';
+    currentState.settings.userMode = 'class_based';
+    storageService.saveData(currentState);
+
+    // 2. Create workspace as this student
+    const creatorUser = { id: 'usr_google_student_demo', email: 'aanya.sharma@iitd.ac.in', name: 'Aanya Sharma' };
+    await classSpaceService.createWorkspace(creatorUser, { name: 'CSE Batch 2026' });
+
+    render(
+      <ThemeProvider>
+        <AppProvider>
+          <ClassSpaceProvider>
+            <ClassSpaceView />
+          </ClassSpaceProvider>
+        </AppProvider>
+      </ThemeProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('CSE Batch 2026')).toBeInTheDocument();
+    });
+
+    // 3. Switch to Classmates tab
+    const classmatesTab = screen.getByText('Classmates');
+    fireEvent.click(classmatesTab);
+
+    // 4. Verify the exact email from Main Settings profile is displayed in Community Classmates directory
+    await waitFor(() => {
+      expect(screen.getByText('aanya.sharma@iitd.ac.in')).toBeInTheDocument();
     });
   });
 });

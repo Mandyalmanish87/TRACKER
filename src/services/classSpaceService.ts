@@ -184,6 +184,7 @@ export const classSpaceService = {
       role: 'cr',
       joinedAt: now,
       displayName: user.name || user.email.split('@')[0],
+      email: user.email,
       avatarUrl: user.avatarUrl,
     };
 
@@ -215,6 +216,7 @@ export const classSpaceService = {
             user_id: user.id,
             role: 'cr',
             display_name: crMember.displayName,
+            email: crMember.email,
             avatar_url: crMember.avatarUrl,
           })
           .select()
@@ -283,6 +285,7 @@ export const classSpaceService = {
             user_id: user.id,
             role: 'member',
             display_name: user.name || user.email.split('@')[0],
+            email: user.email,
             avatar_url: user.avatarUrl,
           })
           .select()
@@ -319,6 +322,7 @@ export const classSpaceService = {
       role: 'member',
       joinedAt: new Date().toISOString(),
       displayName: user.name || user.email.split('@')[0],
+      email: user.email,
       avatarUrl: user.avatarUrl,
     };
 
@@ -1602,6 +1606,7 @@ export const classSpaceService = {
       if (m.userId === userId) {
         m.displayName = updated.displayName;
         m.avatarUrl = updated.avatarUrl;
+        if (updated.email) m.email = updated.email;
       }
     }
     saveLocalData(local);
@@ -1707,6 +1712,7 @@ function mapMemberFromDb(row: any): ClassSpaceMember {
     userId: row.user_id,
     role: row.role,
     displayName: row.display_name,
+    email: row.email,
     avatarUrl: row.avatar_url,
     isMuted: row.is_muted,
     joinedAt: row.joined_at,

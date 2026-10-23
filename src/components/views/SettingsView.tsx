@@ -239,6 +239,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToClassSpa
     if (classSpace?.updateProfile) {
       classSpace.updateProfile({
         displayName,
+        email: email || undefined,
         avatarUrl: avatarUrl || undefined,
       }).catch(() => {});
     }
@@ -280,7 +281,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToClassSpa
         bio: bio || undefined,
       });
       if (classSpace?.updateProfile) {
-        classSpace.updateProfile({ displayName, avatarUrl: result }).catch(() => {});
+        classSpace.updateProfile({ displayName, email: email || undefined, avatarUrl: result }).catch(() => {});
       }
       setProfileSaved(true);
       if (profileTimeoutRef.current) clearTimeout(profileTimeoutRef.current);
@@ -309,7 +310,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToClassSpa
       bio: bio || undefined,
     });
     if (classSpace?.updateProfile) {
-      classSpace.updateProfile({ displayName, avatarUrl: url }).catch(() => {});
+      classSpace.updateProfile({ displayName, email: email || undefined, avatarUrl: url }).catch(() => {});
     }
     setProfileSaved(true);
     if (profileTimeoutRef.current) clearTimeout(profileTimeoutRef.current);
@@ -334,7 +335,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToClassSpa
       bio: bio || undefined,
     });
     if (classSpace?.updateProfile) {
-      classSpace.updateProfile({ displayName, avatarUrl: undefined }).catch(() => {});
+      classSpace.updateProfile({ displayName, email: email || undefined, avatarUrl: undefined }).catch(() => {});
     }
   };
 

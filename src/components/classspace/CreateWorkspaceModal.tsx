@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, Sparkles, Building, Layers, Calendar, BookOpen, KeyRound } from 'lucide-react';
 import { useOptionalClassSpace } from '../../context/ClassSpaceContext';
+import { useApp } from '../../context/AppContext';
 
 interface CreateWorkspaceModalProps {
   isOpen: boolean;
@@ -15,6 +16,7 @@ export const CreateWorkspaceModal: React.FC<CreateWorkspaceModalProps> = ({
 }) => {
   const classSpace = useOptionalClassSpace();
   const createWorkspace = classSpace?.createWorkspace;
+  const { updateSettings } = useApp();
 
   const [name, setName] = useState('');
   const [institution, setInstitution] = useState('');
@@ -54,6 +56,7 @@ export const CreateWorkspaceModal: React.FC<CreateWorkspaceModalProps> = ({
       if (res.error) {
         setError(res.error);
       } else if (res.workspace) {
+        updateSettings({ userMode: 'class_based' });
         onCreated?.(res.workspace.id);
         onClose();
       }

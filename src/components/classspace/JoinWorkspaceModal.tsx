@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, LogIn, KeyRound, Sparkles, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { useOptionalClassSpace } from '../../context/ClassSpaceContext';
+import { useApp } from '../../context/AppContext';
 import { normalizeJoinCode, isValidJoinCode } from '../../utils/classSpaceUtils';
 import { classSpaceService } from '../../services/classSpaceService';
 import { ClassSpaceWorkspace } from '../../types/classSpace';
@@ -18,6 +19,7 @@ export const JoinWorkspaceModal: React.FC<JoinWorkspaceModalProps> = ({
 }) => {
   const classSpace = useOptionalClassSpace();
   const joinWorkspaceByCode = classSpace?.joinWorkspaceByCode;
+  const { updateSettings } = useApp();
 
   const [code, setCode] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -99,6 +101,7 @@ export const JoinWorkspaceModal: React.FC<JoinWorkspaceModalProps> = ({
       if (res.error) {
         setError(res.error);
       } else if (res.workspace) {
+        updateSettings({ userMode: 'class_based' });
         onJoined?.(res.workspace.id);
         onClose();
       }

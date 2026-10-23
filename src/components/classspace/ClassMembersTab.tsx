@@ -29,15 +29,16 @@ export const ClassMembersTab: React.FC = () => {
   // Filter members based on query and role filter
   const filteredMembers = useMemo(() => {
     return members.filter((m) => {
-      const name = m.displayName || 'Member';
-      const email = m.email || '';
+      const isCurrentUser = m.id === currentMember?.id || m.userId === currentMember?.userId;
+      const name = isCurrentUser ? (currentMember?.displayName || m.displayName) : (m.displayName || 'Member');
+      const email = isCurrentUser ? (currentMember?.email || m.email || '') : (m.email || '');
       const matchesSearch =
         name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         email.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesRole = roleFilter === 'all' || m.role === roleFilter;
       return matchesSearch && matchesRole;
     });
-  }, [members, searchQuery, roleFilter]);
+  }, [members, currentMember, searchQuery, roleFilter]);
 
   // Role counts
   const counts = useMemo(() => {
@@ -214,9 +215,9 @@ export const ClassMembersTab: React.FC = () => {
         ) : (
           <div className="divide-y divide-border">
             {filteredMembers.map((member) => {
-              const isCurrentUser = member.id === currentMember?.id;
-              const name = member.displayName || 'Member';
-              const email = member.email || 'classmate@edu.com';
+              const isCurrentUser = member.id === currentMember?.id || member.userId === currentMember?.userId;
+              const name = isCurrentUser ? (currentMember?.displayName || member.displayName) : (member.displayName || 'Member');
+              const email = isCurrentUser ? (currentMember?.email || member.email || 'No email provided') : (member.email || 'classmate@edu.com');
               const initials = getAvatarInitials(name);
               const fallbackBg = getAvatarBgColor(name);
 

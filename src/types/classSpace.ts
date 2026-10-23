@@ -179,6 +179,7 @@ export interface ClassNotification {
 export interface ClassUserProfile {
   userId: string;
   displayName: string;
+  email?: string;
   avatarUrl?: string;
   notificationPreferences: {
     timetableAlerts: boolean;

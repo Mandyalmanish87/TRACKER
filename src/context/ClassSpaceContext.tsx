@@ -153,14 +153,26 @@ export const useOptionalClassSpace = () => useContext(ClassSpaceContext);
 export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { authUser, state: appState } = useApp();
 
-  // Active student identity (falls back to demo student if not logged in to enable exploration)
+  // Active student identity (syncs with user profile email, display name, and avatar)
   const effectiveUser: AuthUser = useMemo(() => {
-    if (authUser) return authUser;
+    const profileEmail = appState.profile?.email?.trim();
+    const profileName = appState.profile?.displayName?.trim();
+    const profileAvatar = appState.profile?.avatarUrl;
+
+    if (authUser) {
+      return {
+        ...authUser,
+        email: profileEmail || authUser.email,
+        name: profileName || authUser.name || 'Scholar Student',
+        avatarUrl: profileAvatar || authUser.avatarUrl,
+      };
+    }
+
     return {
       id: 'usr_google_student_demo',
-      email: 'student.scholar@gmail.com',
-      name: appState.profile?.displayName || 'Scholar Student',
-      avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=96&h=96&fit=crop&crop=faces',
+      email: profileEmail || 'scholar.student@university.edu',
+      name: profileName || 'Scholar Student',
+      avatarUrl: profileAvatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=96&h=96&fit=crop&crop=faces',
       isSimulated: true,
     };
   }, [authUser, appState.profile]);
@@ -190,8 +202,15 @@ export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   // Current membership record in the active workspace
   const currentMember = useMemo(() => {
     if (!activeWorkspace) return null;
-    return members.find((m) => m.userId === effectiveUser.id) || null;
-  }, [activeWorkspace, members, effectiveUser.id]);
+    const mem = members.find((m) => m.userId === effectiveUser.id);
+    if (!mem) return null;
+    return {
+      ...mem,
+      displayName: effectiveUser.name || mem.displayName,
+      email: effectiveUser.email || mem.email,
+      avatarUrl: effectiveUser.avatarUrl || mem.avatarUrl,
+    };
+  }, [activeWorkspace, members, effectiveUser]);
 
   const isOwner = currentMember?.role === 'owner' || (Boolean(activeWorkspace && activeWorkspace.createdBy === effectiveUser.id));
   const isCR = currentMember?.role === 'cr' || isOwner;
@@ -841,11 +860,16 @@ export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const res = await classSpaceService.updateUserProfile(effectiveUser.id, updates);
     if (res.profile) {
       setProfile(res.profile);
-      // Update local members display name/avatar
+      // Update local members display name/avatar/email
       setMembers((prev) =>
         prev.map((m) =>
           m.userId === effectiveUser.id
-            ? { ...m, displayName: res.profile!.displayName, avatarUrl: res.profile!.avatarUrl }
+            ? {
+                ...m,
+                displayName: res.profile!.displayName,
+                avatarUrl: res.profile!.avatarUrl,
+                email: res.profile!.email || m.email,
+              }
             : m
         )
       );
