@@ -176,6 +176,7 @@ returns boolean
 language sql
 security definer
 stable
+set search_path = public
 as $$
   select exists (
     select 1 from public.class_members
@@ -183,11 +184,15 @@ as $$
   );
 $$;
 
+revoke all on function public.is_class_member(uuid, uuid) from public, anon;
+grant execute on function public.is_class_member(uuid, uuid) to authenticated, service_role;
+
 create or replace function public.is_class_admin(ws_id uuid, u_id uuid)
 returns boolean
 language sql
 security definer
 stable
+set search_path = public
 as $$
   select exists (
     select 1 from public.class_members
@@ -195,17 +200,144 @@ as $$
   );
 $$;
 
+revoke all on function public.is_class_admin(uuid, uuid) from public, anon;
+grant execute on function public.is_class_admin(uuid, uuid) to authenticated, service_role;
+
 create or replace function public.is_class_cr(ws_id uuid, u_id uuid)
 returns boolean
 language sql
 security definer
 stable
+set search_path = public
 as $$
   select exists (
     select 1 from public.class_members
     where workspace_id = ws_id and user_id = u_id and role in ('owner', 'cr')
   );
 $$;
+
+revoke all on function public.is_class_cr(uuid, uuid) from public, anon;
+grant execute on function public.is_class_cr(uuid, uuid) to authenticated, service_role;
+
+-- Secure RPC to lookup workspace info by join code without exposing entire directory
+create or replace function public.lookup_workspace_by_join_code(p_join_code text)
+returns table (
+  id uuid,
+  name text,
+  college text,
+  institution text,
+  department text,
+  section text,
+  batch text,
+  description text
+)
+language plpgsql
+security definer
+stable
+set search_path = public
+as $$
+declare
+  v_normalized text;
+begin
+  if auth.role() <> 'authenticated' then
+    return;
+  end if;
+
+  v_normalized := upper(regexp_replace(trim(p_join_code), '[\s-]', '', 'g'));
+  if length(v_normalized) <> 5 or v_normalized !~ '^[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{5}$' then
+    return;
+  end if;
+
+  return query
+  select
+    w.id,
+    w.name,
+    w.college,
+    w.institution,
+    w.department,
+    w.section,
+    w.batch,
+    w.description
+  from public.class_workspaces w
+  where upper(w.join_code) = v_normalized
+  limit 1;
+end;
+$$;
+
+revoke all on function public.lookup_workspace_by_join_code(text) from public, anon;
+grant execute on function public.lookup_workspace_by_join_code(text) to authenticated, service_role;
+
+-- Trusted database function to validate join code before creating membership
+create or replace function public.join_class_workspace(
+  p_join_code text,
+  p_display_name text,
+  p_avatar_url text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid;
+  v_user_email text;
+  v_normalized_code text;
+  v_ws record;
+  v_existing_member record;
+  v_new_member record;
+begin
+  v_user_id := auth.uid();
+  if v_user_id is null or auth.role() <> 'authenticated' then
+    return jsonb_build_object('error', 'Authentication required');
+  end if;
+
+  select email into v_user_email from auth.users where id = v_user_id;
+
+  v_normalized_code := upper(regexp_replace(trim(p_join_code), '[\s-]', '', 'g'));
+  if length(v_normalized_code) <> 5 or v_normalized_code !~ '^[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{5}$' then
+    return jsonb_build_object('error', 'Invalid join code format. Must be 5 alphanumeric characters.');
+  end if;
+
+  select * into v_ws
+  from public.class_workspaces
+  where upper(join_code) = v_normalized_code;
+
+  if v_ws.id is null then
+    return jsonb_build_object('error', 'No ClassSpace found with this Join Code. Please verify with your CR.');
+  end if;
+
+  select * into v_existing_member
+  from public.class_members
+  where workspace_id = v_ws.id and user_id = v_user_id;
+
+  if v_existing_member.id is not null then
+    return jsonb_build_object('error', 'You are already a member of this ClassSpace.');
+  end if;
+
+  insert into public.class_members (
+    workspace_id,
+    user_id,
+    role,
+    display_name,
+    avatar_url
+  ) values (
+    v_ws.id,
+    v_user_id,
+    'member',
+    coalesce(nullif(trim(p_display_name), ''), split_part(coalesce(v_user_email, 'user@example.com'), '@', 1)),
+    p_avatar_url
+  )
+  returning * into v_new_member;
+
+  return jsonb_build_object(
+    'workspace', row_to_json(v_ws),
+    'member', row_to_json(v_new_member)
+  );
+end;
+$$;
+
+revoke all on function public.join_class_workspace(text, text, text) from public, anon;
+grant execute on function public.join_class_workspace(text, text, text) to authenticated, service_role;
 
 
 -- ==============================================================================
@@ -225,15 +357,16 @@ alter table public.class_notifications enable row level security;
 alter table public.class_profiles enable row level security;
 
 -- 1. class_workspaces
--- Members can view their workspaces; any authenticated user can view by join code (lookup only)
-create policy "Members and join-code lookups can view workspaces"
+-- Only members and workspace creators can view their workspaces
+drop policy if exists "Members and join-code lookups can view workspaces" on public.class_workspaces;
+drop policy if exists "Members and creators can view workspaces" on public.class_workspaces;
+create policy "Members and creators can view workspaces"
   on public.class_workspaces
   for select
   using (
     auth.role() = 'authenticated' and (
       created_by = auth.uid() or
-      public.is_class_member(id, auth.uid()) or
-      join_code is not null
+      public.is_class_member(id, auth.uid())
     )
   );
 
@@ -258,14 +391,17 @@ create policy "Workspace members can view member directory"
   for select
   using (public.is_class_member(workspace_id, auth.uid()));
 
-create policy "Users can join workspaces as member or CR upon creation"
+drop policy if exists "Users can join workspaces as member or CR upon creation" on public.class_members;
+drop policy if exists "Workspace creators can insert their initial membership upon creation" on public.class_members;
+create policy "Workspace creators can insert their initial membership upon creation"
   on public.class_members
   for insert
   with check (
     auth.uid() = user_id and
-    (role = 'member' or (role = 'cr' and exists (
+    role in ('owner', 'cr') and
+    exists (
       select 1 from public.class_workspaces where id = workspace_id and created_by = auth.uid()
-    )))
+    )
   );
 
 create policy "Users can update their own membership profile; CR can update roles"
@@ -416,14 +552,43 @@ create policy "Users can delete their own notifications"
   using (auth.uid() = user_id);
 
 -- 10. class_profiles
-create policy "Anyone can read member profiles"
+-- Users can view their own profile, or verified co-members sharing a common workspace
+drop policy if exists "Anyone can read member profiles" on public.class_profiles;
+drop policy if exists "Users can view their own profile or co-members can view profile" on public.class_profiles;
+create policy "Users can view their own profile or co-members can view profile"
   on public.class_profiles
   for select
-  using (auth.role() = 'authenticated');
+  using (
+    auth.role() = 'authenticated' and (
+      auth.uid() = user_id or
+      exists (
+        select 1
+        from public.class_members m1
+        join public.class_members m2 on m1.workspace_id = m2.workspace_id
+        where m1.user_id = auth.uid() and m2.user_id = class_profiles.user_id
+      )
+    )
+  );
 
-create policy "Users can manage only their own profile"
+drop policy if exists "Users can manage only their own profile" on public.class_profiles;
+drop policy if exists "Users can insert only their own profile" on public.class_profiles;
+drop policy if exists "Users can update only their own profile" on public.class_profiles;
+drop policy if exists "Users can delete only their own profile" on public.class_profiles;
+
+create policy "Users can insert only their own profile"
   on public.class_profiles
-  for all
+  for insert
+  with check (auth.uid() = user_id);
+
+create policy "Users can update only their own profile"
+  on public.class_profiles
+  for update
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+create policy "Users can delete only their own profile"
+  on public.class_profiles
+  for delete
   using (auth.uid() = user_id);
 
 
@@ -437,11 +602,13 @@ values ('classspace-avatars', 'classspace-avatars', true)
 on conflict (id) do update set public = true;
 
 -- Storage policies: Public read, users can upload/update/delete only their own folder
+drop policy if exists "Public read for classspace avatars" on storage.objects;
 create policy "Public read for classspace avatars"
   on storage.objects
   for select
   using (bucket_id = 'classspace-avatars');
 
+drop policy if exists "Users can upload their own avatar" on storage.objects;
 create policy "Users can upload their own avatar"
   on storage.objects
   for insert
@@ -451,19 +618,28 @@ create policy "Users can upload their own avatar"
     (storage.foldername(name))[1] = auth.uid()::text
   );
 
+drop policy if exists "Users can update their own avatar" on storage.objects;
 create policy "Users can update their own avatar"
   on storage.objects
   for update
   using (
     bucket_id = 'classspace-avatars' and
+    auth.role() = 'authenticated' and
+    (storage.foldername(name))[1] = auth.uid()::text
+  )
+  with check (
+    bucket_id = 'classspace-avatars' and
+    auth.role() = 'authenticated' and
     (storage.foldername(name))[1] = auth.uid()::text
   );
 
+drop policy if exists "Users can delete their own avatar" on storage.objects;
 create policy "Users can delete their own avatar"
   on storage.objects
   for delete
   using (
     bucket_id = 'classspace-avatars' and
+    auth.role() = 'authenticated' and
     (storage.foldername(name))[1] = auth.uid()::text
   );
 
