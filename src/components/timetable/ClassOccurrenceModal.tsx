@@ -1,10 +1,19 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   X,
   RotateCcw,
   Ban,
 } from 'lucide-react';
-import { ResolvedCalendarEvent } from '../../types';
+import {
+  ResolvedCalendarEvent,
+  TimetableSlot,
+  OccurrenceOverride,
+  ExtraClass,
+  Subject,
+} from '../../types';
+import { useOptionalApp } from '../../context/AppContext';
+import { findScheduleConflicts } from '../../utils/scheduleResolver';
+import { ScheduleConflictBanner } from './ScheduleConflictBanner';
 
 interface ClassOccurrenceModalProps {
   event: ResolvedCalendarEvent | null;
@@ -25,6 +34,11 @@ interface ClassOccurrenceModalProps {
   onCancelOccurrence: (slotId: string, originalDate: string) => void;
   onRestoreOccurrence: (slotId: string, originalDate: string) => void;
   onDeleteSlot?: (slotId: string) => void;
+  // Optional timetable context props for standalone usage/testing
+  timetable?: TimetableSlot[];
+  overrides?: OccurrenceOverride[];
+  extraClasses?: ExtraClass[];
+  subjects?: Subject[];
 }
 
 export const ClassOccurrenceModal: React.FC<ClassOccurrenceModalProps> = ({
@@ -38,8 +52,18 @@ export const ClassOccurrenceModal: React.FC<ClassOccurrenceModalProps> = ({
   onCancelOccurrence,
   onRestoreOccurrence,
   onDeleteSlot: _onDeleteSlot,
+  timetable: propTimetable,
+  overrides: propOverrides,
+  extraClasses: propExtraClasses,
+  subjects: propSubjects,
 }) => {
   if (!isOpen || !event) return null;
+
+  const app = useOptionalApp();
+  const timetable = propTimetable ?? app?.state.timetable ?? [];
+  const overrides = propOverrides ?? app?.state.occurrenceOverrides ?? [];
+  const extraClasses = propExtraClasses ?? app?.state.extraClasses ?? [];
+  const subjects = propSubjects ?? app?.state.subjects ?? [];
 
   const [mode, setMode] = useState<'view' | 'reschedule'>('view');
   const [newDate, setNewDate] = useState(event.date);
@@ -52,6 +76,31 @@ export const ClassOccurrenceModal: React.FC<ClassOccurrenceModalProps> = ({
   const isRescheduled = event.source === 'rescheduled';
   const isCancelled = Boolean(event.isCancelled);
   const isRecurring = Boolean(event.slotId);
+
+  // Recalculate schedule conflicts whenever date or start/end times change
+  const conflicts = useMemo(() => {
+    if (mode !== 'reschedule' || !newDate || !newStartTime || !newEndTime) return [];
+    return findScheduleConflicts({
+      date: newDate,
+      startTime: newStartTime,
+      endTime: newEndTime,
+      timetable,
+      overrides,
+      extraClasses,
+      subjects,
+      ignoreEvent: event,
+    });
+  }, [
+    mode,
+    newDate,
+    newStartTime,
+    newEndTime,
+    timetable,
+    overrides,
+    extraClasses,
+    subjects,
+    event,
+  ]);
 
   const handleRescheduleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -248,10 +297,14 @@ export const ClassOccurrenceModal: React.FC<ClassOccurrenceModalProps> = ({
             )}
 
             <div>
-              <label className="block text-xs font-semibold text-espresso-700 dark:text-espresso-300 mb-1 uppercase font-mono">
+              <label
+                htmlFor="reschedule-date"
+                className="block text-xs font-semibold text-espresso-700 dark:text-espresso-300 mb-1 uppercase font-mono"
+              >
                 New Date
               </label>
               <input
+                id="reschedule-date"
                 type="date"
                 required
                 value={newDate}
@@ -262,10 +315,14 @@ export const ClassOccurrenceModal: React.FC<ClassOccurrenceModalProps> = ({
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-semibold text-espresso-700 dark:text-espresso-300 mb-1 uppercase font-mono">
+                <label
+                  htmlFor="reschedule-start-time"
+                  className="block text-xs font-semibold text-espresso-700 dark:text-espresso-300 mb-1 uppercase font-mono"
+                >
                   Start Time
                 </label>
                 <input
+                  id="reschedule-start-time"
                   type="time"
                   required
                   value={newStartTime}
@@ -274,10 +331,14 @@ export const ClassOccurrenceModal: React.FC<ClassOccurrenceModalProps> = ({
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-espresso-700 dark:text-espresso-300 mb-1 uppercase font-mono">
+                <label
+                  htmlFor="reschedule-end-time"
+                  className="block text-xs font-semibold text-espresso-700 dark:text-espresso-300 mb-1 uppercase font-mono"
+                >
                   End Time
                 </label>
                 <input
+                  id="reschedule-end-time"
                   type="time"
                   required
                   value={newEndTime}
@@ -288,10 +349,14 @@ export const ClassOccurrenceModal: React.FC<ClassOccurrenceModalProps> = ({
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-espresso-700 dark:text-espresso-300 mb-1 uppercase font-mono">
+              <label
+                htmlFor="reschedule-room"
+                className="block text-xs font-semibold text-espresso-700 dark:text-espresso-300 mb-1 uppercase font-mono"
+              >
                 Room / Location (Optional)
               </label>
               <input
+                id="reschedule-room"
                 type="text"
                 value={newRoom}
                 onChange={(e) => setNewRoom(e.target.value)}
@@ -301,10 +366,14 @@ export const ClassOccurrenceModal: React.FC<ClassOccurrenceModalProps> = ({
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-espresso-700 dark:text-espresso-300 mb-1 uppercase font-mono">
+              <label
+                htmlFor="reschedule-notes"
+                className="block text-xs font-semibold text-espresso-700 dark:text-espresso-300 mb-1 uppercase font-mono"
+              >
                 Notes (Optional)
               </label>
               <input
+                id="reschedule-notes"
                 type="text"
                 value={newNotes}
                 onChange={(e) => setNewNotes(e.target.value)}
@@ -312,6 +381,13 @@ export const ClassOccurrenceModal: React.FC<ClassOccurrenceModalProps> = ({
                 className="w-full px-3 py-2 rounded-xl border border-ivory-300 dark:border-espresso-700 bg-ivory-50 dark:bg-espresso-850 text-xs text-espresso-950 dark:text-ivory-50"
               />
             </div>
+
+            {conflicts.length > 0 && (
+              <ScheduleConflictBanner
+                conflicts={conflicts}
+                message="This proposed rescheduled time overlaps with existing class"
+              />
+            )}
 
             <div className="flex items-center justify-end gap-2 pt-2">
               <button

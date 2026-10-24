@@ -4,6 +4,7 @@ import {
   ExtraClass,
   ResolvedCalendarEvent,
   DayOfWeek,
+  Subject,
 } from '../types';
 
 /**
@@ -212,4 +213,109 @@ export function getAttendanceRequirement(attendanceRequirement?: number): number
     return attendanceRequirement;
   }
   return 75;
+}
+
+export interface ScheduleConflict {
+  event: ResolvedCalendarEvent;
+  subjectName?: string;
+  subjectCode?: string;
+  startTime: string;
+  endTime: string;
+}
+
+export interface ConflictCheckParams {
+  date: string; // YYYY-MM-DD
+  startTime: string; // HH:mm
+  endTime: string; // HH:mm
+  timetable: TimetableSlot[];
+  overrides?: OccurrenceOverride[];
+  extraClasses?: ExtraClass[];
+  subjects?: Subject[];
+  /** Optional occurrence to ignore (e.g. the class currently being rescheduled) */
+  ignoreEvent?: {
+    slotId?: string;
+    overrideId?: string;
+    extraClassId?: string;
+    occurrenceKey?: string;
+  } | null;
+  /** Optional pre-resolved occurrences (e.g. from ClassSpace) */
+  existingOccurrences?: ResolvedCalendarEvent[];
+}
+
+/**
+ * Check if two time intervals [startA, endA) and [startB, endB) strictly overlap.
+ * Touching intervals (e.g. 10:00-11:00 and 11:00-12:00) do NOT overlap.
+ */
+export function doIntervalsOverlap(startA: string, endA: string, startB: string, endB: string): boolean {
+  if (startA >= endA || startB >= endB) return false;
+  return startA < endB && startB < endA;
+}
+
+/**
+ * Detect time conflicts between a proposed class interval and other active classes on the same date.
+ * - Uses resolved occurrences (recurring, rescheduled, extra classes).
+ * - Ignores cancelled occurrences.
+ * - Ignores the class being edited (self-conflict).
+ * - Requires start < end for the proposed class (invalid intervals return []).
+ */
+export function findScheduleConflicts(params: ConflictCheckParams): ScheduleConflict[] {
+  const {
+    date,
+    startTime,
+    endTime,
+    timetable,
+    overrides,
+    extraClasses,
+    subjects,
+    ignoreEvent,
+    existingOccurrences,
+  } = params;
+
+  // Validate proposed interval (Requirement 8: invalid intervals do not trigger conflicts)
+  if (!date || !startTime || !endTime || startTime >= endTime) {
+    return [];
+  }
+
+  // Get active resolved occurrences for the target date
+  let resolved: ResolvedCalendarEvent[] = [];
+  if (existingOccurrences && existingOccurrences.length > 0) {
+    resolved = existingOccurrences.filter((occ) => occ.date === date);
+  } else {
+    const targetDate = parseDateStr(date);
+    resolved = resolveScheduleForDate(
+      timetable || [],
+      overrides || [],
+      extraClasses || [],
+      targetDate
+    );
+  }
+
+  const conflicts: ScheduleConflict[] = [];
+
+  for (const cand of resolved) {
+    // Requirement 2: Ignore cancelled occurrences
+    if (cand.isCancelled) continue;
+
+    // Requirement 3: Do not report the class being edited as conflicting with itself
+    if (ignoreEvent) {
+      if (ignoreEvent.occurrenceKey && cand.occurrenceKey === ignoreEvent.occurrenceKey) continue;
+      if (ignoreEvent.slotId && cand.slotId === ignoreEvent.slotId) continue;
+      if (ignoreEvent.extraClassId && cand.extraClassId === ignoreEvent.extraClassId) continue;
+      if (ignoreEvent.overrideId && cand.overrideId === ignoreEvent.overrideId) continue;
+    }
+
+    // Requirement 1 & 4: Strict intersection check
+    if (doIntervalsOverlap(startTime, endTime, cand.startTime, cand.endTime)) {
+      const subject = subjects?.find((s) => s.id === cand.subjectId);
+      conflicts.push({
+        event: cand,
+        subjectName: subject?.name,
+        subjectCode: subject?.code,
+        startTime: cand.startTime,
+        endTime: cand.endTime,
+      });
+    }
+  }
+
+  return conflicts;
 }

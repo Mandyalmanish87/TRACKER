@@ -1,5 +1,9 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Calendar, Clock, ArrowRight, X } from 'lucide-react';
+import { useOptionalApp } from '../../context/AppContext';
+import { findScheduleConflicts } from '../../utils/scheduleResolver';
+import { ScheduleConflictBanner } from './ScheduleConflictBanner';
+import { TimetableSlot, OccurrenceOverride, ExtraClass, Subject } from '../../types';
 
 export interface RescheduleProposal {
   slotId?: string;
@@ -21,6 +25,10 @@ interface RecurrencePromptModalProps {
   onConfirmSingle: (proposal: RescheduleProposal) => void;
   onConfirmAll: (proposal: RescheduleProposal) => void;
   onCancel: () => void;
+  timetable?: TimetableSlot[];
+  overrides?: OccurrenceOverride[];
+  extraClasses?: ExtraClass[];
+  subjects?: Subject[];
 }
 
 export const RecurrencePromptModal: React.FC<RecurrencePromptModalProps> = ({
@@ -29,8 +37,36 @@ export const RecurrencePromptModal: React.FC<RecurrencePromptModalProps> = ({
   onConfirmSingle,
   onConfirmAll,
   onCancel,
+  timetable: propTimetable,
+  overrides: propOverrides,
+  extraClasses: propExtraClasses,
+  subjects: propSubjects,
 }) => {
   if (!isOpen || !proposal) return null;
+
+  const app = useOptionalApp();
+  const timetable = propTimetable ?? app?.state.timetable ?? [];
+  const overrides = propOverrides ?? app?.state.occurrenceOverrides ?? [];
+  const extraClasses = propExtraClasses ?? app?.state.extraClasses ?? [];
+  const subjects = propSubjects ?? app?.state.subjects ?? [];
+
+  const conflicts = useMemo(() => {
+    if (!isOpen || !proposal || !proposal.newDate || !proposal.newStartTime || !proposal.newEndTime) return [];
+    return findScheduleConflicts({
+      date: proposal.newDate,
+      startTime: proposal.newStartTime,
+      endTime: proposal.newEndTime,
+      timetable,
+      overrides,
+      extraClasses,
+      subjects,
+      ignoreEvent: {
+        slotId: proposal.slotId,
+        extraClassId: proposal.extraClassId,
+        occurrenceKey: proposal.occurrenceKey,
+      },
+    });
+  }, [isOpen, proposal, timetable, overrides, extraClasses, subjects]);
 
   return (
     <div
@@ -82,6 +118,13 @@ export const RecurrencePromptModal: React.FC<RecurrencePromptModalProps> = ({
             </span>
           </div>
         </div>
+
+        {conflicts.length > 0 && (
+          <ScheduleConflictBanner
+            conflicts={conflicts}
+            message="The target time slot overlaps with existing class"
+          />
+        )}
 
         <p className="text-xs text-espresso-600 dark:text-ivory-300">
           This class is part of a weekly recurring schedule. How would you like to apply this change?

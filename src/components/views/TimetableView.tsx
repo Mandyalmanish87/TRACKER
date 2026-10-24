@@ -17,9 +17,11 @@ import { useApp } from '../../context/AppContext';
 import { DayOfWeek, TimetableSlot, Subject, ResolvedCalendarEvent } from '../../types';
 import { GptTimetableImportModal } from '../timetable/GptTimetableImportModal';
 import { ClassOccurrenceModal } from '../timetable/ClassOccurrenceModal';
+import { ScheduleConflictBanner } from '../timetable/ScheduleConflictBanner';
 import { ConfirmModal } from '../common/ConfirmModal';
 import { BlockCalendar } from '../calendar/BlockCalendar';
 import { useOptionalClassSpace } from '../../context/ClassSpaceContext';
+import { findScheduleConflicts } from '../../utils/scheduleResolver';
 
 type CalendarViewMode = 'month' | 'week' | 'day' | 'list';
 
@@ -101,6 +103,29 @@ export const TimetableView: React.FC = () => {
   const [extraEndTime, setExtraEndTime] = useState('10:00');
   const [extraRoom, setExtraRoom] = useState('');
   const [extraNotes, setExtraNotes] = useState('');
+
+  // Conflict detection for Add Extra Class modal
+  const extraConflicts = useMemo(() => {
+    if (!isAddExtraModalOpen || !extraDate || !extraStartTime || !extraEndTime) return [];
+    return findScheduleConflicts({
+      date: extraDate,
+      startTime: extraStartTime,
+      endTime: extraEndTime,
+      timetable: state.timetable || [],
+      overrides: state.occurrenceOverrides || [],
+      extraClasses: state.extraClasses || [],
+      subjects: state.subjects || [],
+    });
+  }, [
+    isAddExtraModalOpen,
+    extraDate,
+    extraStartTime,
+    extraEndTime,
+    state.timetable,
+    state.occurrenceOverrides,
+    state.extraClasses,
+    state.subjects,
+  ]);
 
   // Add / Edit Modal state
   const [isAddEditModalOpen, setIsAddEditModalOpen] = useState(false);
@@ -920,6 +945,13 @@ export const TimetableView: React.FC = () => {
                   className="w-full px-3.5 py-2 rounded-xl border border-ivory-300 dark:border-espresso-700 bg-ivory-50 dark:bg-espresso-850 text-xs text-espresso-950 dark:text-ivory-50"
                 />
               </div>
+
+              {extraConflicts.length > 0 && (
+                <ScheduleConflictBanner
+                  conflicts={extraConflicts}
+                  message="This proposed extra class overlaps with existing class"
+                />
+              )}
 
               <div className="flex justify-end gap-2 pt-2">
                 <button

@@ -2485,6 +2485,10 @@ export const useApp = (): AppContextType => {
   return context;
 };
 
+export const useOptionalApp = (): AppContextType | undefined => {
+  return useContext(AppContext);
+};
+
 
 
 
