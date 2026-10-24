@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import App from '../src/App';
 import { storageService } from '../src/services/storage';
@@ -19,17 +19,23 @@ describe('TRACKER App Component & Milestone 1 Verification', () => {
   });
 
   it('renders today classes and marks attendance when clicking Present', () => {
-    render(<App />);
-    
-    // Find Present buttons on today's timetable slots
-    const presentButtons = screen.getAllByRole('button', { name: /present/i });
-    expect(presentButtons.length).toBeGreaterThan(0);
+    // Lock system time to a Wednesday (2026-10-14) so today matches sample data timetable slots
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date('2026-10-14T10:00:00Z'));
+    try {
+      render(<App />);
+      // Find Present buttons on today's timetable slots
+      const presentButtons = screen.getAllByRole('button', { name: /present/i });
+      expect(presentButtons.length).toBeGreaterThan(0);
 
-    // Click present on the first class
-    fireEvent.click(presentButtons[0]);
+      // Click present on the first class
+      fireEvent.click(presentButtons[0]);
 
-    // Check that button still exists and state updated
-    expect(presentButtons[0]).toBeInTheDocument();
+      // Check that button still exists and state updated
+      expect(presentButtons[0]).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('allows switching between Light, Dark, and System modes', () => {

@@ -61,7 +61,12 @@ export function resolveSchedule(
   endDate: Date,
 ): ResolvedCalendarEvent[] {
   const events: ResolvedCalendarEvent[] = [];
-  const dates = getDatesInRange(startDate, endDate);
+
+  // Normalize dates to start of day and end of day so time-of-day in Date objects doesn't break comparisons
+  const normStart = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+  const normEnd = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate(), 23, 59, 59, 999);
+
+  const dates = getDatesInRange(normStart, normEnd);
 
   // Index overrides by "slotId::originalDate" for O(1) lookup
   const overrideMap = new Map<string, OccurrenceOverride>();
@@ -138,7 +143,7 @@ export function resolveSchedule(
     if (ov.type !== 'reschedule' || !ov.newDate) continue;
 
     const newDateObj = parseDateStr(ov.newDate);
-    if (newDateObj < startDate || newDateObj > endDate) continue;
+    if (newDateObj < normStart || newDateObj > normEnd) continue;
 
     const slot = timetable.find((t) => t.id === ov.slotId);
     if (!slot) continue;
@@ -162,7 +167,7 @@ export function resolveSchedule(
   // 3. Add extra one-off classes
   for (const extra of extraClasses) {
     const extraDateObj = parseDateStr(extra.date);
-    if (extraDateObj < startDate || extraDateObj > endDate) continue;
+    if (extraDateObj < normStart || extraDateObj > normEnd) continue;
 
     events.push({
       occurrenceKey: `extra::${extra.id}`,
