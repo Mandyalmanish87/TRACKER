@@ -31,16 +31,30 @@ if (isSupabaseConfigured) {
 
 export const getSupabaseClient = () => supabaseClient;
 
-// Simulated storage key for offline test-drive mode
-const MOCK_AUTH_STORAGE_KEY = 'tracker_mock_auth_user';
+// Test-only user fixture container (strictly isolated to test environments)
+let testUserFixture: AuthUser | null = null;
 
 export const authService = {
   isConfigured: isSupabaseConfigured,
 
   /**
+   * Test-only helper: strictly isolated to test runs and ignored in production builds.
+   */
+  _setTestUser(user: AuthUser | null): void {
+    if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'test') {
+      testUserFixture = user;
+    }
+  },
+
+  /**
    * Get currently authenticated user
    */
   async getCurrentUser(): Promise<AuthUser | null> {
+    // In test environment, return test fixture if set
+    if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'test' && testUserFixture) {
+      return testUserFixture;
+    }
+
     if (supabaseClient) {
       try {
         const { data: { user }, error } = await supabaseClient.auth.getUser();
@@ -57,16 +71,7 @@ export const authService = {
       }
     }
 
-    // Check simulated user
-    try {
-      const stored = localStorage.getItem(MOCK_AUTH_STORAGE_KEY);
-      if (stored) {
-        return JSON.parse(stored) as AuthUser;
-      }
-    } catch {
-      // Ignored
-    }
-
+    // No simulated user in production: unconfigured means unauthenticated
     return null;
   },
 
@@ -89,40 +94,23 @@ export const authService = {
       }
     }
 
-    // Fallback: Test-drive simulated Google account
-    const simulatedUser: AuthUser = {
-      id: 'usr_google_student_demo',
-      email: 'student.scholar@gmail.com',
-      name: 'Scholar Student',
-      avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=96&h=96&fit=crop&crop=faces',
-      isSimulated: true,
+    // Never fabricate a mock Google session when cloud is unconfigured
+    return {
+      error: 'Google Sign-In is unavailable: Cloud services are not configured. To enable cloud synchronization, configure VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.',
     };
-
-    try {
-      localStorage.setItem(MOCK_AUTH_STORAGE_KEY, JSON.stringify(simulatedUser));
-    } catch {
-      // Ignored
-    }
-
-    return { user: simulatedUser };
   },
 
   /**
    * Sign out
    */
   async signOut(): Promise<void> {
+    testUserFixture = null;
     if (supabaseClient) {
       try {
         await supabaseClient.auth.signOut();
       } catch (err) {
         console.warn('[AuthService] Supabase sign out error:', err);
       }
-    }
-
-    try {
-      localStorage.removeItem(MOCK_AUTH_STORAGE_KEY);
-    } catch {
-      // Ignored
     }
   },
 
@@ -149,22 +137,7 @@ export const authService = {
       return () => subscription.unsubscribe();
     }
 
-    // Local storage listener for simulated auth across tabs
-    const handleStorage = (e: StorageEvent) => {
-      if (e.key === MOCK_AUTH_STORAGE_KEY) {
-        if (e.newValue) {
-          try {
-            callback(JSON.parse(e.newValue));
-          } catch {
-            callback(null);
-          }
-        } else {
-          callback(null);
-        }
-      }
-    };
-
-    window.addEventListener('storage', handleStorage);
-    return () => window.removeEventListener('storage', handleStorage);
+    // Unconfigured environment: no-op unsubscribe
+    return () => {};
   },
 };

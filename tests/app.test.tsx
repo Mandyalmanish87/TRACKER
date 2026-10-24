@@ -1,10 +1,12 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import App from '../src/App';
+import { storageService } from '../src/services/storage';
 
 describe('TRACKER App Component & Milestone 1 Verification', () => {
   beforeEach(() => {
     localStorage.clear();
+    storageService.populateSampleData();
   });
 
   it('renders the application shell, editorial branding, and navigation', () => {
@@ -48,6 +50,10 @@ describe('TRACKER App Component & Milestone 1 Verification', () => {
     // Click "Clear" on demo records banner
     const clearBtn = screen.getByRole('button', { name: /clear/i });
     fireEvent.click(clearBtn);
+
+    // Confirm in safety modal
+    const confirmBtn = screen.getByRole('button', { name: /clear demo data/i });
+    fireEvent.click(confirmBtn);
 
     // Should now indicate Live Data Mode
     expect(screen.getByText('Live Data Mode')).toBeInTheDocument();

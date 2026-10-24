@@ -614,7 +614,7 @@ describe('ClassSpace UI Component Integration & User Mode', () => {
 
   it('renders only Community and Classmates sub-tabs when user is enrolled', async () => {
     // Seed real user-created workspace
-    const creatorUser = { id: 'usr_google_student_demo', email: 'demo@c.edu', name: 'Demo Student' };
+    const creatorUser = { id: 'usr_local_student', email: 'demo@c.edu', name: 'Demo Student' };
     await classSpaceService.createWorkspace(creatorUser, { name: 'Robotics Engineering — Sec A' });
 
     render(
@@ -726,7 +726,7 @@ describe('ClassSpace UI Component Integration & User Mode', () => {
     storageService.saveData(currentState);
 
     // 2. Create workspace as this student
-    const creatorUser = { id: 'usr_google_student_demo', email: 'aanya.sharma@iitd.ac.in', name: 'Aanya Sharma' };
+    const creatorUser = { id: 'usr_local_student', email: 'aanya.sharma@iitd.ac.in', name: 'Aanya Sharma' };
     await classSpaceService.createWorkspace(creatorUser, { name: 'CSE Batch 2026' });
 
     render(

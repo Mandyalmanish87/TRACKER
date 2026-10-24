@@ -169,10 +169,10 @@ export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
 
     return {
-      id: 'usr_google_student_demo',
-      email: profileEmail || 'scholar.student@university.edu',
-      name: profileName || 'Scholar Student',
-      avatarUrl: profileAvatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=96&h=96&fit=crop&crop=faces',
+      id: 'usr_local_student',
+      email: profileEmail || 'student@tracker.local',
+      name: profileName || 'Student',
+      avatarUrl: profileAvatar,
       isSimulated: true,
     };
   }, [authUser, appState.profile]);

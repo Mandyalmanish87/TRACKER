@@ -35,7 +35,7 @@ import {
   ErrorLogEntry,
   CalendarEvent,
 } from '../types';
-import { storageService, DEFAULT_SYLLABUS_SUBJECTS } from '../services/storage';
+import { storageService, DEFAULT_SYLLABUS_SUBJECTS, STORAGE_KEY_V2 } from '../services/storage';
 import { getAttendanceRequirement } from '../utils/scheduleResolver';
 import { completeReviewStep, DEFAULT_REVIEW_INTERVALS, hasActiveReviewForTopic } from '../utils/spacedRepetitionUtils';
 import {
@@ -57,7 +57,7 @@ interface AppContextType {
   authUser: AuthUser | null;
   syncStatus: 'idle' | 'syncing' | 'synced' | 'error' | 'offline';
   lastSyncedAt: Date | null;
-  signInWithGoogle: () => Promise<void>;
+  signInWithGoogle: () => Promise<{ success: boolean; error?: string }>;
   signOut: () => Promise<void>;
   syncNow: () => Promise<void>;
   // Attendance actions
@@ -297,13 +297,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return () => clearTimeout(timeout);
   }, [state, authUser, conflictData]);
 
-  const signInWithGoogle = async () => {
+  const signInWithGoogle = async (): Promise<{ success: boolean; error?: string }> => {
     setSyncStatus('syncing');
     const res = await authService.signInWithGoogle();
     if (res.user) {
       setAuthUser(res.user);
       await handleInitialSync(res.user);
+      return { success: true };
     }
+    setSyncStatus('idle');
+    if (res.error) {
+      return { success: false, error: res.error };
+    }
+    return { success: false };
   };
 
   const signOut = async () => {
@@ -795,7 +801,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setState((prev) => {
       const updatedEvents = (prev.events || []).map((evt) => {
         if (evt.id !== id) return evt;
-        const updated = { ...evt, ...updates };
+        const updated = { ...evt, ...updates, isSample: false };
         if (updates.isCompleted !== undefined && updates.status === undefined) {
           updated.status = updates.isCompleted ? 'done' : 'todo';
           updated.completedAt = updates.isCompleted ? new Date().toISOString() : undefined;
@@ -811,6 +817,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           dueDate: updates.date ?? rem.dueDate,
           priority: updates.priority ?? rem.priority,
           isCompleted: updates.isCompleted !== undefined ? updates.isCompleted : rem.isCompleted,
+          isSample: false,
         };
       });
 
@@ -1504,7 +1511,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       const updated = (prev.tasks || []).map((t) =>
-        t.id === id ? { ...t, ...updates, completedAt } : t
+        t.id === id ? { ...t, ...updates, completedAt, isSample: false } : t
       );
       return { ...prev, tasks: updated };
     });
@@ -2313,7 +2320,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // ── Milestone 8: Full Reset ──────────────────────────────────────────────
 
   const fullReset = (): void => {
-    localStorage.clear();
+    localStorage.removeItem(STORAGE_KEY_V2);
+    localStorage.removeItem('tracker_app_data_v1');
+    localStorage.removeItem('tracker_active_focus_timer');
     setState(storageService.loadData());
     setActiveRadioIndex(null);
   };

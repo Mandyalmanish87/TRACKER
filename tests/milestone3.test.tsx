@@ -1,12 +1,13 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import App from '../src/App';
-import { loadData, saveData } from '../src/services/storage';
+import { loadData, saveData, storageService } from '../src/services/storage';
 import { SyllabusSubject, TimetableImportPayload } from '../src/types';
 
 describe('Milestone 3: Syllabus Tracker, Smart Calendar & GPT Timetable Importer', () => {
   beforeEach(() => {
     localStorage.clear();
+    storageService.populateSampleData();
     document.documentElement.className = '';
     document.documentElement.removeAttribute('data-accent');
     document.body.className = '';
@@ -14,6 +15,7 @@ describe('Milestone 3: Syllabus Tracker, Smart Calendar & GPT Timetable Importer
 
   describe('Syllabus Data Persistence & Calculations', () => {
     it('initializes with default starter subjects and preserves them', () => {
+      storageService.populateSampleData();
       const data = loadData();
       expect(data.syllabusSubjects).toBeDefined();
       expect(data.syllabusSubjects!.length).toBe(4);

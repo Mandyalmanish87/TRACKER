@@ -5,6 +5,7 @@ import { AppProvider, useApp } from '../src/context/AppContext';
 import { RecurrencePromptModal, RescheduleProposal } from '../src/components/timetable/RecurrencePromptModal';
 import { resolveSchedule } from '../src/utils/scheduleResolver';
 import { TimetableSlot, OccurrenceOverride } from '../src/types';
+import { storageService } from '../src/services/storage';
 
 // Harness component to test scheduling actions through AppContext
 const TestSchedulerHarness: React.FC = () => {
@@ -82,6 +83,7 @@ const TestSchedulerHarness: React.FC = () => {
 describe('Drag-and-Drop Timetable Rescheduling & Recurrence Safety', () => {
   beforeEach(() => {
     localStorage.clear();
+    storageService.populateSampleData();
   });
 
   it('reschedules a single occurrence without mutating the recurring slot rule', () => {

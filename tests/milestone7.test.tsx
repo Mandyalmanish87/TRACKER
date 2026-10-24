@@ -4,11 +4,12 @@ import App from '../src/App';
 import { AppProvider } from '../src/context/AppContext';
 import { ThemeProvider } from '../src/theme/ThemeContext';
 import { NutritionView } from '../src/components/views/NutritionView';
-import { loadData } from '../src/services/storage';
+import { loadData, storageService } from '../src/services/storage';
 
 describe('Milestone 7: Gym & Nutrition (Full)', () => {
   beforeEach(() => {
     localStorage.clear();
+    storageService.populateSampleData();
     document.documentElement.className = '';
     document.documentElement.removeAttribute('data-accent');
     document.body.className = '';
@@ -220,6 +221,10 @@ describe('Milestone 7: Gym & Nutrition (Full)', () => {
       // Click Clear demo records
       const clearBtn = screen.getByRole('button', { name: /clear/i });
       fireEvent.click(clearBtn);
+
+      // Confirm in safety modal
+      const confirmBtn = screen.getByRole('button', { name: /clear demo data/i });
+      fireEvent.click(confirmBtn);
 
       // Confirm demo records badge disappears
       expect(screen.queryByText(/demo records/i)).not.toBeInTheDocument();

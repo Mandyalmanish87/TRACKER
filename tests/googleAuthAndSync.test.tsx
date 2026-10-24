@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { AppProvider } from '../src/context/AppContext';
 import { ThemeProvider } from '../src/theme/ThemeContext';
 import { Header } from '../src/components/common/Header';
@@ -26,7 +26,14 @@ describe('Google Sign-in & Account Cloud Synchronization', () => {
     expect(signInBtn).toBeInTheDocument();
   });
 
-  it('allows signing in with Google and displays user profile in header', async () => {
+  it('displays user profile in header when authenticated with Google', async () => {
+    authService._setTestUser({
+      id: 'usr_verified_google_1',
+      email: 'student.scholar@gmail.com',
+      name: 'Scholar Student',
+      avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=96&h=96&fit=crop&crop=faces',
+    });
+
     render(
       <ThemeProvider>
         <AppProvider>
@@ -35,13 +42,18 @@ describe('Google Sign-in & Account Cloud Synchronization', () => {
       </ThemeProvider>
     );
 
-    const signInBtn = screen.getByRole('button', { name: /sign in with google/i });
-    fireEvent.click(signInBtn);
-
     await waitFor(() => {
-      // In simulated/local mode, scholar student profile is authenticated
       expect(screen.queryByRole('button', { name: /sign in with google/i })).not.toBeInTheDocument();
+      expect(screen.getByText('Scholar Student')).toBeInTheDocument();
     });
+  });
+
+  it('does not fabricate a user when cloud credentials are unconfigured and reports clear error', async () => {
+    const res = await authService.signInWithGoogle();
+    expect(res.user).toBeUndefined();
+    expect(res.error).toMatch(/cloud services are not configured/i);
+    const user = await authService.getCurrentUser();
+    expect(user).toBeNull();
   });
 
   it('intelligently merges local and cloud datasets without losing records', () => {

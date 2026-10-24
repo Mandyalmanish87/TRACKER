@@ -32,18 +32,20 @@ interface LocalClassSpaceData {
   profiles: Record<string, ClassUserProfile>;
 }
 
-// Empty local store representation for offline / local-first operation
-const EMPTY_LOCAL_DATA: LocalClassSpaceData = {
-  workspaces: [],
-  members: [],
-  rules: [],
-  overrides: [],
-  attendanceRecords: [],
-  messages: [],
-  savedMessages: [],
-  notifications: [],
-  profiles: {},
-};
+// Empty local store representation generator for offline / local-first operation
+function createEmptyLocalData(): LocalClassSpaceData {
+  return {
+    workspaces: [],
+    members: [],
+    rules: [],
+    overrides: [],
+    attendanceRecords: [],
+    messages: [],
+    savedMessages: [],
+    notifications: [],
+    profiles: {},
+  };
+}
 
 /**
  * Loads raw data from local storage with clean empty initialization (no fabricated demo data)
@@ -52,8 +54,9 @@ function getLocalData(): LocalClassSpaceData {
   try {
     const raw = localStorage.getItem(LOCAL_STORE_KEY);
     if (!raw) {
-      localStorage.setItem(LOCAL_STORE_KEY, JSON.stringify(EMPTY_LOCAL_DATA));
-      return { ...EMPTY_LOCAL_DATA };
+      const fresh = createEmptyLocalData();
+      localStorage.setItem(LOCAL_STORE_KEY, JSON.stringify(fresh));
+      return fresh;
     }
     const parsed = JSON.parse(raw) as Partial<LocalClassSpaceData>;
     // Migrate away any previous demo workspace 'ws_demo_cs2026' so production is never seeded with fake data
@@ -79,7 +82,7 @@ function getLocalData(): LocalClassSpaceData {
       profiles,
     };
   } catch {
-    return { ...EMPTY_LOCAL_DATA };
+    return createEmptyLocalData();
   }
 }
 
@@ -190,6 +193,9 @@ export const classSpaceService = {
 
     const supabase = getSupabaseClient();
     if (supabase && isSupabaseConfigured) {
+      if (!user || user.isSimulated || user.id.startsWith('usr_local_') || user.id === 'usr_google_student_demo') {
+        return { error: 'Authentication required: You must be signed in with a verified account to create cloud ClassSpace workspaces.' };
+      }
       try {
         const { data: wsData, error: wsError } = await supabase
           .from('class_workspaces')
@@ -253,6 +259,9 @@ export const classSpaceService = {
 
     const supabase = getSupabaseClient();
     if (supabase && isSupabaseConfigured) {
+      if (!user || user.isSimulated || user.id.startsWith('usr_local_') || user.id === 'usr_google_student_demo') {
+        return { error: 'Authentication required: You must be signed in with a verified account to join cloud ClassSpace workspaces.' };
+      }
       try {
         const { data: wsData, error: wsError } = await supabase
           .from('class_workspaces')

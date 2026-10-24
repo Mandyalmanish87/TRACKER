@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { ThemeToggle } from './ThemeToggle';
 import { Button } from './Button';
+import { ConfirmModal } from './ConfirmModal';
 import {
   Trash2,
   Download,
@@ -28,6 +29,15 @@ export const Header: React.FC = () => {
   const [copiedBackup, setCopiedBackup] = useState(false);
   const [showDataMenu, setShowDataMenu] = useState(false);
   const [showAccountMenu, setShowAccountMenu] = useState(false);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [authErrorMessage, setAuthErrorMessage] = useState<string | null>(null);
+
+  const handleSignIn = async () => {
+    const res = await signInWithGoogle();
+    if (res?.error) {
+      setAuthErrorMessage(res.error);
+    }
+  };
 
   // Format today's date in editorial style
   const today = new Date();
@@ -114,7 +124,7 @@ export const Header: React.FC = () => {
                 Demo Records
               </span>
               <button
-                onClick={clearSampleData}
+                onClick={() => setShowClearConfirm(true)}
                 className="text-[11px] underline font-medium text-terracotta-800 dark:text-terracotta-200 hover:text-terracotta-900 ml-1 inline-flex items-center gap-0.5 cursor-pointer"
                 title="Purge sample data and start with an empty slate"
               >
@@ -240,7 +250,7 @@ export const Header: React.FC = () => {
             </div>
           ) : (
             <button
-              onClick={signInWithGoogle}
+              onClick={handleSignIn}
               className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 hover:bg-ivory-50 dark:hover:bg-espresso-800 text-xs font-semibold text-espresso-900 dark:text-ivory-100 shadow-xs transition cursor-pointer"
               title="Sign in with Google to sync schedule and study data across devices"
             >
@@ -270,6 +280,32 @@ export const Header: React.FC = () => {
           <ThemeToggle />
         </div>
       </div>
+
+      {/* Confirmation modal before clearing sample data */}
+      <ConfirmModal
+        isOpen={showClearConfirm}
+        title="Clear Demo Records"
+        message="Are you sure you want to remove all demonstration records? Any custom records you have created will be preserved."
+        confirmLabel="Clear Demo Data"
+        cancelLabel="Keep"
+        variant="warning"
+        onConfirm={() => {
+          clearSampleData();
+          setShowClearConfirm(false);
+        }}
+        onCancel={() => setShowClearConfirm(false)}
+      />
+
+      {/* Cloud auth error notice */}
+      <ConfirmModal
+        isOpen={Boolean(authErrorMessage)}
+        title="Cloud Sign-In Unavailable"
+        message={authErrorMessage || ''}
+        confirmLabel="Understood"
+        variant="warning"
+        onConfirm={() => setAuthErrorMessage(null)}
+        onCancel={() => setAuthErrorMessage(null)}
+      />
     </header>
   );
 };

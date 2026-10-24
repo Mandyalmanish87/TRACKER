@@ -13,10 +13,12 @@ import {
   detectRecurringWeaknesses,
 } from '../src/utils/testAnalytics';
 import { MockTest, ErrorLogEntry } from '../src/types';
+import { storageService } from '../src/services/storage';
 
 describe('Milestone 6: Mock-Test Analytics & Systematic Error Log', () => {
   beforeEach(() => {
     localStorage.clear();
+    storageService.populateSampleData();
   });
 
   describe('1. Mathematical Calculations & Analytics Safety', () => {

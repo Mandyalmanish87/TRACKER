@@ -1,77 +1,35 @@
 import {
   AppStateData,
   ThemeMode,
-  UserProfile,
-  AppSettings,
   SyllabusSubject,
-  NutritionProfile,
-  CustomPlaylist,
   MockTest,
   ErrorLogEntry,
   CalendarEvent,
 } from '../types';
 
 import { migrateV1ToV2 } from './migration';
+import {
+  DEFAULT_PROFILE,
+  DEFAULT_SETTINGS,
+  DEFAULT_NUTRITION_PROFILE,
+  DEFAULT_DAILY_QUESTION_TARGET,
+  DEFAULT_REVIEW_INTERVALS,
+  DEFAULT_CUSTOM_PLAYLISTS,
+  EMPTY_STATE,
+} from './defaults';
 
-const STORAGE_KEY_V2 = 'tracker_app_data_v2';
-const THEME_KEY = 'tracker_app_theme';
+export {
+  DEFAULT_PROFILE,
+  DEFAULT_SETTINGS,
+  DEFAULT_NUTRITION_PROFILE,
+  DEFAULT_DAILY_QUESTION_TARGET,
+  DEFAULT_REVIEW_INTERVALS,
+  DEFAULT_CUSTOM_PLAYLISTS,
+  EMPTY_STATE,
+};
 
-export const DEFAULT_CUSTOM_PLAYLISTS: CustomPlaylist[] = [
-  {
-    id: 'playlist-lofi-focus',
-    name: '📚 Deep Focus & Lo-Fi Beats',
-    description: 'Calm lo-fi hip hop and chill beats for uninterrupted focus.',
-    createdAt: '2026-10-18T00:00:00.000Z',
-    items: [
-      {
-        id: 'item-1',
-        title: 'Lo-Fi Hip Hop Radio — Beats to Relax/Study',
-        url: 'https://www.youtube.com/watch?v=jfKfPfyJRdk',
-        videoId: 'jfKfPfyJRdk',
-        addedAt: '2026-10-18T00:00:00.000Z',
-      },
-      {
-        id: 'item-2',
-        title: 'Coffee Shop Ambience & Soft Beats',
-        url: 'https://www.youtube.com/watch?v=h__V03XTAOE',
-        videoId: 'h__V03XTAOE',
-        addedAt: '2026-10-18T00:00:00.000Z',
-      },
-      {
-        id: 'item-3',
-        title: 'Deep Focus — Solo Piano',
-        url: 'https://www.youtube.com/watch?v=5qap5aO4i9A',
-        videoId: '5qap5aO4i9A',
-        addedAt: '2026-10-18T00:00:00.000Z',
-      },
-    ],
-  },
-  {
-    id: 'playlist-nature-ambient',
-    name: '🌧️ Nature Sounds & Calm Waves',
-    description: 'Gentle ocean waves and relaxing rain sounds.',
-    createdAt: '2026-10-18T00:00:00.000Z',
-    items: [
-      {
-        id: 'item-4',
-        title: 'Rain & Thunder Sounds for Sleep & Study',
-        url: 'https://www.youtube.com/watch?v=mPZkdNFkNps',
-        videoId: 'mPZkdNFkNps',
-        addedAt: '2026-10-18T00:00:00.000Z',
-      },
-      {
-        id: 'item-5',
-        title: 'Ocean Waves Meditation',
-        url: 'https://www.youtube.com/watch?v=bn9F19Hi1Lk',
-        videoId: 'bn9F19Hi1Lk',
-        addedAt: '2026-10-18T00:00:00.000Z',
-      },
-    ],
-  },
-];
-
-export const DEFAULT_REVIEW_INTERVALS: number[] = [1, 3, 7, 14, 30];
-export const DEFAULT_DAILY_QUESTION_TARGET: number = 25;
+export const STORAGE_KEY_V2 = 'tracker_app_data_v2';
+export const THEME_KEY = 'tracker_app_theme';
 
 export const DEFAULT_EVENTS: CalendarEvent[] = [
   {
@@ -134,38 +92,6 @@ export const DEFAULT_EVENTS: CalendarEvent[] = [
     createdAt: '2026-10-18T00:00:00.000Z',
   },
 ];
-
-export const DEFAULT_NUTRITION_PROFILE: NutritionProfile = {
-  goal: 'maintain',
-  targetCalories: 2200,
-  macroTargets: {
-    calories: 2200,
-    protein: 140,
-    carbs: 260,
-    fat: 65,
-    isManualOverride: false,
-  },
-  waterTargetMl: 2500,
-  enabledMealTypes: ['breakfast', 'lunch', 'dinner', 'snacks', 'pre_workout', 'post_workout'],
-  updatedAt: '2026-10-18T00:00:00.000Z',
-};
-
-export const DEFAULT_PROFILE: UserProfile = {
-  displayName: '',
-  targetExam: '',
-};
-
-export const DEFAULT_SETTINGS: AppSettings = {
-  themeMode: 'system',
-  accentColor: 'terracotta',
-  backgroundStyle: 'minimal',
-  studyDayRolloverHour: 0,
-  showExamCountdown: true,
-  showFocusRadio: false,
-  dashboardLayoutMode: 'bento',
-  dashboardDensity: 'compact',
-  userMode: 'individual',
-};
 
 export const DEFAULT_SYLLABUS_SUBJECTS: SyllabusSubject[] = [
   {
@@ -393,7 +319,7 @@ export const loadData = (): AppStateData => {
           },
           syllabusSubjects: Array.isArray(parsed.syllabusSubjects)
             ? parsed.syllabusSubjects
-            : DEFAULT_SYLLABUS_SUBJECTS,
+            : [],
           occurrenceOverrides: Array.isArray(parsed.occurrenceOverrides) ? parsed.occurrenceOverrides : [],
           extraClasses: Array.isArray(parsed.extraClasses) ? parsed.extraClasses : [],
           tasks: Array.isArray(parsed.tasks) ? parsed.tasks : [],
@@ -411,13 +337,16 @@ export const loadData = (): AppStateData => {
           radioLoopMode: parsed.radioLoopMode === 'all' || parsed.radioLoopMode === 'one' ? parsed.radioLoopMode : 'off',
           radioIsShuffle: Boolean(parsed.radioIsShuffle),
           customPlaylists: Array.isArray(parsed.customPlaylists) ? parsed.customPlaylists : DEFAULT_CUSTOM_PLAYLISTS,
-          mockTests: Array.isArray(parsed.mockTests) ? parsed.mockTests : DEFAULT_MOCK_TESTS,
-          errorLogs: Array.isArray(parsed.errorLogs) ? parsed.errorLogs : DEFAULT_ERROR_LOGS,
-          events: Array.isArray(parsed.events) ? parsed.events : DEFAULT_EVENTS,
+          mockTests: Array.isArray(parsed.mockTests) ? parsed.mockTests : [],
+          errorLogs: Array.isArray(parsed.errorLogs) ? parsed.errorLogs : [],
+          events: Array.isArray(parsed.events) ? parsed.events : [],
         };
       }
-    } catch {
+    } catch (err) {
       console.error('Corrupt v2 data, attempting migration from v1');
+      try {
+        localStorage.setItem('tracker_app_data_v2_corrupt_backup', v2Serialized);
+      } catch {}
     }
   }
   // Fallback to v1 data and migrate
@@ -430,35 +359,17 @@ export const loadData = (): AppStateData => {
       localStorage.setItem(STORAGE_KEY_V2, JSON.stringify(migrated));
       return migrated;
     } catch {
-      console.error('Failed to parse v1 data, using SAMPLE_DATA');
+      console.error('Failed to parse v1 data, initializing empty state');
     }
   }
-  // No existing data, initialize with sample data and save to v2
+  // Fresh installation: initialize with a valid, clean, empty default state without demo data
   const fresh: AppStateData = {
-    ...SAMPLE_DATA,
-    profile: { ...DEFAULT_PROFILE, ...(SAMPLE_DATA.profile || {}) },
-    settings: { ...DEFAULT_SETTINGS, ...(SAMPLE_DATA.settings || {}) },
-    syllabusSubjects: JSON.parse(JSON.stringify(DEFAULT_SYLLABUS_SUBJECTS)),
-    occurrenceOverrides: [],
-    extraClasses: [],
-    tasks: Array.isArray(SAMPLE_DATA.tasks) ? JSON.parse(JSON.stringify(SAMPLE_DATA.tasks)) : [],
-    spacedReviews: Array.isArray(SAMPLE_DATA.spacedReviews) ? JSON.parse(JSON.stringify(SAMPLE_DATA.spacedReviews)) : [],
-    dailyQuestions: Array.isArray(SAMPLE_DATA.dailyQuestions) ? JSON.parse(JSON.stringify(SAMPLE_DATA.dailyQuestions)) : [],
-    dailyQuestionTarget: SAMPLE_DATA.dailyQuestionTarget ?? DEFAULT_DAILY_QUESTION_TARGET,
-    reviewIntervals: SAMPLE_DATA.reviewIntervals ?? DEFAULT_REVIEW_INTERVALS,
-    foodDiaryEntries: Array.isArray(SAMPLE_DATA.foodDiaryEntries) ? JSON.parse(JSON.stringify(SAMPLE_DATA.foodDiaryEntries)) : [],
-    customFoods: Array.isArray(SAMPLE_DATA.customFoods) ? JSON.parse(JSON.stringify(SAMPLE_DATA.customFoods)) : [],
-    recipes: Array.isArray(SAMPLE_DATA.recipes) ? JSON.parse(JSON.stringify(SAMPLE_DATA.recipes)) : [],
-    weightLogs: Array.isArray(SAMPLE_DATA.weightLogs) ? JSON.parse(JSON.stringify(SAMPLE_DATA.weightLogs)) : [],
-    nutritionProfile: SAMPLE_DATA.nutritionProfile ?? DEFAULT_NUTRITION_PROFILE,
-    radioUrls: Array.isArray(SAMPLE_DATA.radioUrls) ? JSON.parse(JSON.stringify(SAMPLE_DATA.radioUrls)) : [],
-    radioQueue: Array.isArray(SAMPLE_DATA.radioQueue) ? JSON.parse(JSON.stringify(SAMPLE_DATA.radioQueue)) : [],
-    radioLoopMode: SAMPLE_DATA.radioLoopMode ?? 'off',
-    radioIsShuffle: Boolean(SAMPLE_DATA.radioIsShuffle),
+    ...EMPTY_STATE,
+    profile: { ...DEFAULT_PROFILE },
+    settings: { ...DEFAULT_SETTINGS },
     customPlaylists: JSON.parse(JSON.stringify(DEFAULT_CUSTOM_PLAYLISTS)),
-    mockTests: Array.isArray(SAMPLE_DATA.mockTests) ? JSON.parse(JSON.stringify(SAMPLE_DATA.mockTests)) : [],
-    errorLogs: Array.isArray(SAMPLE_DATA.errorLogs) ? JSON.parse(JSON.stringify(SAMPLE_DATA.errorLogs)) : [],
-    events: Array.isArray(SAMPLE_DATA.events) ? JSON.parse(JSON.stringify(SAMPLE_DATA.events)) : DEFAULT_EVENTS,
+    hasSampleData: false,
+    schemaVersion: 2,
   };
   localStorage.setItem(STORAGE_KEY_V2, JSON.stringify(fresh));
   return fresh;
@@ -471,27 +382,27 @@ export const saveData = (data: AppStateData): void => {
       schemaVersion: 2,
       profile: data.profile ?? DEFAULT_PROFILE,
       settings: data.settings ?? DEFAULT_SETTINGS,
-      syllabusSubjects: data.syllabusSubjects ?? DEFAULT_SYLLABUS_SUBJECTS,
-      occurrenceOverrides: data.occurrenceOverrides ?? [],
-      extraClasses: data.extraClasses ?? [],
-      tasks: data.tasks ?? [],
-      spacedReviews: data.spacedReviews ?? [],
-      dailyQuestions: data.dailyQuestions ?? [],
+      syllabusSubjects: Array.isArray(data.syllabusSubjects) ? data.syllabusSubjects : [],
+      occurrenceOverrides: Array.isArray(data.occurrenceOverrides) ? data.occurrenceOverrides : [],
+      extraClasses: Array.isArray(data.extraClasses) ? data.extraClasses : [],
+      tasks: Array.isArray(data.tasks) ? data.tasks : [],
+      spacedReviews: Array.isArray(data.spacedReviews) ? data.spacedReviews : [],
+      dailyQuestions: Array.isArray(data.dailyQuestions) ? data.dailyQuestions : [],
       dailyQuestionTarget: typeof data.dailyQuestionTarget === 'number' ? data.dailyQuestionTarget : DEFAULT_DAILY_QUESTION_TARGET,
-      reviewIntervals: data.reviewIntervals ?? DEFAULT_REVIEW_INTERVALS,
-      foodDiaryEntries: data.foodDiaryEntries ?? [],
-      customFoods: data.customFoods ?? [],
-      recipes: data.recipes ?? [],
-      weightLogs: data.weightLogs ?? [],
+      reviewIntervals: Array.isArray(data.reviewIntervals) ? data.reviewIntervals : DEFAULT_REVIEW_INTERVALS,
+      foodDiaryEntries: Array.isArray(data.foodDiaryEntries) ? data.foodDiaryEntries : [],
+      customFoods: Array.isArray(data.customFoods) ? data.customFoods : [],
+      recipes: Array.isArray(data.recipes) ? data.recipes : [],
+      weightLogs: Array.isArray(data.weightLogs) ? data.weightLogs : [],
       nutritionProfile: data.nutritionProfile ?? DEFAULT_NUTRITION_PROFILE,
-      radioUrls: data.radioUrls ?? [],
-      radioQueue: data.radioQueue ?? [],
-      radioLoopMode: data.radioLoopMode ?? 'off',
+      radioUrls: Array.isArray(data.radioUrls) ? data.radioUrls : [],
+      radioQueue: Array.isArray(data.radioQueue) ? data.radioQueue : [],
+      radioLoopMode: data.radioLoopMode === 'all' || data.radioLoopMode === 'one' ? data.radioLoopMode : 'off',
       radioIsShuffle: Boolean(data.radioIsShuffle),
-      customPlaylists: data.customPlaylists ?? DEFAULT_CUSTOM_PLAYLISTS,
-      mockTests: data.mockTests ?? [],
-      errorLogs: data.errorLogs ?? [],
-      events: data.events ?? DEFAULT_EVENTS,
+      customPlaylists: Array.isArray(data.customPlaylists) ? data.customPlaylists : JSON.parse(JSON.stringify(DEFAULT_CUSTOM_PLAYLISTS)),
+      mockTests: Array.isArray(data.mockTests) ? data.mockTests : [],
+      errorLogs: Array.isArray(data.errorLogs) ? data.errorLogs : [],
+      events: Array.isArray(data.events) ? data.events : [],
     };
     localStorage.setItem(STORAGE_KEY_V2, JSON.stringify(toSave));
   } catch (err) {
@@ -970,35 +881,6 @@ export const SAMPLE_DATA: AppStateData = {
   events: DEFAULT_EVENTS,
 };
 
-export const EMPTY_STATE: AppStateData = {
-  hasSampleData: false,
-  schemaVersion: 2,
-  profile: DEFAULT_PROFILE,
-  settings: DEFAULT_SETTINGS,
-  subjects: [],
-  timetable: [],
-  attendanceLogs: [],
-  studySessions: [],
-  gymWorkouts: [],
-  reminders: [],
-  syllabusSubjects: [],
-  occurrenceOverrides: [],
-  extraClasses: [],
-  tasks: [],
-  spacedReviews: [],
-  dailyQuestions: [],
-  dailyQuestionTarget: DEFAULT_DAILY_QUESTION_TARGET,
-  reviewIntervals: DEFAULT_REVIEW_INTERVALS,
-  foodDiaryEntries: [],
-  customFoods: [],
-  recipes: [],
-  weightLogs: [],
-  nutritionProfile: DEFAULT_NUTRITION_PROFILE,
-  mockTests: [],
-  errorLogs: [],
-  events: [],
-};
-
 export interface IStorageService {
   loadData(): AppStateData;
   saveData(data: AppStateData): void;
@@ -1070,7 +952,7 @@ class LocalStorageService implements IStorageService {
       schemaVersion: 2,
       profile: current.profile ?? DEFAULT_PROFILE,
       settings: current.settings ?? DEFAULT_SETTINGS,
-      syllabusSubjects: current.syllabusSubjects ?? DEFAULT_SYLLABUS_SUBJECTS,
+      syllabusSubjects: current.syllabusSubjects ?? [],
       subjects: current.subjects.filter((s) => !s.isSample),
       timetable: current.timetable.filter((t) => !t.isSample),
       attendanceLogs: current.attendanceLogs.filter((a) => !a.isSample),
@@ -1093,7 +975,7 @@ class LocalStorageService implements IStorageService {
       radioQueue: current.radioQueue ?? [],
       radioLoopMode: current.radioLoopMode ?? 'off',
       radioIsShuffle: Boolean(current.radioIsShuffle),
-      customPlaylists: current.customPlaylists ?? DEFAULT_CUSTOM_PLAYLISTS,
+      customPlaylists: current.customPlaylists ?? JSON.parse(JSON.stringify(DEFAULT_CUSTOM_PLAYLISTS)),
       mockTests: (current.mockTests || []).filter((m) => !m.isSample),
       errorLogs: (current.errorLogs || []).filter((e) => !e.isSample),
       events: (current.events || []).filter((e) => !e.isSample),
@@ -1107,47 +989,105 @@ class LocalStorageService implements IStorageService {
   }
 
   importBackup(jsonString: string): AppStateData {
-    const parsed = JSON.parse(jsonString);
-    if (!parsed || typeof parsed !== 'object') {
+    let parsed: any;
+    try {
+      parsed = JSON.parse(jsonString);
+    } catch {
+      throw new Error('Invalid backup file format: not valid JSON');
+    }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
       throw new Error('Invalid backup file format');
     }
-    const validated: AppStateData = {
-      hasSampleData: Boolean(parsed.hasSampleData),
-      subjects: Array.isArray(parsed.subjects) ? parsed.subjects : [],
-      timetable: Array.isArray(parsed.timetable) ? parsed.timetable : [],
-      attendanceLogs: Array.isArray(parsed.attendanceLogs) ? parsed.attendanceLogs : [],
-      studySessions: Array.isArray(parsed.studySessions) ? parsed.studySessions : [],
-      gymWorkouts: Array.isArray(parsed.gymWorkouts) ? parsed.gymWorkouts : [],
-      reminders: Array.isArray(parsed.reminders) ? parsed.reminders : [],
-      occurrenceOverrides: Array.isArray(parsed.occurrenceOverrides) ? parsed.occurrenceOverrides : [],
-      extraClasses: Array.isArray(parsed.extraClasses) ? parsed.extraClasses : [],
-      schemaVersion: 2,
-      profile: parsed.profile ?? DEFAULT_PROFILE,
-      settings: {
-        ...DEFAULT_SETTINGS,
-        ...(parsed.settings && typeof parsed.settings === 'object' ? parsed.settings : {}),
-      },
-      syllabusSubjects: Array.isArray(parsed.syllabusSubjects)
-        ? parsed.syllabusSubjects
-        : DEFAULT_SYLLABUS_SUBJECTS,
-      tasks: Array.isArray(parsed.tasks) ? parsed.tasks : [],
-      spacedReviews: Array.isArray(parsed.spacedReviews) ? parsed.spacedReviews : [],
-      dailyQuestions: Array.isArray(parsed.dailyQuestions) ? parsed.dailyQuestions : [],
-      dailyQuestionTarget: typeof parsed.dailyQuestionTarget === 'number' ? parsed.dailyQuestionTarget : DEFAULT_DAILY_QUESTION_TARGET,
-      reviewIntervals: Array.isArray(parsed.reviewIntervals) ? parsed.reviewIntervals : DEFAULT_REVIEW_INTERVALS,
-      foodDiaryEntries: Array.isArray(parsed.foodDiaryEntries) ? parsed.foodDiaryEntries : [],
-      customFoods: Array.isArray(parsed.customFoods) ? parsed.customFoods : [],
-      recipes: Array.isArray(parsed.recipes) ? parsed.recipes : [],
-      weightLogs: Array.isArray(parsed.weightLogs) ? parsed.weightLogs : [],
-      nutritionProfile: parsed.nutritionProfile ?? DEFAULT_NUTRITION_PROFILE,
-      radioUrls: Array.isArray(parsed.radioUrls) ? parsed.radioUrls : [],
-      radioQueue: Array.isArray(parsed.radioQueue) ? parsed.radioQueue : [],
-      radioLoopMode: parsed.radioLoopMode === 'all' || parsed.radioLoopMode === 'one' ? parsed.radioLoopMode : 'off',
-      radioIsShuffle: Boolean(parsed.radioIsShuffle),
-      customPlaylists: Array.isArray(parsed.customPlaylists) ? parsed.customPlaylists : DEFAULT_CUSTOM_PLAYLISTS,
-      mockTests: Array.isArray(parsed.mockTests) ? parsed.mockTests : [],
-      errorLogs: Array.isArray(parsed.errorLogs) ? parsed.errorLogs : [],
+    const hasKnownKey = [
+      'subjects',
+      'timetable',
+      'attendanceLogs',
+      'studySessions',
+      'gymWorkouts',
+      'reminders',
+      'syllabusSubjects',
+      'occurrenceOverrides',
+      'extraClasses',
+      'tasks',
+      'spacedReviews',
+      'dailyQuestions',
+      'foodDiaryEntries',
+      'customFoods',
+      'recipes',
+      'weightLogs',
+      'nutritionProfile',
+      'radioUrls',
+      'radioQueue',
+      'customPlaylists',
+      'mockTests',
+      'errorLogs',
+      'events',
+      'profile',
+      'settings',
+      'schemaVersion',
+    ].some((k) => k in parsed);
+
+    if (!hasKnownKey) {
+      throw new Error('Invalid backup file format: unrecognized Tracker backup structure');
+    }
+
+    const existing = this.loadData();
+
+    const readCollection = <T>(key: string, existingList: T[] = []): T[] => {
+      if (key in parsed) {
+        return Array.isArray(parsed[key]) ? (parsed[key] as T[]) : [];
+      }
+      return existingList;
     };
+
+    const validated: AppStateData = {
+      schemaVersion: 2,
+      hasSampleData: 'hasSampleData' in parsed ? Boolean(parsed.hasSampleData) : existing.hasSampleData,
+      profile: 'profile' in parsed && parsed.profile && typeof parsed.profile === 'object'
+        ? { ...DEFAULT_PROFILE, ...existing.profile, ...parsed.profile }
+        : (existing.profile ?? DEFAULT_PROFILE),
+      settings: 'settings' in parsed && parsed.settings && typeof parsed.settings === 'object'
+        ? { ...DEFAULT_SETTINGS, ...existing.settings, ...parsed.settings }
+        : (existing.settings ?? DEFAULT_SETTINGS),
+      subjects: readCollection('subjects', existing.subjects),
+      timetable: readCollection('timetable', existing.timetable),
+      attendanceLogs: readCollection('attendanceLogs', existing.attendanceLogs),
+      studySessions: readCollection('studySessions', existing.studySessions),
+      gymWorkouts: readCollection('gymWorkouts', existing.gymWorkouts),
+      reminders: readCollection('reminders', existing.reminders),
+      syllabusSubjects: readCollection('syllabusSubjects', existing.syllabusSubjects),
+      occurrenceOverrides: readCollection('occurrenceOverrides', existing.occurrenceOverrides),
+      extraClasses: readCollection('extraClasses', existing.extraClasses),
+      tasks: readCollection('tasks', existing.tasks),
+      spacedReviews: readCollection('spacedReviews', existing.spacedReviews),
+      dailyQuestions: readCollection('dailyQuestions', existing.dailyQuestions),
+      dailyQuestionTarget: typeof parsed.dailyQuestionTarget === 'number'
+        ? parsed.dailyQuestionTarget
+        : (existing.dailyQuestionTarget ?? DEFAULT_DAILY_QUESTION_TARGET),
+      reviewIntervals: Array.isArray(parsed.reviewIntervals)
+        ? parsed.reviewIntervals
+        : (existing.reviewIntervals ?? DEFAULT_REVIEW_INTERVALS),
+      foodDiaryEntries: readCollection('foodDiaryEntries', existing.foodDiaryEntries),
+      customFoods: readCollection('customFoods', existing.customFoods),
+      recipes: readCollection('recipes', existing.recipes),
+      weightLogs: readCollection('weightLogs', existing.weightLogs),
+      nutritionProfile: 'nutritionProfile' in parsed && parsed.nutritionProfile
+        ? parsed.nutritionProfile
+        : (existing.nutritionProfile ?? DEFAULT_NUTRITION_PROFILE),
+      radioUrls: readCollection('radioUrls', existing.radioUrls),
+      radioQueue: readCollection('radioQueue', existing.radioQueue),
+      radioLoopMode: parsed.radioLoopMode === 'all' || parsed.radioLoopMode === 'one' || parsed.radioLoopMode === 'off'
+        ? parsed.radioLoopMode
+        : (existing.radioLoopMode ?? 'off'),
+      radioIsShuffle: typeof parsed.radioIsShuffle === 'boolean'
+        ? parsed.radioIsShuffle
+        : Boolean(existing.radioIsShuffle),
+      customPlaylists: readCollection('customPlaylists', existing.customPlaylists ?? JSON.parse(JSON.stringify(DEFAULT_CUSTOM_PLAYLISTS))),
+      mockTests: readCollection('mockTests', existing.mockTests),
+      errorLogs: readCollection('errorLogs', existing.errorLogs),
+      events: readCollection('events', existing.events),
+    };
+
     this.saveData(validated);
     return validated;
   }
