@@ -54,6 +54,7 @@ export const EventCalendar: React.FC<EventCalendarProps> = () => {
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
   const [modalDate, setModalDate] = useState<string>('');
   const [modalStartTime, setModalStartTime] = useState<string>('10:00');
+  const [modalIsAllDay, setModalIsAllDay] = useState<boolean>(false);
 
   // Drag and drop state
   const [draggedEventId, setDraggedEventId] = useState<string | null>(null);
@@ -96,10 +97,11 @@ export const EventCalendar: React.FC<EventCalendarProps> = () => {
   };
 
   // Quick Open Modal Handlers
-  const handleCreateNew = (dateStr?: string, timeStr?: string) => {
+  const handleCreateNew = (dateStr?: string, timeStr?: string, isAllDay = false) => {
     setEditingEvent(null);
     setModalDate(dateStr || currentDateStr);
     setModalStartTime(timeStr || '10:00');
+    setModalIsAllDay(isAllDay);
     setIsModalOpen(true);
   };
 
@@ -108,6 +110,7 @@ export const EventCalendar: React.FC<EventCalendarProps> = () => {
     setEditingEvent(event);
     setModalDate(event.date);
     setModalStartTime(event.startTime || '10:00');
+    setModalIsAllDay(Boolean(event.isAllDay));
     setIsModalOpen(true);
   };
 
@@ -126,7 +129,8 @@ export const EventCalendar: React.FC<EventCalendarProps> = () => {
     const updates: Partial<CalendarEvent> = { date: targetDateStr };
     if (targetHour !== undefined) {
       const hourStr = String(targetHour).padStart(2, '0') + ':00';
-      const endHourStr = String(Math.min(targetHour + 1, 23)).padStart(2, '0') + ':00';
+      const endHour = targetHour + 1;
+      const endHourStr = endHour >= 24 ? '23:59' : String(endHour).padStart(2, '0') + ':00';
       updates.startTime = hourStr;
       updates.endTime = endHourStr;
       updates.isAllDay = false;
@@ -335,7 +339,13 @@ export const EventCalendar: React.FC<EventCalendarProps> = () => {
           weekDays={weekDays}
           events={events}
           todayStr={todayStr}
-          onSelectSlot={(dateStr, hour) => handleCreateNew(dateStr, `${String(hour).padStart(2, '0')}:00`)}
+          onSelectSlot={(dateStr, hour) =>
+            handleCreateNew(
+              dateStr,
+              hour !== undefined ? `${String(hour).padStart(2, '0')}:00` : '10:00',
+              hour === undefined
+            )
+          }
           onEditEvent={handleEdit}
           onDropOnSlot={(dateStr, hour, e) => handleDropOnDate(e, dateStr, hour)}
           onDragStart={handleDragStart}
@@ -386,6 +396,7 @@ export const EventCalendar: React.FC<EventCalendarProps> = () => {
         initialEvent={editingEvent}
         initialDate={modalDate}
         initialStartTime={modalStartTime}
+        initialIsAllDay={modalIsAllDay}
       />
     </div>
   );
@@ -589,9 +600,9 @@ interface WeekViewProps {
   weekDays: Date[];
   events: CalendarEvent[];
   todayStr: string;
-  onSelectSlot: (dateStr: string, hour: number) => void;
+  onSelectSlot: (dateStr: string, hour?: number) => void;
   onEditEvent: (event: CalendarEvent, e?: React.MouseEvent) => void;
-  onDropOnSlot: (dateStr: string, hour: number, e: React.DragEvent) => void;
+  onDropOnSlot: (dateStr: string, hour: number | undefined, e: React.DragEvent) => void;
   onDragStart: (e: React.DragEvent, eventId: string) => void;
   onDragOver: (e: React.DragEvent) => void;
 }
@@ -634,6 +645,54 @@ const WeekView: React.FC<WeekViewProps> = ({
                 >
                   {d.getDate()}
                 </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* All-Day Events Row */}
+        <div className="grid grid-cols-[60px_repeat(7,1fr)] border-b border-ivory-200 dark:border-espresso-800 bg-ivory-50/40 dark:bg-espresso-850 min-h-[42px]">
+          <div className="p-2 text-right text-[10px] font-mono font-medium text-espresso-400 dark:text-espresso-500 border-r border-ivory-200 dark:border-espresso-800 select-none flex items-center justify-end">
+            All-day
+          </div>
+          {weekDays.map((d) => {
+            const dateStr = toLocalDateString(d);
+            const allDayEvents = events.filter(
+              (evt) => evt.date === dateStr && (evt.isAllDay || (!evt.startTime && !evt.endTime))
+            );
+
+            return (
+              <div
+                key={`allday-${dateStr}`}
+                data-testid={`allday-cell-${dateStr}`}
+                aria-label={`All-day events for ${dateStr}`}
+                onDragOver={onDragOver}
+                onDrop={(e) => onDropOnSlot(dateStr, undefined, e)}
+                onClick={() => onSelectSlot(dateStr)}
+                className="p-1 border-r border-ivory-200 dark:border-espresso-800 last:border-r-0 hover:bg-ivory-100/50 dark:hover:bg-espresso-800/50 transition cursor-pointer flex flex-col gap-1 min-h-[42px]"
+              >
+                {allDayEvents.map((evt) => {
+                  const conf = getEventCategoryConfig(evt.category);
+                  return (
+                    <div
+                      key={evt.id}
+                      draggable
+                      onDragStart={(e) => onDragStart(e, evt.id)}
+                      onClick={(e) => onEditEvent(evt, e)}
+                      className="px-1.5 py-0.5 rounded text-[10px] font-semibold truncate border shadow-xs cursor-pointer hover:scale-[1.01] transition"
+                      style={{
+                        backgroundColor: conf.lightBg,
+                        borderColor: conf.color,
+                        borderLeftWidth: '3px',
+                      }}
+                      title={`${evt.title} (${conf.label})`}
+                    >
+                      <span className={evt.isCompleted ? 'line-through opacity-60' : ''}>
+                        {evt.title}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             );
           })}

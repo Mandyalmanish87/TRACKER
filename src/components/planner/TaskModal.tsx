@@ -3,6 +3,7 @@ import { X, Calendar, Clock, AlertCircle, Plus, Trash2 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { PlannerTask, TaskPriority, TaskStatus, Subtask } from '../../types';
 import { validateTask } from '../../utils/plannerUtils';
+import { toLocalDateString } from '../events/EventCalendar';
 
 interface TaskModalProps {
   isOpen: boolean;
@@ -66,7 +67,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       setDescription('');
       setStatus('todo');
       setPriority('medium');
-      setDueDate(new Date().toISOString().split('T')[0]);
+      setDueDate(toLocalDateString(new Date()));
       setDueTime('');
       setEstimatedDuration('');
       setNotes('');
@@ -76,6 +77,17 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       setSyllabusTopicId(initialTopicId || '');
     }
   }, [isOpen, taskToEdit, initialTopicId, initialChapterId, initialSubjectId]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
@@ -155,15 +167,24 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-espresso-950/60 backdrop-blur-sm overflow-y-auto">
-      <div className="w-full max-w-lg bg-white dark:bg-espresso-900 rounded-2xl border border-ivory-300 dark:border-espresso-700 shadow-2xl overflow-hidden my-8">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="task-modal-title"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-espresso-950/60 backdrop-blur-sm overflow-y-auto"
+    >
+      <div className="w-full max-w-lg bg-white dark:bg-espresso-900 rounded-2xl border border-ivory-300 dark:border-espresso-750 shadow-2xl overflow-hidden my-8">
         {/* Header */}
         <div className="p-4 sm:p-5 border-b border-ivory-200 dark:border-espresso-800 flex items-center justify-between">
-          <h2 className="font-serif text-lg font-bold text-espresso-950 dark:text-ivory-50">
+          <h2 id="task-modal-title" className="font-serif text-lg font-bold text-espresso-950 dark:text-ivory-50">
             {taskToEdit ? 'Edit Task' : 'New Study Task'}
           </h2>
           <button
             onClick={onClose}
+            aria-label="Close dialog"
             className="p-1 rounded-lg text-espresso-400 hover:text-espresso-700 dark:hover:text-ivory-200 transition"
           >
             <X className="w-5 h-5" />
@@ -278,9 +299,15 @@ export const TaskModal: React.FC<TaskModalProps> = ({
               min="0"
               step="5"
               value={estimatedDuration}
-              onChange={(e) =>
-                setEstimatedDuration(e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value, 10)))
-              }
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val === '') {
+                  setEstimatedDuration('');
+                } else {
+                  const num = parseInt(val, 10);
+                  setEstimatedDuration(isNaN(num) ? '' : Math.max(0, num));
+                }
+              }}
               placeholder="e.g. 45"
               className="w-full px-3.5 py-2 text-xs sm:text-sm rounded-xl border border-ivory-300 dark:border-espresso-750 bg-ivory-50/50 dark:bg-espresso-800 text-espresso-950 dark:text-ivory-50 focus:outline-none focus:ring-2 focus:ring-terracotta-500"
             />

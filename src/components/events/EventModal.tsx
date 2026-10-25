@@ -3,6 +3,7 @@ import { X, Calendar as CalendarIcon, Clock, MapPin, AlignLeft, Tag, Flag, Trash
 import { useApp } from '../../context/AppContext';
 import { CalendarEvent, EventCategory, EventPriority, ExamType, TaskStatus, Subtask } from '../../types';
 import { EVENT_CATEGORIES, getEventCategoryConfig } from '../../utils/eventCategories';
+import { toLocalDateString } from './EventCalendar';
 
 interface EventModalProps {
   isOpen: boolean;
@@ -11,6 +12,7 @@ interface EventModalProps {
   initialDate?: string;
   initialStartTime?: string;
   initialCategory?: EventCategory;
+  initialIsAllDay?: boolean;
 }
 
 export const EventModal: React.FC<EventModalProps> = ({
@@ -20,6 +22,7 @@ export const EventModal: React.FC<EventModalProps> = ({
   initialDate,
   initialStartTime,
   initialCategory,
+  initialIsAllDay,
 }) => {
   const { state, addEvent, updateEvent, deleteEvent } = useApp();
 
@@ -46,7 +49,7 @@ export const EventModal: React.FC<EventModalProps> = ({
     if (initialEvent) {
       setTitle(initialEvent.title || '');
       setCategory(initialEvent.category || 'task');
-      setDate(initialEvent.date || new Date().toISOString().split('T')[0]);
+      setDate(initialEvent.date || toLocalDateString(new Date()));
       setEndDate(initialEvent.endDate || '');
       setIsAllDay(Boolean(initialEvent.isAllDay));
       setStartTime(initialEvent.startTime || '09:00');
@@ -60,12 +63,12 @@ export const EventModal: React.FC<EventModalProps> = ({
       setSubtasks(initialEvent.subtasks ? JSON.parse(JSON.stringify(initialEvent.subtasks)) : []);
       setIsDeleting(false);
     } else {
-      const today = initialDate || new Date().toISOString().split('T')[0];
+      const today = initialDate || toLocalDateString(new Date());
       setTitle('');
       setCategory(initialCategory || 'task');
       setDate(today);
       setEndDate('');
-      setIsAllDay(false);
+      setIsAllDay(Boolean(initialIsAllDay));
       const st = initialStartTime || '10:00';
       setStartTime(st);
       const hour = parseInt(st.split(':')[0], 10) || 10;
@@ -80,7 +83,18 @@ export const EventModal: React.FC<EventModalProps> = ({
       setSubtasks([]);
       setIsDeleting(false);
     }
-  }, [isOpen, initialEvent, initialDate, initialStartTime, initialCategory]);
+  }, [isOpen, initialEvent, initialDate, initialStartTime, initialCategory, initialIsAllDay]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   const handleAddSubtask = () => {
     const trimmed = newSubtaskTitle.trim();

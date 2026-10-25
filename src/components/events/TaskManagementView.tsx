@@ -13,12 +13,15 @@ import {
   Kanban,
   List as ListIcon,
   Trash2,
+  CheckSquare,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { CalendarEvent, EventCategory, EventPriority, TaskStatus } from '../../types';
 import { EVENT_CATEGORIES, getEventCategoryConfig } from '../../utils/eventCategories';
 import { EventModal } from './EventModal';
 import { InlineSubtaskList } from '../planner/InlineSubtaskList';
+import { ConfirmModal } from '../common/ConfirmModal';
+import { toLocalDateString } from './EventCalendar';
 
 export const TaskManagementView: React.FC = () => {
   const { state, updateEvent, deleteEvent, toggleEventComplete, toggleEventSubtask } = useApp();
@@ -32,11 +35,12 @@ export const TaskManagementView: React.FC = () => {
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
+  const [eventToDelete, setEventToDelete] = useState<CalendarEvent | null>(null);
 
   // Drag and drop in board view
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
 
-  const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
+  const todayStr = useMemo(() => toLocalDateString(new Date()), []);
 
   // Filter and sort events
   const filteredEvents = useMemo(() => {
@@ -247,7 +251,7 @@ export const TaskManagementView: React.FC = () => {
             onEdit={handleEdit}
             onToggleComplete={toggleEventComplete}
             onToggleSubtask={toggleEventSubtask}
-            onDelete={deleteEvent}
+            onDelete={setEventToDelete}
           />
 
           {/* IN PROGRESS COLUMN */}
@@ -263,7 +267,7 @@ export const TaskManagementView: React.FC = () => {
             onEdit={handleEdit}
             onToggleComplete={toggleEventComplete}
             onToggleSubtask={toggleEventSubtask}
-            onDelete={deleteEvent}
+            onDelete={setEventToDelete}
           />
 
           {/* COMPLETED COLUMN */}
@@ -279,7 +283,7 @@ export const TaskManagementView: React.FC = () => {
             onEdit={handleEdit}
             onToggleComplete={toggleEventComplete}
             onToggleSubtask={toggleEventSubtask}
-            onDelete={deleteEvent}
+            onDelete={setEventToDelete}
           />
         </div>
       ) : (
@@ -353,6 +357,14 @@ export const TaskManagementView: React.FC = () => {
                         {evt.priority === 'high' && (
                           <span className="text-rose-600 font-bold uppercase text-[10px]">High</span>
                         )}
+                        {evt.subtasks && evt.subtasks.length > 0 && (
+                          <span className="flex items-center gap-1 text-[11px] font-mono text-espresso-600 dark:text-ivory-300">
+                            <CheckSquare className="w-3 h-3 text-terracotta-500" />
+                            <span>
+                              {evt.subtasks.filter((s) => s.isCompleted).length}/{evt.subtasks.length} subtasks
+                            </span>
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -361,7 +373,7 @@ export const TaskManagementView: React.FC = () => {
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      deleteEvent(evt.id);
+                      setEventToDelete(evt);
                     }}
                     className="p-1.5 rounded-lg text-espresso-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition"
                     title="Delete event"
@@ -381,6 +393,22 @@ export const TaskManagementView: React.FC = () => {
         onClose={() => setIsModalOpen(false)}
         initialEvent={editingEvent}
       />
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmModal
+        isOpen={Boolean(eventToDelete)}
+        title="Delete Event or Task"
+        message={`Are you sure you want to delete "${eventToDelete?.title}"? This cannot be undone.`}
+        confirmLabel="Delete"
+        variant="danger"
+        onConfirm={() => {
+          if (eventToDelete) {
+            deleteEvent(eventToDelete.id);
+            setEventToDelete(null);
+          }
+        }}
+        onCancel={() => setEventToDelete(null)}
+      />
     </div>
   );
 };
@@ -398,7 +426,7 @@ interface BoardColumnProps {
   onEdit: (event: CalendarEvent) => void;
   onToggleComplete: (id: string) => void;
   onToggleSubtask?: (eventId: string, subtaskId: string) => void;
-  onDelete: (id: string) => void;
+  onDelete: (event: CalendarEvent) => void;
 }
 
 const BoardColumn: React.FC<BoardColumnProps> = ({
@@ -481,9 +509,11 @@ const BoardColumn: React.FC<BoardColumnProps> = ({
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      onDelete(evt.id);
+                      onDelete(evt);
                     }}
                     className="opacity-0 group-hover:opacity-100 p-1 text-espresso-400 hover:text-rose-600 transition"
+                    title="Delete event"
+                    aria-label={`Delete event ${evt.title}`}
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>

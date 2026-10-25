@@ -764,13 +764,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
    */
   const addEvent = (item: Omit<CalendarEvent, 'id' | 'createdAt'>): string => {
     const id = (item as any).id || `evt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const isCompleted = item.isCompleted ?? (item.status === 'done');
+    const status = item.status ?? (isCompleted ? 'done' : 'todo');
+    const completedAt = item.completedAt !== undefined
+      ? item.completedAt
+      : isCompleted ? new Date().toISOString() : undefined;
     const newEvent: CalendarEvent = {
       ...item,
       id,
       createdAt: new Date().toISOString(),
       isSample: false,
-      isCompleted: item.isCompleted ?? false,
-      status: item.status ?? (item.isCompleted ? 'done' : 'todo'),
+      isCompleted,
+      status,
+      completedAt,
     };
 
     setState((prev) => {
@@ -782,7 +788,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           category: 'academic',
           dueDate: item.date,
           priority: item.priority ?? 'medium',
-          isCompleted: Boolean(item.isCompleted),
+          isCompleted: Boolean(isCompleted),
           isSample: false,
         };
         updatedReminders = [mirrorReminder, ...prev.reminders];
@@ -803,11 +809,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setState((prev) => {
       const updatedEvents = (prev.events || []).map((evt) => {
         if (evt.id !== id) return evt;
-        const updated = { ...evt, ...updates, isSample: false };
-        if (updates.isCompleted !== undefined && updates.status === undefined) {
-          updated.status = updates.isCompleted ? 'done' : 'todo';
-          updated.completedAt = updates.isCompleted ? new Date().toISOString() : undefined;
+        const isDone = updates.status === 'done' || updates.isCompleted === true;
+        const isNotDone = (updates.status && updates.status !== 'done') || updates.isCompleted === false;
+
+        let completedAt = updates.completedAt !== undefined ? updates.completedAt : evt.completedAt;
+        if (isDone && !completedAt) {
+          completedAt = new Date().toISOString();
+        } else if (isNotDone) {
+          completedAt = undefined;
         }
+
+        const nextStatus = updates.status ?? (updates.isCompleted !== undefined ? (updates.isCompleted ? 'done' : 'todo') : evt.status);
+        const nextIsCompleted = updates.isCompleted !== undefined ? updates.isCompleted : (updates.status ? updates.status === 'done' : evt.isCompleted);
+
+        const updated = {
+          ...evt,
+          ...updates,
+          status: nextStatus,
+          isCompleted: nextIsCompleted,
+          completedAt,
+          isSample: false,
+        };
         return updated;
       });
 
