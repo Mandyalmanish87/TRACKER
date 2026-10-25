@@ -17,6 +17,7 @@ import { isTaskOverdue, isTaskDueToday } from '../../utils/plannerUtils';
 import { ConfirmModal } from '../common/ConfirmModal';
 import { TaskModal } from './TaskModal';
 import { TiltCard } from '../common/TiltCard';
+import { InlineSubtaskList } from './InlineSubtaskList';
 
 interface KanbanBoardProps {
   tasks: PlannerTask[];
@@ -57,7 +58,7 @@ const PRIORITY_BADGES: Record<TaskPriority, { label: string; badgeClass: string 
 };
 
 export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, onNavigateToSyllabus }) => {
-  const { state, setTaskStatus, deleteTask } = useApp();
+  const { state, setTaskStatus, deleteTask, toggleTaskSubtask } = useApp();
 
   const [activeMobileColumn, setActiveMobileColumn] = useState<TaskStatus>('todo');
   const [taskToEdit, setTaskToEdit] = useState<PlannerTask | null>(null);
@@ -177,6 +178,13 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, onNavigateToSyl
             </p>
           )}
         </div>
+
+        {/* Inline Subtasks Progress & Checklist */}
+        <InlineSubtaskList
+          taskId={task.id}
+          subtasks={task.subtasks}
+          onToggleSubtask={toggleTaskSubtask}
+        />
 
         {/* Linked Syllabus Item */}
         {linkInfo && (

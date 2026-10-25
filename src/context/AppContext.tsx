@@ -129,6 +129,7 @@ interface AppContextType {
   updateTask: (id: string, updates: Partial<PlannerTask>) => void;
   deleteTask: (id: string) => void;
   setTaskStatus: (id: string, status: TaskStatus) => void;
+  toggleTaskSubtask: (taskId: string, subtaskId: string) => void;
   // Milestone 5: Spaced Repetition actions
   addSpacedReview: (review: Omit<SpacedReview, 'id'>) => string;
   updateSpacedReview: (id: string, updates: Partial<SpacedReview>) => void;
@@ -198,6 +199,7 @@ interface AppContextType {
   updateEvent: (id: string, updates: Partial<CalendarEvent>) => void;
   deleteEvent: (id: string) => void;
   toggleEventComplete: (id: string) => void;
+  toggleEventSubtask: (eventId: string, subtaskId: string) => void;
   fullReset: () => void;
 }
 
@@ -826,6 +828,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         events: updatedEvents,
         reminders: updatedReminders,
       };
+    });
+  };
+
+  const toggleEventSubtask = (eventId: string, subtaskId: string) => {
+    setState((prev) => {
+      const target = (prev.events || []).find((e) => e.id === eventId);
+      if (!target || !target.subtasks) return prev;
+
+      const updatedSubtasks = target.subtasks.map((st) => {
+        if (st.id !== subtaskId) return st;
+        const nextCompleted = !st.isCompleted;
+        return {
+          ...st,
+          isCompleted: nextCompleted,
+          completedAt: nextCompleted ? new Date().toISOString() : undefined,
+        };
+      });
+
+      const updatedEvents = (prev.events || []).map((e) =>
+        e.id === eventId ? { ...e, subtasks: updatedSubtasks, isSample: false } : e
+      );
+      return { ...prev, events: updatedEvents };
     });
   };
 
@@ -1526,6 +1550,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const setTaskStatus = (id: string, status: TaskStatus) => {
     updateTask(id, { status });
+  };
+
+  const toggleTaskSubtask = (taskId: string, subtaskId: string) => {
+    setState((prev) => {
+      const task = (prev.tasks || []).find((t) => t.id === taskId);
+      if (!task || !task.subtasks) return prev;
+
+      const updatedSubtasks = task.subtasks.map((st) => {
+        if (st.id !== subtaskId) return st;
+        const nextCompleted = !st.isCompleted;
+        return {
+          ...st,
+          isCompleted: nextCompleted,
+          completedAt: nextCompleted ? new Date().toISOString() : undefined,
+        };
+      });
+
+      const updatedTasks = (prev.tasks || []).map((t) =>
+        t.id === taskId ? { ...t, subtasks: updatedSubtasks, isSample: false } : t
+      );
+      return { ...prev, tasks: updatedTasks };
+    });
   };
 
   // ─── Milestone 5: Spaced Repetition ────────────────────────────────────────
@@ -2380,6 +2426,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateTask,
         deleteTask,
         setTaskStatus,
+        toggleTaskSubtask,
         // Milestone 5: Spaced Repetition
         addSpacedReview,
         updateSpacedReview,
@@ -2449,6 +2496,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateEvent,
         deleteEvent,
         toggleEventComplete,
+        toggleEventSubtask,
         fullReset,
         // Google Auth & Cloud Sync
         authUser,

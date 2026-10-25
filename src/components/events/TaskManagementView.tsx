@@ -18,9 +18,10 @@ import { useApp } from '../../context/AppContext';
 import { CalendarEvent, EventCategory, EventPriority, TaskStatus } from '../../types';
 import { EVENT_CATEGORIES, getEventCategoryConfig } from '../../utils/eventCategories';
 import { EventModal } from './EventModal';
+import { InlineSubtaskList } from '../planner/InlineSubtaskList';
 
 export const TaskManagementView: React.FC = () => {
-  const { state, updateEvent, deleteEvent, toggleEventComplete } = useApp();
+  const { state, updateEvent, deleteEvent, toggleEventComplete, toggleEventSubtask } = useApp();
 
   const [layoutMode, setLayoutMode] = useState<'board' | 'list'>('board');
   const [searchQuery, setSearchQuery] = useState('');
@@ -245,6 +246,7 @@ export const TaskManagementView: React.FC = () => {
             onDrop={handleDropOnStatus}
             onEdit={handleEdit}
             onToggleComplete={toggleEventComplete}
+            onToggleSubtask={toggleEventSubtask}
             onDelete={deleteEvent}
           />
 
@@ -260,6 +262,7 @@ export const TaskManagementView: React.FC = () => {
             onDrop={handleDropOnStatus}
             onEdit={handleEdit}
             onToggleComplete={toggleEventComplete}
+            onToggleSubtask={toggleEventSubtask}
             onDelete={deleteEvent}
           />
 
@@ -275,6 +278,7 @@ export const TaskManagementView: React.FC = () => {
             onDrop={handleDropOnStatus}
             onEdit={handleEdit}
             onToggleComplete={toggleEventComplete}
+            onToggleSubtask={toggleEventSubtask}
             onDelete={deleteEvent}
           />
         </div>
@@ -393,6 +397,7 @@ interface BoardColumnProps {
   onDrop: (e: React.DragEvent, status: TaskStatus) => void;
   onEdit: (event: CalendarEvent) => void;
   onToggleComplete: (id: string) => void;
+  onToggleSubtask?: (eventId: string, subtaskId: string) => void;
   onDelete: (id: string) => void;
 }
 
@@ -407,6 +412,7 @@ const BoardColumn: React.FC<BoardColumnProps> = ({
   onDrop,
   onEdit,
   onToggleComplete,
+  onToggleSubtask,
   onDelete,
 }) => {
   return (
@@ -487,6 +493,17 @@ const BoardColumn: React.FC<BoardColumnProps> = ({
                   <p className="text-[11px] text-espresso-500 dark:text-espresso-400 line-clamp-2 mt-1.5 pl-6">
                     {evt.description}
                   </p>
+                )}
+
+                {/* Inline Subtasks */}
+                {evt.subtasks && evt.subtasks.length > 0 && onToggleSubtask && (
+                  <div className="pl-6">
+                    <InlineSubtaskList
+                      taskId={evt.id}
+                      subtasks={evt.subtasks}
+                      onToggleSubtask={onToggleSubtask}
+                    />
+                  </div>
                 )}
 
                 <div className="flex items-center justify-between gap-2 mt-3 pt-2 border-t border-ivory-100 dark:border-espresso-800 text-[10px] font-mono pl-6">

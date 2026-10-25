@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { X, Calendar, Clock, AlertCircle } from 'lucide-react';
+import { X, Calendar, Clock, AlertCircle, Plus, Trash2 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { PlannerTask, TaskPriority, TaskStatus } from '../../types';
+import { PlannerTask, TaskPriority, TaskStatus, Subtask } from '../../types';
 import { validateTask } from '../../utils/plannerUtils';
 
 interface TaskModalProps {
@@ -31,6 +31,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   const [dueTime, setDueTime] = useState('');
   const [estimatedDuration, setEstimatedDuration] = useState<number | ''>('');
   const [notes, setNotes] = useState('');
+  const [subtasks, setSubtasks] = useState<Subtask[]>([]);
+  const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
 
   // Syllabus linking
   const [syllabusSubjectId, setSyllabusSubjectId] = useState('');
@@ -44,6 +46,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   useEffect(() => {
     if (!isOpen) return;
     setError(null);
+    setNewSubtaskTitle('');
 
     if (taskToEdit) {
       setTitle(taskToEdit.title);
@@ -54,6 +57,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       setDueTime(taskToEdit.dueTime || '');
       setEstimatedDuration(taskToEdit.estimatedDuration ?? '');
       setNotes(taskToEdit.notes || '');
+      setSubtasks(taskToEdit.subtasks ? JSON.parse(JSON.stringify(taskToEdit.subtasks)) : []);
       setSyllabusSubjectId(taskToEdit.syllabusSubjectId || taskToEdit.subjectId || '');
       setSyllabusChapterId(taskToEdit.syllabusChapterId || '');
       setSyllabusTopicId(taskToEdit.syllabusTopicId || '');
@@ -66,6 +70,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       setDueTime('');
       setEstimatedDuration('');
       setNotes('');
+      setSubtasks([]);
       setSyllabusSubjectId(initialSubjectId || '');
       setSyllabusChapterId(initialChapterId || '');
       setSyllabusTopicId(initialTopicId || '');
@@ -81,6 +86,36 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   // Selected chapter's subtopics
   const selectedChapter = availableChapters.find((c) => c.id === syllabusChapterId);
   const availableTopics = selectedChapter ? selectedChapter.subtopics : [];
+
+  const handleAddSubtask = () => {
+    const trimmed = newSubtaskTitle.trim();
+    if (!trimmed) return;
+    const newSub: Subtask = {
+      id: `st-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      title: trimmed,
+      isCompleted: false,
+    };
+    setSubtasks((prev) => [...prev, newSub]);
+    setNewSubtaskTitle('');
+  };
+
+  const handleToggleSubtaskInModal = (subtaskId: string) => {
+    setSubtasks((prev) =>
+      prev.map((s) => {
+        if (s.id !== subtaskId) return s;
+        const nextComp = !s.isCompleted;
+        return {
+          ...s,
+          isCompleted: nextComp,
+          completedAt: nextComp ? new Date().toISOString() : undefined,
+        };
+      })
+    );
+  };
+
+  const handleRemoveSubtask = (subtaskId: string) => {
+    setSubtasks((prev) => prev.filter((s) => s.id !== subtaskId));
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -101,6 +136,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       syllabusChapterId: syllabusChapterId || undefined,
       syllabusTopicId: syllabusTopicId || undefined,
       subjectId: syllabusSubjectId || undefined,
+      subtasks: subtasks.length > 0 ? subtasks : undefined,
     };
 
     const validation = validateTask(taskPayload);
@@ -325,6 +361,79 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 </div>
               )}
             </div>
+          </div>
+
+          {/* Subtasks Section */}
+          <div className="pt-2 border-t border-ivory-200 dark:border-espresso-800 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-semibold text-espresso-700 dark:text-ivory-200 uppercase font-mono tracking-wider">
+                Subtasks / Checklist {subtasks.length > 0 && `(${subtasks.filter((s) => s.isCompleted).length}/${subtasks.length})`}
+              </label>
+            </div>
+
+            {/* Input to add subtask */}
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={newSubtaskTitle}
+                onChange={(e) => setNewSubtaskTitle(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleAddSubtask();
+                  }
+                }}
+                placeholder="Add subtask and press Enter..."
+                className="flex-1 px-3 py-2 text-xs rounded-xl border border-ivory-300 dark:border-espresso-750 bg-ivory-50/50 dark:bg-espresso-800 text-espresso-950 dark:text-ivory-50 focus:outline-none focus:ring-2 focus:ring-terracotta-500"
+              />
+              <button
+                type="button"
+                onClick={handleAddSubtask}
+                className="px-3.5 py-2 text-xs font-semibold rounded-xl bg-ivory-200 dark:bg-espresso-800 hover:bg-ivory-300 dark:hover:bg-espresso-750 text-espresso-800 dark:text-ivory-100 transition flex items-center gap-1 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add</span>
+              </button>
+            </div>
+
+            {/* Subtasks list */}
+            {subtasks.length > 0 && (
+              <ul className="space-y-1.5 pt-1 max-h-40 overflow-y-auto" role="list">
+                {subtasks.map((st) => (
+                  <li
+                    key={st.id}
+                    className="flex items-center justify-between gap-2 p-2 rounded-xl bg-ivory-50 dark:bg-espresso-800/60 border border-ivory-200 dark:border-espresso-750 text-xs"
+                  >
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <input
+                        type="checkbox"
+                        checked={st.isCompleted}
+                        onChange={() => handleToggleSubtaskInModal(st.id)}
+                        className="rounded text-terracotta-500 cursor-pointer"
+                        aria-label={`Toggle ${st.title}`}
+                      />
+                      <span
+                        className={`break-words select-none ${
+                          st.isCompleted
+                            ? 'line-through text-espresso-400 dark:text-espresso-500'
+                            : 'text-espresso-900 dark:text-ivory-100 font-medium'
+                        }`}
+                      >
+                        {st.title}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveSubtask(st.id)}
+                      className="p-1 rounded-md text-espresso-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition cursor-pointer"
+                      aria-label={`Remove ${st.title}`}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
 
           {/* Notes */}

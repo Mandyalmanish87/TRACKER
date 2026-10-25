@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { X, Calendar as CalendarIcon, Clock, MapPin, AlignLeft, Tag, Flag, Trash2, CheckCircle2 } from 'lucide-react';
+import { X, Calendar as CalendarIcon, Clock, MapPin, AlignLeft, Tag, Flag, Trash2, CheckCircle2, Plus } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { CalendarEvent, EventCategory, EventPriority, ExamType, TaskStatus } from '../../types';
+import { CalendarEvent, EventCategory, EventPriority, ExamType, TaskStatus, Subtask } from '../../types';
 import { EVENT_CATEGORIES, getEventCategoryConfig } from '../../utils/eventCategories';
 
 interface EventModalProps {
@@ -36,6 +36,8 @@ export const EventModal: React.FC<EventModalProps> = ({
   const [examType, setExamType] = useState<ExamType>('mid_sem');
   const [location, setLocation] = useState('');
   const [description, setDescription] = useState('');
+  const [subtasks, setSubtasks] = useState<Subtask[]>([]);
+  const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
@@ -55,6 +57,7 @@ export const EventModal: React.FC<EventModalProps> = ({
       setExamType(initialEvent.examType || 'mid_sem');
       setLocation(initialEvent.location || '');
       setDescription(initialEvent.description || '');
+      setSubtasks(initialEvent.subtasks ? JSON.parse(JSON.stringify(initialEvent.subtasks)) : []);
       setIsDeleting(false);
     } else {
       const today = initialDate || new Date().toISOString().split('T')[0];
@@ -74,9 +77,40 @@ export const EventModal: React.FC<EventModalProps> = ({
       setExamType('mid_sem');
       setLocation('');
       setDescription('');
+      setSubtasks([]);
       setIsDeleting(false);
     }
   }, [isOpen, initialEvent, initialDate, initialStartTime, initialCategory]);
+
+  const handleAddSubtask = () => {
+    const trimmed = newSubtaskTitle.trim();
+    if (!trimmed) return;
+    const newSub: Subtask = {
+      id: `est-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      title: trimmed,
+      isCompleted: false,
+    };
+    setSubtasks((prev) => [...prev, newSub]);
+    setNewSubtaskTitle('');
+  };
+
+  const handleToggleSubtaskInModal = (subtaskId: string) => {
+    setSubtasks((prev) =>
+      prev.map((s) => {
+        if (s.id !== subtaskId) return s;
+        const nextComp = !s.isCompleted;
+        return {
+          ...s,
+          isCompleted: nextComp,
+          completedAt: nextComp ? new Date().toISOString() : undefined,
+        };
+      })
+    );
+  };
+
+  const handleRemoveSubtask = (subtaskId: string) => {
+    setSubtasks((prev) => prev.filter((s) => s.id !== subtaskId));
+  };
 
   if (!isOpen) return null;
 
@@ -99,6 +133,7 @@ export const EventModal: React.FC<EventModalProps> = ({
       examType: category === 'exam' ? examType : undefined,
       location: location.trim() || undefined,
       description: description.trim() || undefined,
+      subtasks: subtasks.length > 0 ? subtasks : undefined,
     };
 
     if (initialEvent) {
@@ -382,6 +417,79 @@ export const EventModal: React.FC<EventModalProps> = ({
               placeholder="Add key notes, syllabus topics, instructions, or resources..."
               className="w-full px-3 py-2 rounded-xl text-xs sm:text-sm border border-ivory-300 dark:border-espresso-700 bg-ivory-50 dark:bg-espresso-850 text-espresso-950 dark:text-ivory-50 focus:outline-none focus:ring-2 focus:ring-terracotta-500 resize-none"
             />
+          </div>
+
+          {/* Subtasks Section */}
+          <div className="pt-2 border-t border-ivory-200 dark:border-espresso-800 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-semibold uppercase tracking-wider text-espresso-600 dark:text-espresso-300">
+                Subtasks / Checklist {subtasks.length > 0 && `(${subtasks.filter((s) => s.isCompleted).length}/${subtasks.length})`}
+              </label>
+            </div>
+
+            {/* Input to add subtask */}
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={newSubtaskTitle}
+                onChange={(e) => setNewSubtaskTitle(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleAddSubtask();
+                  }
+                }}
+                placeholder="Add subtask and press Enter..."
+                className="flex-1 px-3 py-2 text-xs rounded-xl border border-ivory-300 dark:border-espresso-750 bg-ivory-50/50 dark:bg-espresso-800 text-espresso-950 dark:text-ivory-50 focus:outline-none focus:ring-2 focus:ring-terracotta-500"
+              />
+              <button
+                type="button"
+                onClick={handleAddSubtask}
+                className="px-3.5 py-2 text-xs font-semibold rounded-xl bg-ivory-200 dark:bg-espresso-800 hover:bg-ivory-300 dark:hover:bg-espresso-750 text-espresso-800 dark:text-ivory-100 transition flex items-center gap-1 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add</span>
+              </button>
+            </div>
+
+            {/* Subtasks list */}
+            {subtasks.length > 0 && (
+              <ul className="space-y-1.5 pt-1 max-h-40 overflow-y-auto" role="list">
+                {subtasks.map((st) => (
+                  <li
+                    key={st.id}
+                    className="flex items-center justify-between gap-2 p-2 rounded-xl bg-ivory-50 dark:bg-espresso-800/60 border border-ivory-200 dark:border-espresso-750 text-xs"
+                  >
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <input
+                        type="checkbox"
+                        checked={st.isCompleted}
+                        onChange={() => handleToggleSubtaskInModal(st.id)}
+                        className="rounded text-terracotta-500 cursor-pointer"
+                        aria-label={`Toggle ${st.title}`}
+                      />
+                      <span
+                        className={`break-words select-none ${
+                          st.isCompleted
+                            ? 'line-through text-espresso-400 dark:text-espresso-500'
+                            : 'text-espresso-900 dark:text-ivory-100 font-medium'
+                        }`}
+                      >
+                        {st.title}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveSubtask(st.id)}
+                      className="p-1 rounded-md text-espresso-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition cursor-pointer"
+                      aria-label={`Remove ${st.title}`}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
 
           {/* Footer Actions */}

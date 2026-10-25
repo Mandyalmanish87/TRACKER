@@ -386,6 +386,15 @@ export interface CalendarEvent {
   createdAt: string;
   completedAt?: string;
   isSample?: boolean;
+  subtasks?: Subtask[];
+}
+
+// Subtask definition for checklist items on tasks
+export interface Subtask {
+  id: string;
+  title: string;
+  isCompleted: boolean;
+  completedAt?: string;
 }
 
 // ----- Milestone 5 Types -----
@@ -410,6 +419,7 @@ export interface PlannerTask {
   createdAt: string; // ISO string
   completedAt?: string; // ISO string
   isSample?: boolean;
+  subtasks?: Subtask[];
 }
 
 export interface SpacedReviewHistoryItem {
