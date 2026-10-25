@@ -7,6 +7,7 @@ import { KanbanBoard } from '../src/components/planner/KanbanBoard';
 import { TaskModal } from '../src/components/planner/TaskModal';
 import { InlineSubtaskList } from '../src/components/planner/InlineSubtaskList';
 import { TaskManagementView } from '../src/components/events/TaskManagementView';
+import { EventModal } from '../src/components/events/EventModal';
 import { PlannerTask, CalendarEvent, Subtask } from '../src/types';
 import { storageService } from '../src/services/storage';
 
@@ -370,6 +371,250 @@ describe('Phase 4C.1: Inline Subtask Completion on Kanban Cards', () => {
     const saved = storageService.loadData();
     const updatedEvt = saved.events?.find((e) => e.id === 'evt-task-sub');
     expect(updatedEvt?.subtasks?.find((s) => s.id === 'c-sub-1')?.isCompleted).toBe(true);
+  });
+
+  // 10. Preservation of EventModal for managing subtasks (Task 2)
+  it('allows managing subtasks inside EventModal (adding, removing, toggling) and persists to storage', () => {
+    const calendarEvent: CalendarEvent = {
+      id: 'evt-modal-test',
+      title: 'Prepare Lab Presentation',
+      category: 'task',
+      date: '2026-10-27',
+      status: 'todo',
+      isCompleted: false,
+      createdAt: '2026-10-24T00:00:00.000Z',
+      subtasks: [
+        { id: 'em-sub-1', title: 'Compile data graphs', isCompleted: false },
+        { id: 'em-sub-2', title: 'Write speaker notes', isCompleted: true, completedAt: '2026-10-24T12:00:00.000Z' },
+      ],
+    };
+
+    const initialData = storageService.loadData();
+    initialData.events = [calendarEvent];
+    storageService.saveData(initialData);
+
+    const EventModalContainer: React.FC = () => {
+      const { state } = useApp();
+      const [isOpen, setIsOpen] = React.useState(true);
+      return (
+        <EventModal
+          isOpen={isOpen}
+          onClose={() => setIsOpen(false)}
+          initialEvent={state.events?.find((e) => e.id === 'evt-modal-test')}
+        />
+      );
+    };
+
+    renderWithProviders(<EventModalContainer />);
+
+    // Existing subtasks visible
+    expect(screen.getByText('Compile data graphs')).toBeInTheDocument();
+    expect(screen.getByText('Write speaker notes')).toBeInTheDocument();
+
+    // Toggle subtask 1 in modal
+    const toggleCheckbox = screen.getByRole('checkbox', { name: /toggle compile data graphs/i });
+    expect(toggleCheckbox).not.toBeChecked();
+    fireEvent.click(toggleCheckbox);
+    expect(toggleCheckbox).toBeChecked();
+
+    // Add a new subtask
+    const addInput = screen.getByPlaceholderText(/add subtask and press enter/i);
+    fireEvent.change(addInput, { target: { value: 'Rehearse with timer' } });
+    fireEvent.click(screen.getByRole('button', { name: /add/i }));
+    expect(screen.getByText('Rehearse with timer')).toBeInTheDocument();
+
+    // Remove subtask 2
+    const removeBtn = screen.getByRole('button', { name: /remove write speaker notes/i });
+    fireEvent.click(removeBtn);
+    expect(screen.queryByText('Write speaker notes')).not.toBeInTheDocument();
+
+    // Save changes
+    fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
+
+    // Verify localStorage has the 2 remaining subtasks
+    const saved = storageService.loadData();
+    const updated = saved.events?.find((e) => e.id === 'evt-modal-test');
+    expect(updated).toBeDefined();
+    expect(updated?.subtasks?.length).toBe(2);
+
+    const sub1 = updated?.subtasks?.find((s) => s.title === 'Compile data graphs');
+    expect(sub1?.isCompleted).toBe(true);
+    expect(sub1?.completedAt).toBeDefined();
+
+    const sub2 = updated?.subtasks?.find((s) => s.title === 'Rehearse with timer');
+    expect(sub2?.isCompleted).toBe(false);
+
+    expect(updated?.subtasks?.some((s) => s.title === 'Write speaker notes')).toBe(false);
+  });
+
+  // 11. Completing subtasks does NOT automatically mark parent task/event complete (Task 3)
+  it('completing all subtasks does NOT automatically mark parent task or event status as done', () => {
+    const parentTask: PlannerTask = {
+      id: 'task-no-auto-complete',
+      title: 'Independent Task Completion Test',
+      status: 'todo',
+      priority: 'medium',
+      createdAt: '2026-10-24T00:00:00.000Z',
+      subtasks: [
+        { id: 'ind-1', title: 'Part A', isCompleted: false },
+        { id: 'ind-2', title: 'Part B', isCompleted: false },
+      ],
+    };
+
+    const parentEvent: CalendarEvent = {
+      id: 'evt-no-auto-complete',
+      title: 'Independent Event Completion Test',
+      category: 'task',
+      date: '2026-10-28',
+      status: 'todo',
+      isCompleted: false,
+      createdAt: '2026-10-24T00:00:00.000Z',
+      subtasks: [
+        { id: 'ind-evt-1', title: 'Step 1', isCompleted: false },
+      ],
+    };
+
+    const initialData = storageService.loadData();
+    initialData.tasks = [parentTask];
+    initialData.events = [parentEvent];
+    storageService.saveData(initialData);
+
+    const TestHarness: React.FC = () => {
+      const { toggleTaskSubtask, toggleEventSubtask } = useApp();
+      return (
+        <div>
+          <button onClick={() => toggleTaskSubtask('task-no-auto-complete', 'ind-1')}>Toggle Task 1</button>
+          <button onClick={() => toggleTaskSubtask('task-no-auto-complete', 'ind-2')}>Toggle Task 2</button>
+          <button onClick={() => toggleEventSubtask('evt-no-auto-complete', 'ind-evt-1')}>Toggle Evt 1</button>
+        </div>
+      );
+    };
+
+    renderWithProviders(<TestHarness />);
+
+    // Complete all task subtasks
+    fireEvent.click(screen.getByText('Toggle Task 1'));
+    fireEvent.click(screen.getByText('Toggle Task 2'));
+
+    // Complete all event subtasks
+    fireEvent.click(screen.getByText('Toggle Evt 1'));
+
+    const saved = storageService.loadData();
+    const task = saved.tasks?.find((t) => t.id === 'task-no-auto-complete');
+    const evt = saved.events?.find((e) => e.id === 'evt-no-auto-complete');
+
+    // Subtasks are all completed
+    expect(task?.subtasks?.every((s) => s.isCompleted)).toBe(true);
+    expect(evt?.subtasks?.every((s) => s.isCompleted)).toBe(true);
+
+    // Parent task status MUST remain 'todo' (not auto-marked 'done')
+    expect(task?.status).toBe('todo');
+    expect(task?.completedAt).toBeUndefined();
+
+    // Parent event status MUST remain 'todo' and isCompleted false
+    expect(evt?.status).toBe('todo');
+    expect(evt?.isCompleted).toBe(false);
+    expect(evt?.completedAt).toBeUndefined();
+  });
+
+  // 12. completedAt is set on completion and cleared when unchecked (Task 4)
+  it('sets completedAt timestamp on subtask completion and clears it when uncompleted', () => {
+    const task: PlannerTask = {
+      id: 'task-timestamp-test',
+      title: 'Timestamp Verification Task',
+      status: 'in_progress',
+      priority: 'high',
+      createdAt: '2026-10-24T00:00:00.000Z',
+      subtasks: [
+        { id: 'ts-sub', title: 'Timestamp Check Item', isCompleted: false },
+      ],
+    };
+
+    const initialData = storageService.loadData();
+    initialData.tasks = [task];
+    storageService.saveData(initialData);
+
+    const TestHarness: React.FC = () => {
+      const { toggleTaskSubtask } = useApp();
+      return (
+        <button onClick={() => toggleTaskSubtask('task-timestamp-test', 'ts-sub')}>Toggle Subtask</button>
+      );
+    };
+
+    renderWithProviders(<TestHarness />);
+    const btn = screen.getByText('Toggle Subtask');
+
+    // 1. Mark complete
+    fireEvent.click(btn);
+    let saved = storageService.loadData();
+    let sub = saved.tasks?.find((t) => t.id === 'task-timestamp-test')?.subtasks?.[0];
+    expect(sub?.isCompleted).toBe(true);
+    expect(sub?.completedAt).toBeDefined();
+    expect(typeof sub?.completedAt).toBe('string');
+    const parsedDate = new Date(sub!.completedAt!);
+    expect(isNaN(parsedDate.getTime())).toBe(false);
+
+    // 2. Mark incomplete (uncheck)
+    fireEvent.click(btn);
+    saved = storageService.loadData();
+    sub = saved.tasks?.find((t) => t.id === 'task-timestamp-test')?.subtasks?.[0];
+    expect(sub?.isCompleted).toBe(false);
+    expect(sub?.completedAt).toBeUndefined();
+  });
+
+  // 13. Toggling a subtask updates only targeted record and preserves sibling subtasks (Task 5)
+  it('toggling a subtask updates only the targeted task and preserves sibling subtasks', () => {
+    const taskA: PlannerTask = {
+      id: 'task-A',
+      title: 'Task Alpha',
+      status: 'todo',
+      priority: 'high',
+      createdAt: '2026-10-24T00:00:00.000Z',
+      subtasks: [
+        { id: 'sub-a1', title: 'Alpha Step 1', isCompleted: false },
+        { id: 'sub-a2', title: 'Alpha Step 2', isCompleted: true, completedAt: '2026-10-24T10:00:00.000Z' },
+      ],
+    };
+
+    const taskB: PlannerTask = {
+      id: 'task-B',
+      title: 'Task Beta',
+      status: 'todo',
+      priority: 'low',
+      createdAt: '2026-10-24T00:00:00.000Z',
+      subtasks: [
+        { id: 'sub-b1', title: 'Beta Step 1', isCompleted: false },
+        { id: 'sub-b2', title: 'Beta Step 2', isCompleted: false },
+      ],
+    };
+
+    const initialData = storageService.loadData();
+    initialData.tasks = [taskA, taskB];
+    storageService.saveData(initialData);
+
+    const TestHarness: React.FC = () => {
+      const { toggleTaskSubtask } = useApp();
+      return (
+        <button onClick={() => toggleTaskSubtask('task-A', 'sub-a1')}>Toggle A1</button>
+      );
+    };
+
+    renderWithProviders(<TestHarness />);
+    fireEvent.click(screen.getByText('Toggle A1'));
+
+    const saved = storageService.loadData();
+    const loadedA = saved.tasks?.find((t) => t.id === 'task-A');
+    const loadedB = saved.tasks?.find((t) => t.id === 'task-B');
+
+    // Task A: sub-a1 toggled to complete
+    expect(loadedA?.subtasks?.find((s) => s.id === 'sub-a1')?.isCompleted).toBe(true);
+    // Task A: sibling sub-a2 preserved exactly
+    expect(loadedA?.subtasks?.find((s) => s.id === 'sub-a2')?.isCompleted).toBe(true);
+    expect(loadedA?.subtasks?.find((s) => s.id === 'sub-a2')?.completedAt).toBe('2026-10-24T10:00:00.000Z');
+
+    // Task B: completely untouched
+    expect(loadedB?.subtasks?.find((s) => s.id === 'sub-b1')?.isCompleted).toBe(false);
+    expect(loadedB?.subtasks?.find((s) => s.id === 'sub-b2')?.isCompleted).toBe(false);
   });
 });
 
