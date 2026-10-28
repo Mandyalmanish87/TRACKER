@@ -17,18 +17,20 @@ export const STORAGE_KEY_V2 = 'tracker_app_data_v2';
  */
 export function migrateV1ToV2(raw: unknown): AppStateData {
   const v1 = (raw && typeof raw === 'object' ? raw : {}) as Partial<AppStateData>;
-  // Preserve existing data structures, ensuring they are arrays
-  const subjects = Array.isArray(v1.subjects) ? v1.subjects : [];
-  const timetable = Array.isArray(v1.timetable) ? v1.timetable : [];
-  const attendanceLogs = Array.isArray(v1.attendanceLogs) ? v1.attendanceLogs : [];
+  // Preserve existing data structures, ensuring they are valid arrays of objects
+  const subjects = Array.isArray(v1.subjects) ? v1.subjects.filter((s: any) => s && typeof s === 'object') : [];
+  const timetable = Array.isArray(v1.timetable) ? v1.timetable.filter((t: any) => t && typeof t === 'object') : [];
+  const attendanceLogs = Array.isArray(v1.attendanceLogs) ? v1.attendanceLogs.filter((a: any) => a && typeof a === 'object') : [];
   const studySessions = Array.isArray(v1.studySessions)
-    ? v1.studySessions.map((s: any) => ({
-        ...s,
-        status: s.status ?? 'completed',
-      }))
+    ? v1.studySessions
+        .filter((s: any) => s && typeof s === 'object')
+        .map((s: any) => ({
+          ...s,
+          status: s.status ?? 'completed',
+        }))
     : [];
-  const gymWorkouts = Array.isArray(v1.gymWorkouts) ? v1.gymWorkouts : [];
-  const reminders = Array.isArray(v1.reminders) ? v1.reminders : [];
+  const gymWorkouts = Array.isArray(v1.gymWorkouts) ? v1.gymWorkouts.filter((g: any) => g && typeof g === 'object') : [];
+  const reminders = Array.isArray(v1.reminders) ? v1.reminders.filter((r: any) => r && typeof r === 'object') : [];
 
   const defaultProfile: UserProfile = {
     displayName: v1.profile?.displayName ?? '',
@@ -92,5 +94,6 @@ export function migrateV1ToV2(raw: unknown): AppStateData {
     mockTests: Array.isArray(v1.mockTests) ? v1.mockTests : [],
     errorLogs: Array.isArray(v1.errorLogs) ? v1.errorLogs : [],
     events: Array.isArray(v1.events) ? v1.events : [],
+    tombstones: Array.isArray(v1.tombstones) ? v1.tombstones : [],
   };
 }

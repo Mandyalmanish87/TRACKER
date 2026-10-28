@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { TimetableImportClass, DayOfWeek } from '../../types';
+import { preprocessAndParseTimetableJson } from '../../utils/timetableJsonSanitizer';
 
 interface GptTimetableImportModalProps {
   isOpen: boolean;
@@ -96,17 +97,11 @@ export const GptTimetableImportModal: React.FC<GptTimetableImportModalProps> = (
       return;
     }
 
-    // Strip markdown code fences if user included them (e.g. ```json ... ```)
-    let cleanJson = trimmed;
-    if (cleanJson.startsWith('```')) {
-      cleanJson = cleanJson.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '');
-    }
-
     let payload: any;
     try {
-      payload = JSON.parse(cleanJson);
+      payload = preprocessAndParseTimetableJson(trimmed);
     } catch (err: any) {
-      setValidationError(`Invalid JSON format: ${err.message}. Please verify the pasted text.`);
+      setValidationError(err.message || 'Invalid JSON format. Please verify the pasted text.');
       return;
     }
 

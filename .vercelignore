@@ -1,0 +1,10 @@
+.env
+.env.local
+.env.*
+.git
+.vercel
+node_modules
+dist
+tests
+supabase
+

@@ -82,8 +82,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const displayName = state.profile?.displayName?.trim() || 'Scholar';
 
   // Drag and drop state
-  const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
 
   // Compute live overview metrics
   const targetDay = 3; // Wednesday in demo/academic term
@@ -153,29 +153,59 @@ export const Dashboard: React.FC<DashboardProps> = ({
     return valid;
   }, [state.settings?.dashboardWidgetOrder]);
 
-  const handleDragStart = (e: React.DragEvent, index: number) => {
-    e.dataTransfer.setData('text/plain', String(index));
+  // Filter visible widgets according to single source of truth in state.settings?.dashboardWidgetVisibility
+  const visibleWidgets = useMemo(() => {
+    const visibility = state.settings?.dashboardWidgetVisibility;
+    return widgetOrder.filter((id) => {
+      if (visibility && typeof visibility[id] === 'boolean') {
+        return visibility[id];
+      }
+      return true; // Default all widgets in command center to visible
+    });
+  }, [widgetOrder, state.settings?.dashboardWidgetVisibility]);
+
+  const isExamCountdownVisible = useMemo(() => {
+    const visibility = state.settings?.dashboardWidgetVisibility;
+    if (visibility && typeof visibility.academic_countdown === 'boolean') {
+      return visibility.academic_countdown;
+    }
+    return state.settings?.showExamCountdown ?? true;
+  }, [state.settings?.dashboardWidgetVisibility, state.settings?.showExamCountdown]);
+
+  const isKpiStripVisible = useMemo(() => {
+    const visibility = state.settings?.dashboardWidgetVisibility;
+    if (visibility && typeof visibility.kpi_strip === 'boolean') {
+      return visibility.kpi_strip;
+    }
+    return true;
+  }, [state.settings?.dashboardWidgetVisibility]);
+
+  const handleDragStart = (e: React.DragEvent, widgetId: string) => {
+    e.dataTransfer.setData('text/plain', widgetId);
     e.dataTransfer.effectAllowed = 'move';
-    setDraggingIndex(index);
+    setDraggingId(widgetId);
   };
 
-  const handleDragOver = (e: React.DragEvent, index: number) => {
+  const handleDragOver = (e: React.DragEvent, widgetId: string) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
-    if (dragOverIndex !== index) {
-      setDragOverIndex(index);
+    if (dragOverId !== widgetId) {
+      setDragOverId(widgetId);
     }
   };
 
-  const handleDrop = (e: React.DragEvent, targetIndex: number) => {
+  const handleDrop = (e: React.DragEvent, targetWidgetId: string) => {
     e.preventDefault();
-    const sourceIndexStr = e.dataTransfer.getData('text/plain');
-    const sourceIndex = Number(sourceIndexStr);
+    const sourceWidgetId = e.dataTransfer.getData('text/plain');
 
-    setDraggingIndex(null);
-    setDragOverIndex(null);
+    setDraggingId(null);
+    setDragOverId(null);
 
-    if (isNaN(sourceIndex) || sourceIndex === targetIndex) return;
+    if (!sourceWidgetId || sourceWidgetId === targetWidgetId) return;
+
+    const sourceIndex = widgetOrder.indexOf(sourceWidgetId);
+    const targetIndex = widgetOrder.indexOf(targetWidgetId);
+    if (sourceIndex === -1 || targetIndex === -1) return;
 
     const newOrder = [...widgetOrder];
     const [moved] = newOrder.splice(sourceIndex, 1);
@@ -185,12 +215,16 @@ export const Dashboard: React.FC<DashboardProps> = ({
   };
 
   const handleDragEnd = () => {
-    setDraggingIndex(null);
-    setDragOverIndex(null);
+    setDraggingId(null);
+    setDragOverId(null);
   };
 
-  const handleMove = (fromIndex: number, toIndex: number) => {
+  const handleMove = (widgetId: string, direction: 'up' | 'down') => {
+    const fromIndex = widgetOrder.indexOf(widgetId);
+    if (fromIndex === -1) return;
+    const toIndex = direction === 'up' ? fromIndex - 1 : fromIndex + 1;
     if (toIndex < 0 || toIndex >= widgetOrder.length) return;
+
     const newOrder = [...widgetOrder];
     const [moved] = newOrder.splice(fromIndex, 1);
     newOrder.splice(toIndex, 0, moved);
@@ -265,10 +299,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
       </div>
 
       {/* ── 2. ACADEMIC COUNTDOWN & KPI STRIP ─────────────────────── */}
-      <section className="space-y-6">
-        <AcademicCountdownWidget />
+      {(isExamCountdownVisible || isKpiStripVisible) && (
+        <section className="space-y-6">
+          {isExamCountdownVisible && <AcademicCountdownWidget />}
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5 sm:gap-4">
+          {isKpiStripVisible && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5 sm:gap-4">
           {/* Stat 0: Current Time */}
           <TiltCard maxTilt={8} scale={1.02}>
             <div className="p-4 sm:p-5 rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 shadow-subtle h-full flex flex-col justify-between">
@@ -383,8 +419,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
               </p>
             </div>
           </TiltCard>
-        </div>
-      </section>
+            </div>
+          )}
+        </section>
+      )}
 
       {/* ── 3. REARRANGEABLE COMMAND CENTER WIDGETS ────────────────── */}
       <section className="space-y-4">
@@ -416,67 +454,79 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
         {/* Masonry Layout: stacks blocks with zero vertical gaps */}
         <CardDensityContext.Provider value={{ density: 'compact', borderless: false }}>
-          <div className="columns-1 md:columns-2 lg:columns-3 xl:columns-4 gap-4 space-y-4">
-            {widgetOrder.map((widgetId, idx) => {
-              const isDragging = draggingIndex === idx;
-              const isOver = dragOverIndex === idx;
+          {visibleWidgets.length === 0 ? (
+            <div className="p-8 text-center rounded-2xl border border-dashed border-ivory-400 dark:border-espresso-700 bg-ivory-50/50 dark:bg-espresso-900/30">
+              <p className="text-sm font-medium text-espresso-700 dark:text-ivory-200">
+                All command center widgets are currently hidden.
+              </p>
+              <p className="text-xs text-espresso-500 dark:text-espresso-400 mt-1">
+                You can re-enable widgets anytime in Settings → Dashboard Control System.
+              </p>
+            </div>
+          ) : (
+            <div className="columns-1 md:columns-2 lg:columns-3 xl:columns-4 gap-4 space-y-4">
+              {visibleWidgets.map((widgetId) => {
+                const isDragging = draggingId === widgetId;
+                const isOver = dragOverId === widgetId;
+                const currentIndexInVisible = visibleWidgets.indexOf(widgetId);
 
-              return (
-                <div
-                  key={widgetId}
-                  onDragOver={(e) => handleDragOver(e, idx)}
-                  onDrop={(e) => handleDrop(e, idx)}
-                  className={`break-inside-avoid rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 overflow-hidden shadow-subtle mb-4 flex flex-col transition-all duration-200 relative group ${
-                    isOver ? 'ring-2 ring-terracotta-500 scale-[1.01]' : ''
-                  } ${isDragging ? 'opacity-40' : ''}`}
-                >
-                  {/* Sleek Integrated Drag Header */}
-                  <div className="flex items-center justify-between px-3.5 py-1.5 border-b border-ivory-200 dark:border-espresso-800 bg-ivory-50/80 dark:bg-espresso-900/60 select-none shrink-0 text-xs">
-                    <div
-                      draggable
-                      onDragStart={(e) => handleDragStart(e, idx)}
-                      onDragEnd={handleDragEnd}
-                      className="flex items-center gap-1.5 cursor-grab active:cursor-grabbing hover:text-espresso-950 dark:hover:text-ivory-50 transition py-0.5 px-1 rounded -ml-1"
-                      title="Click and drag to rearrange this widget"
-                    >
-                      <GripVertical className="w-3.5 h-3.5 text-terracotta-500 shrink-0" />
-                      <span className="font-mono text-[11px] font-semibold tracking-wide text-espresso-800 dark:text-ivory-200 truncate">
-                        {WIDGET_TITLES[widgetId] || widgetId}
-                      </span>
+                return (
+                  <div
+                    key={widgetId}
+                    onDragOver={(e) => handleDragOver(e, widgetId)}
+                    onDrop={(e) => handleDrop(e, widgetId)}
+                    className={`break-inside-avoid rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 overflow-hidden shadow-subtle mb-4 flex flex-col transition-all duration-200 relative group ${
+                      isOver ? 'ring-2 ring-terracotta-500 scale-[1.01]' : ''
+                    } ${isDragging ? 'opacity-40' : ''}`}
+                  >
+                    {/* Sleek Integrated Drag Header */}
+                    <div className="flex items-center justify-between px-3.5 py-1.5 border-b border-ivory-200 dark:border-espresso-800 bg-ivory-50/80 dark:bg-espresso-900/60 select-none shrink-0 text-xs">
+                      <div
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, widgetId)}
+                        onDragEnd={handleDragEnd}
+                        className="flex items-center gap-1.5 cursor-grab active:cursor-grabbing hover:text-espresso-950 dark:hover:text-ivory-50 transition py-0.5 px-1 rounded -ml-1"
+                        title="Click and drag to rearrange this widget"
+                      >
+                        <GripVertical className="w-3.5 h-3.5 text-terracotta-500 shrink-0" />
+                        <span className="font-mono text-[11px] font-semibold tracking-wide text-espresso-800 dark:text-ivory-200 truncate">
+                          {WIDGET_TITLES[widgetId] || widgetId}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-0.5 shrink-0 opacity-70 group-hover:opacity-100 transition-opacity">
+                        <button
+                          type="button"
+                          onClick={() => handleMove(widgetId, 'up')}
+                          disabled={currentIndexInVisible === 0}
+                          aria-label="Move widget up"
+                          title="Move up"
+                          className="p-1 rounded hover:bg-ivory-200 dark:hover:bg-espresso-750 disabled:opacity-20 transition cursor-pointer text-espresso-600 dark:text-espresso-300"
+                        >
+                          <ChevronUp className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleMove(widgetId, 'down')}
+                          disabled={currentIndexInVisible === visibleWidgets.length - 1}
+                          aria-label="Move widget down"
+                          title="Move down"
+                          className="p-1 rounded hover:bg-ivory-200 dark:hover:bg-espresso-750 disabled:opacity-20 transition cursor-pointer text-espresso-600 dark:text-espresso-300"
+                        >
+                          <ChevronDown className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
 
-                    <div className="flex items-center gap-0.5 shrink-0 opacity-70 group-hover:opacity-100 transition-opacity">
-                      <button
-                        type="button"
-                        onClick={() => handleMove(idx, idx - 1)}
-                        disabled={idx === 0}
-                        aria-label="Move widget up"
-                        title="Move up"
-                        className="p-1 rounded hover:bg-ivory-200 dark:hover:bg-espresso-750 disabled:opacity-20 transition cursor-pointer text-espresso-600 dark:text-espresso-300"
-                      >
-                        <ChevronUp className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleMove(idx, idx + 1)}
-                        disabled={idx === widgetOrder.length - 1}
-                        aria-label="Move widget down"
-                        title="Move down"
-                        className="p-1 rounded hover:bg-ivory-200 dark:hover:bg-espresso-750 disabled:opacity-20 transition cursor-pointer text-espresso-600 dark:text-espresso-300"
-                      >
-                        <ChevronDown className="w-3.5 h-3.5" />
-                      </button>
+                    {/* Embedded Widget Card Content */}
+                    <div className="flex-1 flex flex-col min-w-0 w-full [&>div]:border-0 [&>div]:rounded-none [&>div]:shadow-none">
+                      {renderWidgetComponent(widgetId)}
                     </div>
                   </div>
-
-                  {/* Embedded Widget Card Content */}
-                  <div className="flex-1 flex flex-col min-w-0 w-full [&>div]:border-0 [&>div]:rounded-none [&>div]:shadow-none">
-                    {renderWidgetComponent(widgetId)}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </CardDensityContext.Provider>
       </section>
     </div>

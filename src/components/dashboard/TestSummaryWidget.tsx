@@ -68,7 +68,7 @@ export const TestSummaryWidget: React.FC<TestSummaryWidgetProps> = ({ onNavigate
         {onNavigateToTests && (
           <button
             onClick={onNavigateToTests}
-            className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-0.5"
+            className="text-xs font-semibold text-terracotta-600 dark:text-terracotta-400 hover:underline flex items-center gap-0.5 cursor-pointer"
           >
             <span>Analytics</span>
             <ChevronRight className="w-3.5 h-3.5" />
@@ -114,7 +114,7 @@ export const TestSummaryWidget: React.FC<TestSummaryWidgetProps> = ({ onNavigate
 
               {stats.movingAverage.length > 0 && (
                 <div className="flex items-center gap-1 text-[11px] font-mono text-espresso-600 dark:text-espresso-300">
-                  <TrendingUp className="w-3 h-3 text-indigo-500" />
+                  <TrendingUp className="w-3 h-3 text-terracotta-500" />
                   <span>3-Avg: <strong>{stats.movingAverage[stats.movingAverage.length - 1]}%</strong></span>
                 </div>
               )}
@@ -158,7 +158,7 @@ export const TestSummaryWidget: React.FC<TestSummaryWidgetProps> = ({ onNavigate
           {onNavigateToTests && (
             <button
               onClick={onNavigateToTests}
-              className="mt-2 text-indigo-600 dark:text-indigo-400 font-semibold underline"
+              className="mt-2 text-terracotta-600 dark:text-terracotta-400 font-semibold underline cursor-pointer"
             >
               Log your first test
             </button>

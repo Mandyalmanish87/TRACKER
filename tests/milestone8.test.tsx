@@ -510,7 +510,7 @@ describe('Milestone 8: Focus Radio, Calendar Export & Remaining Settings', () =>
       expect(screen.getByText(/saved!/i)).toBeInTheDocument();
     });
 
-    it('validates spaced review intervals input', () => {
+    it('does not render spaced review intervals in SettingsView (removed as requested)', () => {
       render(
         <ThemeProvider>
           <AppProvider>
@@ -519,20 +519,8 @@ describe('Milestone 8: Focus Radio, Calendar Export & Remaining Settings', () =>
         </ThemeProvider>
       );
 
-      const intervalInput = screen.getByPlaceholderText(/1, 3, 7, 14, 30/i);
-      const saveIntervalsBtn = screen.getByRole('button', { name: /save intervals/i });
-
-      // Enter invalid intervals
-      fireEvent.change(intervalInput, { target: { value: '1, abc, -5' } });
-      fireEvent.click(saveIntervalsBtn);
-
-      expect(screen.getByText(/all values must be positive integers/i)).toBeInTheDocument();
-
-      // Enter valid intervals
-      fireEvent.change(intervalInput, { target: { value: '2, 5, 10, 20' } });
-      fireEvent.click(saveIntervalsBtn);
-
-      expect(screen.getByText(/saved!/i)).toBeInTheDocument();
+      expect(screen.queryByPlaceholderText(/1, 3, 7, 14, 30/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Spaced Review Intervals/i)).not.toBeInTheDocument();
     });
 
     it('enforces two-step reset requiring exact string RESET', () => {

@@ -22,6 +22,7 @@ export const Header: React.FC = () => {
     importData,
     authUser,
     syncStatus,
+    lastSyncedAt,
     signInWithGoogle,
     signOut,
     syncNow,
@@ -31,6 +32,10 @@ export const Header: React.FC = () => {
   const [showAccountMenu, setShowAccountMenu] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [authErrorMessage, setAuthErrorMessage] = useState<string | null>(null);
+
+  const formattedLastSynced = lastSyncedAt
+    ? lastSyncedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    : null;
 
   const handleSignIn = async () => {
     const res = await signInWithGoogle();
@@ -185,68 +190,142 @@ export const Header: React.FC = () => {
 
           {/* Google Sign-in & Sync Status */}
           {authUser ? (
-            <div className="relative">
+            <div className="flex items-center gap-2">
+              {/* Dedicated Honest Sync Status Pill */}
               <button
-                onClick={() => setShowAccountMenu(!showAccountMenu)}
-                className="flex items-center gap-2 p-1.5 rounded-xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 hover:bg-ivory-50 dark:hover:bg-espresso-800 transition cursor-pointer text-xs"
+                type="button"
+                onClick={syncStatus === 'offline' || syncStatus === 'error' ? syncNow : undefined}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition ${
+                  syncStatus === 'synced'
+                    ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/50 cursor-default'
+                    : syncStatus === 'syncing'
+                    ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800/50 cursor-default'
+                    : syncStatus === 'offline'
+                    ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800/50 hover:bg-amber-100 cursor-pointer'
+                    : syncStatus === 'error'
+                    ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800/50 hover:bg-rose-100 cursor-pointer'
+                    : 'bg-ivory-100 dark:bg-espresso-800 text-espresso-600 dark:text-ivory-300 border-ivory-300 dark:border-espresso-700 cursor-default'
+                }`}
+                title={
+                  syncStatus === 'synced'
+                    ? `Synced with cloud${formattedLastSynced ? ` at ${formattedLastSynced}` : ''}`
+                    : syncStatus === 'syncing'
+                    ? 'Synchronizing changes with cloud...'
+                    : syncStatus === 'offline'
+                    ? 'Offline: changes saved locally on this device. Click to retry sync.'
+                    : syncStatus === 'error'
+                    ? 'Sync error: click to retry.'
+                    : 'Cloud status: idle'
+                }
               >
-                <div className="w-6 h-6 rounded-full overflow-hidden bg-terracotta-100 dark:bg-terracotta-950 flex items-center justify-center font-bold text-terracotta-700 dark:text-terracotta-300 text-xs">
-                  {state.profile?.avatarUrl || authUser.avatarUrl ? (
-                    <img src={state.profile?.avatarUrl || authUser.avatarUrl} alt={authUser.name || 'User'} className="w-full h-full object-cover" />
-                  ) : (
-                    (authUser.name || authUser.email)[0].toUpperCase()
-                  )}
-                </div>
-                <div className="hidden lg:flex items-center gap-1.5 text-xs font-medium text-espresso-800 dark:text-ivory-200">
-                  <span className="truncate max-w-[120px]">{authUser.name || authUser.email.split('@')[0]}</span>
-                  <span
-                    className={`w-2 h-2 rounded-full ${
-                      syncStatus === 'synced'
-                        ? 'bg-emerald-500'
-                        : syncStatus === 'syncing'
-                        ? 'bg-amber-500 animate-ping'
-                        : 'bg-espresso-400'
-                    }`}
-                    title={`Sync status: ${syncStatus}`}
-                  />
-                </div>
+                <span
+                  className={`w-1.5 h-1.5 rounded-full ${
+                    syncStatus === 'synced'
+                      ? 'bg-emerald-500'
+                      : syncStatus === 'syncing'
+                      ? 'bg-amber-500 animate-ping'
+                      : syncStatus === 'offline'
+                      ? 'bg-amber-500'
+                      : syncStatus === 'error'
+                      ? 'bg-rose-500'
+                      : 'bg-espresso-400'
+                  }`}
+                />
+                <span className="hidden sm:inline">
+                  {syncStatus === 'synced'
+                    ? 'Synced'
+                    : syncStatus === 'syncing'
+                    ? 'Syncing...'
+                    : syncStatus === 'offline'
+                    ? 'Offline (Saved locally)'
+                    : syncStatus === 'error'
+                    ? 'Sync error (Retry)'
+                    : 'Local'}
+                </span>
+                <span className="sm:hidden">
+                  {syncStatus === 'synced'
+                    ? 'Synced'
+                    : syncStatus === 'syncing'
+                    ? 'Syncing'
+                    : syncStatus === 'offline'
+                    ? 'Offline'
+                    : syncStatus === 'error'
+                    ? 'Error'
+                    : 'Local'}
+                </span>
               </button>
 
-              {showAccountMenu && (
-                <div
-                  className="absolute right-0 mt-2 w-64 bg-white dark:bg-espresso-850 rounded-xl border border-ivory-300 dark:border-espresso-750 shadow-editorial dark:shadow-editorial-dark py-2 z-50 text-xs space-y-1"
-                  onClick={() => setShowAccountMenu(false)}
+              <div className="relative">
+                <button
+                  onClick={() => setShowAccountMenu(!showAccountMenu)}
+                  className="flex items-center gap-2 p-1.5 rounded-xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 hover:bg-ivory-50 dark:hover:bg-espresso-800 transition cursor-pointer text-xs"
                 >
-                  <div className="px-3.5 py-2 border-b border-ivory-200 dark:border-espresso-800">
-                    <p className="font-semibold text-espresso-950 dark:text-ivory-50 truncate">
-                      {authUser.name || 'Scholar Student'}
-                    </p>
-                    <p className="text-[11px] font-mono text-espresso-500 dark:text-ivory-400 truncate">
-                      {authUser.email}
-                    </p>
-                    <div className="flex items-center gap-1.5 mt-1.5 text-[10px] font-mono text-emerald-600 dark:text-emerald-400">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                      <span>{authUser.isSimulated ? 'Local Cloud Simulation' : 'Google Cloud Sync Active'}</span>
-                    </div>
+                  <div className="w-6 h-6 rounded-full overflow-hidden bg-terracotta-100 dark:bg-terracotta-950 flex items-center justify-center font-bold text-terracotta-700 dark:text-terracotta-300 text-xs">
+                    {state.profile?.avatarUrl || authUser.avatarUrl ? (
+                      <img src={state.profile?.avatarUrl || authUser.avatarUrl} alt={authUser.name || 'User'} className="w-full h-full object-cover" />
+                    ) : (
+                      (authUser.name || authUser.email)[0].toUpperCase()
+                    )}
                   </div>
+                  <div className="hidden lg:flex items-center gap-1.5 text-xs font-medium text-espresso-800 dark:text-ivory-200">
+                    <span className="truncate max-w-[120px]">{authUser.name || authUser.email.split('@')[0]}</span>
+                  </div>
+                </button>
 
-                  <button
-                    onClick={syncNow}
-                    className="w-full text-left px-3.5 py-2 flex items-center gap-2 text-espresso-700 dark:text-ivory-200 hover:bg-ivory-100 dark:hover:bg-espresso-800 cursor-pointer"
+                {showAccountMenu && (
+                  <div
+                    className="absolute right-0 mt-2 w-64 bg-white dark:bg-espresso-850 rounded-xl border border-ivory-300 dark:border-espresso-750 shadow-editorial dark:shadow-editorial-dark py-2 z-50 text-xs space-y-1"
+                    onClick={() => setShowAccountMenu(false)}
                   >
-                    <RefreshCw className="w-3.5 h-3.5 text-terracotta-500" />
-                    <span>Sync Cloud Now</span>
-                  </button>
+                    <div className="px-3.5 py-2 border-b border-ivory-200 dark:border-espresso-800">
+                      <p className="font-semibold text-espresso-950 dark:text-ivory-50 truncate">
+                        {authUser.name || 'Scholar Student'}
+                      </p>
+                      <p className="text-[11px] font-mono text-espresso-500 dark:text-ivory-400 truncate">
+                        {authUser.email}
+                      </p>
+                      <div className="flex items-center gap-1.5 mt-1.5 text-[10px] font-mono text-espresso-600 dark:text-ivory-300">
+                        <span
+                          className={`w-1.5 h-1.5 rounded-full ${
+                            syncStatus === 'synced'
+                              ? 'bg-emerald-500'
+                              : syncStatus === 'syncing'
+                              ? 'bg-amber-500 animate-ping'
+                              : syncStatus === 'offline'
+                              ? 'bg-amber-500'
+                              : 'bg-rose-500'
+                          }`}
+                        />
+                        <span>
+                          {syncStatus === 'synced'
+                            ? `Synced ${formattedLastSynced ? `(${formattedLastSynced})` : ''}`
+                            : syncStatus === 'syncing'
+                            ? 'Syncing in progress...'
+                            : syncStatus === 'offline'
+                            ? 'Offline: saved locally'
+                            : 'Sync error: click retry'}
+                        </span>
+                      </div>
+                    </div>
 
-                  <button
-                    onClick={signOut}
-                    className="w-full text-left px-3.5 py-2 flex items-center gap-2 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 cursor-pointer"
-                  >
-                    <LogOut className="w-3.5 h-3.5" />
-                    <span>Sign Out</span>
-                  </button>
-                </div>
-              )}
+                    <button
+                      onClick={syncNow}
+                      className="w-full text-left px-3.5 py-2 flex items-center gap-2 text-espresso-700 dark:text-ivory-200 hover:bg-ivory-100 dark:hover:bg-espresso-800 cursor-pointer"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 text-terracotta-500 ${syncStatus === 'syncing' ? 'animate-spin' : ''}`} />
+                      <span>{syncStatus === 'syncing' ? 'Syncing...' : 'Sync Cloud Now'}</span>
+                    </button>
+
+                    <button
+                      onClick={signOut}
+                      className="w-full text-left px-3.5 py-2 flex items-center gap-2 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 cursor-pointer"
+                    >
+                      <LogOut className="w-3.5 h-3.5" />
+                      <span>Sign Out</span>
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           ) : (
             <button

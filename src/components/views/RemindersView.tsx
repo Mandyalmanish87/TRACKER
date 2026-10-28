@@ -60,7 +60,8 @@ export const RemindersView: React.FC = () => {
           {/* Quick Create Action */}
           <button
             onClick={() => setIsNewEventModalOpen(true)}
-            className="px-3.5 py-2 rounded-xl bg-terracotta-500 hover:bg-terracotta-600 text-white text-xs font-semibold flex items-center gap-2 shadow-xs transition"
+            className="px-3.5 py-2 rounded-xl text-white text-xs font-semibold flex items-center gap-2 shadow-subtle transition hover:opacity-95 cursor-pointer"
+            style={{ backgroundColor: 'var(--accent)' }}
           >
             <Plus className="w-4 h-4" />
             <span>Add Event / Task</span>

@@ -16,7 +16,13 @@ import {
   ClassNotification,
   ClassUserProfile,
 } from '../types/classSpace';
-import { generateJoinCode, normalizeJoinCode, isValidJoinCode } from '../utils/classSpaceUtils';
+import {
+  generateJoinCode,
+  normalizeJoinCode,
+  isValidJoinCode,
+  canManageSchedule,
+  canManageWorkspace,
+} from '../utils/classSpaceUtils';
 
 const LOCAL_STORE_KEY = 'tracker_classspace_data_v1';
 
@@ -96,6 +102,24 @@ function saveLocalData(data: LocalClassSpaceData): void {
   }
 }
 
+let recentFailedLookups: number[] = [];
+export const RATE_LIMIT_MAX_FAILED_ATTEMPTS = 5;
+export const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 60 seconds
+
+export function resetLookupRateLimiter(): void {
+  recentFailedLookups = [];
+}
+
+export function isLookupRateLimited(): boolean {
+  const now = Date.now();
+  recentFailedLookups = recentFailedLookups.filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
+  return recentFailedLookups.length >= RATE_LIMIT_MAX_FAILED_ATTEMPTS;
+}
+
+export function recordFailedLookup(): void {
+  recentFailedLookups.push(Date.now());
+}
+
 /**
  * Checks whether an identifier is a local-only / simulated / non-UUID ID.
  * Any non-UUID (e.g. 'usr_local_*', 'ws_*', 'mem_*', 'rule_*', 'ov_*', 'att_*', 'msg_*', 'save_*', 'notif_*', etc.)
@@ -142,6 +166,38 @@ export const classSpaceService = {
   },
   isLocalId,
   isCloudAvailable,
+
+  archiveAndClearLocalData(userId?: string): void {
+    if (userId) {
+      try {
+        const raw = localStorage.getItem(LOCAL_STORE_KEY);
+        if (raw) {
+          localStorage.setItem(`tracker_classspace_archive_${userId}`, raw);
+        }
+      } catch (err) {
+        console.warn('[ClassSpaceService] Failed to archive user classspace data:', err);
+      }
+    }
+    try {
+      localStorage.removeItem(LOCAL_STORE_KEY);
+      window.dispatchEvent(new Event('tracker_classspace_updated'));
+    } catch (err) {
+      console.warn('[ClassSpaceService] Failed to clear local classspace data on signout:', err);
+    }
+  },
+
+  restoreArchivedData(userId?: string): void {
+    if (!userId) return;
+    try {
+      const archived = localStorage.getItem(`tracker_classspace_archive_${userId}`);
+      if (archived) {
+        localStorage.setItem(LOCAL_STORE_KEY, archived);
+        window.dispatchEvent(new Event('tracker_classspace_updated'));
+      }
+    } catch (err) {
+      console.warn('[ClassSpaceService] Failed to restore archived user classspace data:', err);
+    }
+  },
 
   // ==========================================================================
   // WORKSPACES
@@ -311,7 +367,12 @@ export const classSpaceService = {
 
     const normalized = normalizeJoinCode(rawCode);
     if (!isValidJoinCode(normalized)) {
+      recordFailedLookup();
       return { error: 'Invalid ClassSpace code format. Must be 5 alphanumeric characters.' };
+    }
+
+    if (isLookupRateLimited()) {
+      return { error: 'Too many invalid attempts. Please wait 60 seconds before trying again.' };
     }
 
     const supabase = getSupabaseClient();
@@ -325,11 +386,13 @@ export const classSpaceService = {
         });
 
         if (error) {
+          recordFailedLookup();
           return { error: error.message };
         }
 
         if (data && typeof data === 'object') {
           if ('error' in data && data.error) {
+            recordFailedLookup();
             return { error: String(data.error) };
           }
           if ('workspace' in data && 'member' in data) {
@@ -339,8 +402,10 @@ export const classSpaceService = {
             };
           }
         }
+        recordFailedLookup();
         return { error: 'Unable to join ClassSpace: unexpected response from cloud server.' };
       } catch (err) {
+        recordFailedLookup();
         console.warn('[ClassSpaceService] Supabase joinWorkspace RPC error:', err);
         return { error: err instanceof Error ? err.message : 'Failed to join ClassSpace in cloud.' };
       }
@@ -351,6 +416,7 @@ export const classSpaceService = {
     const workspace = local.workspaces.find((w) => w.joinCode === normalized);
 
     if (!workspace) {
+      recordFailedLookup();
       return { error: 'No ClassSpace found with this Join Code. Please verify with your CR.' };
     }
 
@@ -384,7 +450,12 @@ export const classSpaceService = {
   ): Promise<{ workspace?: ClassSpaceWorkspace; error?: string }> {
     const normalized = normalizeJoinCode(rawCode);
     if (!isValidJoinCode(normalized)) {
+      recordFailedLookup();
       return { error: 'Invalid ClassSpace code format. Must be 5 alphanumeric characters.' };
+    }
+
+    if (isLookupRateLimited()) {
+      return { error: 'Too many invalid attempts. Please wait 60 seconds before trying again.' };
     }
 
     const supabase = getSupabaseClient();
@@ -396,6 +467,7 @@ export const classSpaceService = {
         });
 
         if (error) {
+          recordFailedLookup();
           return { error: error.message };
         }
 
@@ -420,8 +492,10 @@ export const classSpaceService = {
         }
 
         // When cloud is active and query returns empty, workspace is not in cloud database
+        recordFailedLookup();
         return { error: 'No ClassSpace found with this Join Code.' };
       } catch (err) {
+        recordFailedLookup();
         console.warn('[ClassSpaceService] lookupWorkspace RPC error:', err);
         return { error: err instanceof Error ? err.message : 'Failed to lookup workspace in cloud.' };
       }
@@ -430,6 +504,7 @@ export const classSpaceService = {
     const local = getLocalData();
     const ws = local.workspaces.find((w) => w.joinCode === normalized);
     if (!ws) {
+      recordFailedLookup();
       return { error: 'No ClassSpace found with this Join Code.' };
     }
     return { workspace: ws };
@@ -587,8 +662,8 @@ export const classSpaceService = {
   ): Promise<{ success: boolean; error?: string }> {
     const local = getLocalData();
     const actor = local.members.find((m) => m.workspaceId === workspaceId && m.userId === actingUserId);
-    if (!actor || actor.role !== 'cr') {
-      return { success: false, error: 'Only the CR can assign co-admins or roles.' };
+    if (!actor || !canManageWorkspace(actor.role)) {
+      return { success: false, error: 'Only the Workspace Owner or CR can assign roles.' };
     }
 
     const supabase = getSupabaseClient();
@@ -618,6 +693,71 @@ export const classSpaceService = {
       target.role = newRole;
       saveLocalData(local);
     }
+    return { success: true };
+  },
+
+  async removeMember(
+    workspaceId: string,
+    actingUserId: string,
+    targetUserId: string
+  ): Promise<{ success: boolean; error?: string }> {
+    if (!workspaceId || !actingUserId || !targetUserId) {
+      return { success: false, error: 'Workspace ID, acting user ID, and target user ID are required.' };
+    }
+
+    if (actingUserId === targetUserId) {
+      return { success: false, error: 'Cannot remove yourself using member removal. Use leave workspace instead.' };
+    }
+
+    const local = getLocalData();
+    const ws = local.workspaces.find((w) => w.id === workspaceId);
+    const actor = local.members.find((m) => m.workspaceId === workspaceId && m.userId === actingUserId);
+    if (actor && !canManageWorkspace(actor.role)) {
+      return { success: false, error: 'Unauthorized: Only the Workspace Owner or CR can remove members.' };
+    }
+
+    const target = local.members.find((m) => m.workspaceId === workspaceId && m.userId === targetUserId);
+    if (target?.role === 'owner' || ws?.createdBy === targetUserId) {
+      return { success: false, error: 'Cannot remove the workspace owner.' };
+    }
+
+    const supabase = getSupabaseClient();
+    if (
+      supabase &&
+      isCloudAvailable() &&
+      !isLocalId(workspaceId) &&
+      !isLocalId(actingUserId) &&
+      !isLocalId(targetUserId)
+    ) {
+      try {
+        const { error } = await supabase
+          .from('class_members')
+          .delete()
+          .eq('workspace_id', workspaceId)
+          .eq('user_id', targetUserId);
+
+        if (error) return { success: false, error: error.message };
+
+        local.members = local.members.filter(
+          (m) => !(m.workspaceId === workspaceId && m.userId === targetUserId)
+        );
+        saveLocalData(local);
+
+        return { success: true };
+      } catch (err) {
+        return { success: false, error: (err as Error).message };
+      }
+    }
+
+    if (!actor || !canManageWorkspace(actor.role)) {
+      return { success: false, error: 'Unauthorized: Only the Workspace Owner or CR can remove members.' };
+    }
+
+    local.members = local.members.filter(
+      (m) => !(m.workspaceId === workspaceId && m.userId === targetUserId)
+    );
+    saveLocalData(local);
+
     return { success: true };
   },
 
@@ -658,8 +798,8 @@ export const classSpaceService = {
     actorRole: ClassSpaceRole,
     rule: Omit<ClassTimetableRule, 'id' | 'workspaceId' | 'createdAt' | 'updatedAt'>
   ): Promise<{ rule?: ClassTimetableRule; error?: string }> {
-    if (actorRole !== 'cr' && actorRole !== 'co_admin') {
-      return { error: 'Unauthorized: Only CR or Co-Admin can add official recurring classes.' };
+    if (!canManageSchedule(actorRole)) {
+      return { error: 'Unauthorized: Only Owner, CR or Co-Admin can add official recurring classes.' };
     }
 
     const now = new Date().toISOString();
@@ -712,8 +852,8 @@ export const classSpaceService = {
     ruleId: string,
     updates: Partial<ClassTimetableRule>
   ): Promise<{ success: boolean; error?: string }> {
-    if (actorRole !== 'cr' && actorRole !== 'co_admin') {
-      return { success: false, error: 'Unauthorized: Only CR or Co-Admin can update recurring class rules.' };
+    if (!canManageSchedule(actorRole)) {
+      return { success: false, error: 'Unauthorized: Only Owner, CR or Co-Admin can update recurring class rules.' };
     }
 
     const supabase = getSupabaseClient();
@@ -757,8 +897,8 @@ export const classSpaceService = {
     actorRole: ClassSpaceRole,
     ruleId: string
   ): Promise<{ success: boolean; error?: string }> {
-    if (actorRole !== 'cr' && actorRole !== 'co_admin') {
-      return { success: false, error: 'Unauthorized: Only CR or Co-Admin can delete class rules.' };
+    if (!canManageSchedule(actorRole)) {
+      return { success: false, error: 'Unauthorized: Only Owner, CR or Co-Admin can delete class rules.' };
     }
 
     const supabase = getSupabaseClient();
@@ -788,8 +928,8 @@ export const classSpaceService = {
     actorRole: ClassSpaceRole,
     override: Omit<ClassTimetableOverride, 'id' | 'workspaceId' | 'createdAt'>
   ): Promise<{ override?: ClassTimetableOverride; error?: string }> {
-    if (actorRole !== 'cr' && actorRole !== 'co_admin') {
-      return { error: 'Unauthorized: Only CR or Co-Admin can reschedule, cancel or add extra classes.' };
+    if (!canManageSchedule(actorRole)) {
+      return { error: 'Unauthorized: Only Owner, CR or Co-Admin can reschedule, cancel or add extra classes.' };
     }
 
     const now = new Date().toISOString();
@@ -849,8 +989,8 @@ export const classSpaceService = {
     actorRole: ClassSpaceRole,
     overrideId: string
   ): Promise<{ success: boolean; error?: string }> {
-    if (actorRole !== 'cr' && actorRole !== 'co_admin') {
-      return { success: false, error: 'Unauthorized: Only CR or Co-Admin can restore or revert overrides.' };
+    if (!canManageSchedule(actorRole)) {
+      return { success: false, error: 'Unauthorized: Only Owner, CR or Co-Admin can restore or revert overrides.' };
     }
 
     const supabase = getSupabaseClient();
@@ -1429,8 +1569,8 @@ export const classSpaceService = {
     messageId: string,
     actorRole?: ClassSpaceRole
   ): Promise<{ success: boolean; error?: string }> {
-    if (actorRole !== 'cr' && actorRole !== 'co_admin') {
-      return { success: false, error: 'Only CR or Co-Admin can pin announcements.' };
+    if (!canManageSchedule(actorRole)) {
+      return { success: false, error: 'Only Owner, CR or Co-Admin can pin announcements.' };
     }
 
     const local = getLocalData();

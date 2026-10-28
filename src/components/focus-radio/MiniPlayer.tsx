@@ -23,6 +23,13 @@ import {
   X,
 } from 'lucide-react';
 
+function formatRadioTime(sec: number): string {
+  if (isNaN(sec) || sec < 0) return '0:00';
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
 export const MiniPlayer: React.FC = () => {
   const {
     currentTrack,
@@ -35,6 +42,11 @@ export const MiniPlayer: React.FC = () => {
     isMiniPlayerOpen,
     isMiniPlayerCollapsed,
     errorMessage,
+    currentTime,
+    duration,
+    savedPlaybackPosition,
+    seekTo,
+    resumeFromSavedPosition,
     togglePlay,
     next,
     prev,
@@ -54,11 +66,11 @@ export const MiniPlayer: React.FC = () => {
     return (
       <button
         onClick={() => setMiniPlayerOpen(true)}
-        className="fixed bottom-4 right-4 z-40 px-3.5 py-2.5 rounded-full bg-[#0B0D0C] border border-[#C8FF45]/50 text-[#C8FF45] font-mono text-xs flex items-center gap-2 shadow-2xl hover:scale-105 active:scale-95 transition cursor-pointer"
+        className="fixed bottom-4 right-4 z-40 px-3.5 py-2.5 rounded-full bg-[#0D0F0E] border border-zinc-800 text-[#C8FF45] font-mono text-xs flex items-center gap-2 shadow-2xl hover:scale-105 active:scale-95 transition cursor-pointer"
         title="Open Focus Radio"
       >
         <Radio className="w-4 h-4 text-[#C8FF45] animate-pulse" />
-        <span className="font-semibold">Focus Radio</span>
+        <span className="font-semibold text-white">Focus Radio</span>
         {isPlaying && <span className="w-2 h-2 rounded-full bg-[#C8FF45] animate-ping" />}
       </button>
     );
@@ -71,7 +83,7 @@ export const MiniPlayer: React.FC = () => {
           isMiniPlayerCollapsed
             ? 'bottom-4 right-4 w-72 sm:w-80'
             : 'bottom-4 right-4 w-[calc(100vw-2rem)] max-w-sm sm:max-w-md'
-        } rounded-2xl bg-[#0B0D0C]/95 backdrop-blur-xl border border-zinc-800 shadow-2xl overflow-hidden`}
+        } rounded-2xl bg-[#0D0F0E]/95 backdrop-blur-xl border border-zinc-800 shadow-2xl overflow-hidden`}
         style={{
           boxShadow: '0 20px 40px -15px rgba(0,0,0,0.8), 0 0 20px -5px rgba(200,255,69,0.15)',
         }}
@@ -97,7 +109,7 @@ export const MiniPlayer: React.FC = () => {
           <div className="flex items-center gap-1">
             <button
               onClick={() => setMiniPlayerCollapsed(!isMiniPlayerCollapsed)}
-              className="p-1 rounded text-zinc-400 hover:text-white transition"
+              className="p-1 rounded text-zinc-400 hover:text-white transition cursor-pointer"
               title={isMiniPlayerCollapsed ? 'Expand Radio' : 'Collapse Radio'}
             >
               {isMiniPlayerCollapsed ? (
@@ -121,7 +133,7 @@ export const MiniPlayer: React.FC = () => {
         <div className="p-3">
           <div className="flex items-center gap-3">
             {/* Thumbnail */}
-            <div className="relative w-12 h-12 rounded-xl overflow-hidden bg-zinc-900 border border-zinc-800 shrink-0">
+            <div className="relative w-12 h-12 rounded-xl overflow-hidden bg-zinc-900 border border-zinc-800 shrink-0 shadow-xs">
               {currentTrack?.thumbnailUrl ? (
                 <img
                   src={currentTrack.thumbnailUrl}
@@ -145,7 +157,7 @@ export const MiniPlayer: React.FC = () => {
               <h4 className="text-xs font-semibold text-white truncate leading-tight">
                 {currentTrack?.title || 'No Stream Selected'}
               </h4>
-              <p className="text-[11px] text-zinc-400 truncate mt-0.5">
+              <p className="text-[11px] text-zinc-400 font-mono truncate mt-0.5">
                 {currentTrack?.author || 'Select a curated stream or paste a URL'}
               </p>
             </div>
@@ -176,9 +188,38 @@ export const MiniPlayer: React.FC = () => {
           {/* Visualizer & Controls (Expanded view) */}
           {!isMiniPlayerCollapsed && (
             <div className="mt-3 pt-3 border-t border-zinc-800/80 space-y-3">
+              {/* One-click resume control for browser autoplay restrictions */}
+              {savedPlaybackPosition > 5 && !isPlaying && (
+                <button
+                  onClick={resumeFromSavedPosition}
+                  className="w-full py-1.5 px-3 rounded-xl bg-[#C8FF45]/15 border border-[#C8FF45]/30 text-[#C8FF45] text-xs font-mono flex items-center justify-center gap-1.5 hover:bg-[#C8FF45]/25 transition cursor-pointer"
+                >
+                  <Play className="w-3.5 h-3.5 fill-current" />
+                  <span>Resume from {formatRadioTime(savedPlaybackPosition)}</span>
+                </button>
+              )}
+
+              {/* Spotify-Style Seek / Progress Slider */}
+              <div className="space-y-1">
+                <input
+                  type="range"
+                  min={0}
+                  max={duration > 0 ? duration : 100}
+                  step={1}
+                  value={currentTime}
+                  onChange={(e) => seekTo(Number(e.target.value))}
+                  className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-[#C8FF45]"
+                  title="Seek playback position"
+                />
+                <div className="flex justify-between text-[10px] font-mono text-zinc-400">
+                  <span>{formatRadioTime(currentTime)}</span>
+                  <span>{formatRadioTime(duration)}</span>
+                </div>
+              </div>
+
               {/* Simulated Ambient Visualizer */}
               <div className="bg-zinc-950/70 rounded-xl p-2 border border-zinc-900 flex items-center justify-between">
-                <Visualizer isPlaying={isPlaying} className="flex-1" />
+                <Visualizer isPlaying={isPlaying} color="#C8FF45" className="flex-1" />
                 <span className="text-[9px] font-mono text-zinc-500 uppercase px-2">
                   Ambient Pulse
                 </span>
@@ -190,14 +231,14 @@ export const MiniPlayer: React.FC = () => {
                 <div className="flex items-center gap-1">
                   <button
                     onClick={prev}
-                    className="p-1.5 rounded-lg text-zinc-400 hover:text-white transition"
+                    className="p-1.5 rounded-lg text-zinc-400 hover:text-white transition cursor-pointer"
                     title="Previous Track"
                   >
                     <SkipBack className="w-3.5 h-3.5" />
                   </button>
                   <button
                     onClick={() => setShuffle(!shuffle)}
-                    className={`p-1.5 rounded-lg transition ${
+                    className={`p-1.5 rounded-lg transition cursor-pointer ${
                       shuffle
                         ? 'text-[#C8FF45] bg-[#C8FF45]/15'
                         : 'text-zinc-500 hover:text-zinc-200'
@@ -212,7 +253,7 @@ export const MiniPlayer: React.FC = () => {
                       else if (repeatMode === 'all') setRepeatMode('one');
                       else setRepeatMode('off');
                     }}
-                    className={`p-1.5 rounded-lg transition ${
+                    className={`p-1.5 rounded-lg transition cursor-pointer ${
                       repeatMode !== 'off'
                         ? 'text-[#C8FF45] bg-[#C8FF45]/15'
                         : 'text-zinc-500 hover:text-zinc-200'
@@ -231,7 +272,7 @@ export const MiniPlayer: React.FC = () => {
                 <div className="flex items-center gap-2">
                   <button
                     onClick={toggleMute}
-                    className="text-zinc-400 hover:text-white transition"
+                    className="text-zinc-400 hover:text-white transition cursor-pointer"
                     title={isMuted ? 'Unmute' : 'Mute'}
                   >
                     {isMuted || volume === 0 ? (
@@ -256,7 +297,7 @@ export const MiniPlayer: React.FC = () => {
                 <div className="flex items-center gap-1.5">
                   <button
                     onClick={() => setActiveTab(activeTab === 'queue' ? 'none' : 'queue')}
-                    className={`px-2.5 py-1 rounded-lg text-[11px] font-mono transition flex items-center gap-1 ${
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-mono transition flex items-center gap-1 cursor-pointer ${
                       activeTab === 'queue'
                         ? 'bg-[#C8FF45] text-black font-semibold'
                         : 'bg-zinc-900 text-zinc-300 hover:text-white'
@@ -268,7 +309,7 @@ export const MiniPlayer: React.FC = () => {
 
                   <button
                     onClick={() => setActiveTab(activeTab === 'add' ? 'none' : 'add')}
-                    className={`px-2.5 py-1 rounded-lg text-[11px] font-mono transition flex items-center gap-1 ${
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-mono transition flex items-center gap-1 cursor-pointer ${
                       activeTab === 'add'
                         ? 'bg-[#C8FF45] text-black font-semibold'
                         : 'bg-zinc-900 text-zinc-300 hover:text-white'
@@ -281,7 +322,7 @@ export const MiniPlayer: React.FC = () => {
 
                 <button
                   onClick={() => setIsSavedPlaylistsOpen(true)}
-                  className="px-2 py-1 rounded-lg text-[11px] font-mono bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 flex items-center gap-1 transition"
+                  className="px-2 py-1 rounded-lg text-[11px] font-mono bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 flex items-center gap-1 transition cursor-pointer"
                   title="Saved Playlists"
                   aria-label="View Playlists"
                 >

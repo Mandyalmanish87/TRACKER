@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import { useTheme } from '../../theme/ThemeContext';
-import { AccentColor, BackgroundStyle, ThemeMode } from '../../types';
+import { AccentColor, BackgroundStyle, ThemeMode, AppSettings } from '../../types';
 import {
   Sun,
   Moon,
@@ -11,14 +11,12 @@ import {
   Palette,
   Settings,
   Eye,
-  Radio,
   CalendarClock,
   Clock,
   GraduationCap,
   RotateCcw,
   Info,
   Target,
-  BookOpen,
   Cloud,
   RefreshCw,
   Building,
@@ -43,6 +41,7 @@ import { getAvatarBgColor, getAvatarInitials } from '../../utils/classSpaceUtils
 import { CreateWorkspaceModal } from '../classspace/CreateWorkspaceModal';
 import { JoinWorkspaceModal } from '../classspace/JoinWorkspaceModal';
 import { ConfirmModal } from '../common/ConfirmModal';
+import { BillingSettingsSection } from '../subscription/BillingSettingsSection';
 
 // ─── Accent Color Catalogue ────────────────────────────────────────────────
 const ACCENT_OPTIONS: { id: AccentColor; label: string; hex: string }[] = [
@@ -102,19 +101,93 @@ const Card: React.FC<{ children: React.ReactNode; className?: string }> = ({ chi
 // ─── App Version ──────────────────────────────────────────────────────────────
 const APP_VERSION = '0.8.0';
 
+export interface DashboardWidgetConfig {
+  id: string;
+  name: string;
+  description: string;
+}
+
+export const DASHBOARD_WIDGET_CONFIGS: DashboardWidgetConfig[] = [
+  {
+    id: 'academic_countdown',
+    name: 'Academic Countdown',
+    description: 'Target exam date and remaining days banner',
+  },
+  {
+    id: 'kpi_strip',
+    name: 'Overview Stats Strip',
+    description: 'Quick metrics for current time, classes, attendance, deep focus, and consistency',
+  },
+  {
+    id: 'today_schedule',
+    name: "Today's Timetable",
+    description: 'Upcoming scheduled lectures and ongoing class indicators',
+  },
+  {
+    id: 'attendance',
+    name: 'Attendance Health',
+    description: 'Attendance percentage gauge and safe bunk calculator',
+  },
+  {
+    id: 'focus_timer',
+    name: 'Deep Focus Timer',
+    description: 'Pomodoro timer and focus session launcher',
+  },
+  {
+    id: 'journey_heatmap',
+    name: 'Focus Journey Heatmap',
+    description: 'Year-to-date daily study consistency activity grid',
+  },
+  {
+    id: 'focus_radio',
+    name: 'Focus Radio',
+    description: 'Curated lofi and study streams with Spotify-style progress controls',
+  },
+  {
+    id: 'events_tasks',
+    name: 'Events & Tasks',
+    description: 'High-priority homework, deadlines, and pending checklist items',
+  },
+  {
+    id: 'planner',
+    name: 'Study Planner',
+    description: 'Syllabus chapter progress and revision queue',
+  },
+  {
+    id: 'nutrition',
+    name: 'Nutrition & Macros',
+    description: 'Daily calories and protein targets',
+  },
+  {
+    id: 'gym',
+    name: 'Gym Workout Split',
+    description: "Today's workout session and exercise checklist",
+  },
+  {
+    id: 'syllabus',
+    name: 'Syllabus Tracker',
+    description: 'Course completion status across subjects',
+  },
+  {
+    id: 'tests',
+    name: 'Tests & Error Analytics',
+    description: 'Mock exam performance, accuracy, and recurring mistake breakdown',
+  },
+];
+
 interface SettingsViewProps {
   onNavigateToClassSpace?: () => void;
+  onNavigateToAdmin?: () => void;
 }
 
 // ─── Main SettingsView ──────────────────────────────────────────────────────
-export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToClassSpace }) => {
+export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToClassSpace, onNavigateToAdmin }) => {
   const {
     state,
     updateSettings,
     updateProfile,
     fullReset,
     setDailyQuestionTarget,
-    updateReviewIntervals,
     authUser,
     syncStatus,
     lastSyncedAt,
@@ -145,6 +218,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToClassSpa
     studyDayRolloverHour: 0,
     showExamCountdown: true,
     showFocusRadio: false,
+    dashboardWidgetVisibility: {},
   };
 
   const profile = state.profile ?? { displayName: '', targetExam: '' };
@@ -173,11 +247,34 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToClassSpa
   const [questionTarget, setQuestionTarget] = useState(state.dailyQuestionTarget ?? 25);
   const [qtSaved, setQtSaved] = useState(false);
 
-  // Review intervals local state
-  const DEFAULT_INTERVALS = state.reviewIntervals ?? [1, 3, 7, 14, 30];
-  const [intervalInput, setIntervalInput] = useState(DEFAULT_INTERVALS.join(', '));
-  const [intervalError, setIntervalError] = useState('');
-  const [intervalSaved, setIntervalSaved] = useState(false);
+  const isWidgetVisible = (widgetId: string) => {
+    if (widgetId === 'academic_countdown') {
+      return settings.dashboardWidgetVisibility?.['academic_countdown'] ?? settings.showExamCountdown;
+    }
+    if (widgetId === 'focus_radio') {
+      return settings.dashboardWidgetVisibility?.['focus_radio'] ?? settings.showFocusRadio;
+    }
+    return settings.dashboardWidgetVisibility?.[widgetId] ?? true;
+  };
+
+  const toggleWidgetVisibility = (widgetId: string) => {
+    const current = isWidgetVisible(widgetId);
+    const next = !current;
+    const newVisibility = {
+      ...(settings.dashboardWidgetVisibility ?? {}),
+      [widgetId]: next,
+    };
+    const updates: Partial<AppSettings> = {
+      dashboardWidgetVisibility: newVisibility,
+    };
+    if (widgetId === 'academic_countdown') {
+      updates.showExamCountdown = next;
+    }
+    if (widgetId === 'focus_radio') {
+      updates.showFocusRadio = next;
+    }
+    updateSettings(updates);
+  };
 
   // Keep local state in sync when state loads or updates
   React.useEffect(() => {
@@ -439,6 +536,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToClassSpa
             </div>
           )}
         </Card>
+
+        {/* ── Membership & Subscriptions (Milestone 05) ── */}
+        <BillingSettingsSection userId={authUser?.id} />
 
         {/* ── User Mode (Type A — Individual vs Type B — Class-based) ── */}
         <Card className="lg:col-span-2">
@@ -1133,67 +1233,70 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToClassSpa
           </div>
         </Card>
 
-        {/* ── Dashboard Preferences ── */}
+        {/* ── Dashboard Control System ── */}
         <Card>
-          <SectionHeading
-            icon={<Eye className="w-4 h-4" />}
-            title="Dashboard"
-            sub="Control which panels are visible"
-          />
-
-          <div className="space-y-4">
-            {/* Show Exam Countdown */}
-            <div className="flex items-center justify-between py-3 border-b border-ivory-200 dark:border-espresso-800">
-              <div>
-                <p className="text-sm font-medium text-espresso-900 dark:text-ivory-100">Academic Countdown</p>
-                <p className="text-xs text-espresso-400 dark:text-espresso-500 mt-0.5">
-                  Days remaining to your target date
-                </p>
-              </div>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+            <SectionHeading
+              icon={<Eye className="w-4 h-4" />}
+              title="Dashboard Control System"
+              sub="Toggle which widgets are displayed on your main Today dashboard. All data is preserved when a card is hidden."
+            />
+            <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
               <button
-                aria-label="Toggle Academic Countdown"
-                onClick={() => updateSettings({ showExamCountdown: !settings.showExamCountdown })}
-                className={`relative w-11 h-6 rounded-full transition-colors ${
-                  settings.showExamCountdown
-                    ? 'bg-espresso-800 dark:bg-ivory-200'
-                    : 'bg-ivory-300 dark:bg-espresso-700'
-                }`}
+                type="button"
+                onClick={() => {
+                  const allVisible: Record<string, boolean> = {};
+                  DASHBOARD_WIDGET_CONFIGS.forEach((w) => {
+                    allVisible[w.id] = true;
+                  });
+                  updateSettings({
+                    dashboardWidgetVisibility: allVisible,
+                    showExamCountdown: true,
+                    showFocusRadio: true,
+                  });
+                }}
+                className="text-xs px-3 py-1.5 rounded-xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 hover:bg-ivory-100 dark:hover:bg-espresso-800 text-espresso-700 dark:text-ivory-200 font-medium transition cursor-pointer shadow-xs"
               >
-                <span
-                  className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white dark:bg-espresso-900 shadow transition-transform ${
-                    settings.showExamCountdown ? 'translate-x-5' : 'translate-x-0'
-                  }`}
-                />
+                Enable All
               </button>
             </div>
+          </div>
 
-            {/* Show Focus Radio */}
-            <div className="flex items-center justify-between py-3">
-              <div className="flex items-start gap-2">
-                <Radio className="w-4 h-4 mt-0.5 text-espresso-500 dark:text-espresso-400 shrink-0" />
-                <div>
-                  <p className="text-sm font-medium text-espresso-900 dark:text-ivory-100">Focus Radio</p>
-                  <p className="text-xs text-espresso-400 dark:text-espresso-500 mt-0.5">
-                    YouTube ambient music player — shown in the Deep Focus view
-                  </p>
+          <div className="divide-y divide-ivory-200 dark:divide-espresso-800">
+            {DASHBOARD_WIDGET_CONFIGS.map((widget) => {
+              const visible = isWidgetVisible(widget.id);
+              return (
+                <div
+                  key={widget.id}
+                  className="flex items-center justify-between py-3.5 first:pt-0 last:pb-0 gap-4"
+                >
+                  <div>
+                    <p className="text-sm font-medium text-espresso-900 dark:text-ivory-100">
+                      {widget.name}
+                    </p>
+                    <p className="text-xs text-espresso-400 dark:text-espresso-500 mt-0.5">
+                      {widget.description}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    aria-label={`Toggle ${widget.name}`}
+                    onClick={() => toggleWidgetVisibility(widget.id)}
+                    className={`relative w-11 h-6 rounded-full transition-colors shrink-0 cursor-pointer ${
+                      visible
+                        ? 'bg-espresso-800 dark:bg-ivory-200'
+                        : 'bg-ivory-300 dark:bg-espresso-700'
+                    }`}
+                  >
+                    <span
+                      className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white dark:bg-espresso-900 shadow transition-transform ${
+                        visible ? 'translate-x-5' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
                 </div>
-              </div>
-              <button
-                aria-label="Toggle Focus Radio"
-                onClick={() => updateSettings({ showFocusRadio: !settings.showFocusRadio })}
-                className={`relative w-11 h-6 rounded-full transition-colors ${
-                  settings.showFocusRadio
-                    ? 'bg-espresso-800 dark:bg-ivory-200'
-                    : 'bg-ivory-300 dark:bg-espresso-700'
-                }`}
-              >
-                <span
-                  className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white dark:bg-espresso-900 shadow transition-transform ${
-                    settings.showFocusRadio ? 'translate-x-5' : 'translate-x-0'
-                  }`}
-                />
-              </button>
-            </div>
+              );
+            })}
           </div>
         </Card>
 
@@ -1310,46 +1413,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToClassSpa
           </div>
         </Card>
 
-        {/* ── Spaced Review Intervals ── */}
-        <Card>
-          <SectionHeading
-            icon={<BookOpen className="w-4 h-4" />}
-            title="Spaced Review Intervals"
-            sub="Days between repetitions — comma-separated integers (e.g. 1, 3, 7, 14, 30)"
-          />
-          <div className="space-y-3">
-            <input
-              type="text"
-              value={intervalInput}
-              onChange={(e) => { setIntervalInput(e.target.value); setIntervalError(''); }}
-              placeholder="1, 3, 7, 14, 30"
-              className="w-full px-3.5 py-2.5 rounded-xl border border-ivory-300 dark:border-espresso-700 bg-ivory-50 dark:bg-espresso-900 text-espresso-900 dark:text-ivory-100 text-sm font-mono placeholder:text-espresso-400 focus:outline-none focus:ring-2 focus:ring-terracotta-400 transition"
-            />
-            {intervalError && (
-              <p className="text-xs text-red-600 dark:text-red-400">{intervalError}</p>
-            )}
-            <button
-              onClick={() => {
-                const parts = intervalInput.split(',').map((s) => parseInt(s.trim(), 10));
-                if (parts.some(isNaN) || parts.some((n) => n <= 0)) {
-                  setIntervalError('All values must be positive integers separated by commas.');
-                  return;
-                }
-                updateReviewIntervals(parts);
-                setIntervalSaved(true);
-                setTimeout(() => setIntervalSaved(false), 2000);
-              }}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl text-white text-sm font-medium hover:opacity-90 transition shadow-subtle"
-              style={{ backgroundColor: 'var(--accent)' }}
-            >
-              {intervalSaved ? <><Check className="w-4 h-4" /> Saved!</> : 'Save Intervals'}
-            </button>
-            <p className="text-xs text-espresso-400 dark:text-espresso-500">
-              Applied to all new spaced review schedules. Existing reviews are not retroactively changed.
-            </p>
-          </div>
-        </Card>
-
         {/* ── Full Reset ── */}
         <Card className="border-red-200 dark:border-red-900/50">
           <SectionHeading
@@ -1398,12 +1461,22 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToClassSpa
       </div>
 
       {/* ── App Version ── */}
-      <div className="flex items-center justify-between py-4 border-t border-ivory-300 dark:border-espresso-800 text-xs text-espresso-400 dark:text-espresso-500 font-mono">
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-2 py-4 border-t border-ivory-300 dark:border-espresso-800 text-xs text-espresso-400 dark:text-espresso-500 font-mono">
         <span className="flex items-center gap-1.5">
           <Info className="w-3.5 h-3.5" />
           TRACKER v{APP_VERSION} · Local-First · No Cloud Sync
         </span>
-        <span>All data stored in your browser&apos;s localStorage</span>
+        <div className="flex items-center gap-4">
+          {onNavigateToAdmin && (
+            <button
+              onClick={onNavigateToAdmin}
+              className="text-[11px] text-espresso-400 hover:text-terracotta-600 dark:hover:text-terracotta-400 transition underline underline-offset-2 cursor-pointer font-sans"
+            >
+              Platform Administrative Portal
+            </button>
+          )}
+          <span>All data stored in your browser&apos;s localStorage</span>
+        </div>
       </div>
 
       {/* ClassSpace Dialog Modals */}

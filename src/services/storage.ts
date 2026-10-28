@@ -5,6 +5,8 @@ import {
   MockTest,
   ErrorLogEntry,
   CalendarEvent,
+  CustomPlaylist,
+  SyncTombstone,
 } from '../types';
 
 import { migrateV1ToV2 } from './migration';
@@ -270,6 +272,144 @@ export const DEFAULT_ERROR_LOGS: ErrorLogEntry[] = [
   },
 ];
 
+export const sanitizeEntityArray = <T extends { id: string }>(arr: unknown): T[] => {
+  if (!Array.isArray(arr)) return [];
+  return arr.filter(
+    (item): item is T =>
+      Boolean(item) &&
+      typeof item === 'object' &&
+      !Array.isArray(item) &&
+      typeof (item as any).id === 'string' &&
+      (item as any).id.trim().length > 0
+  );
+};
+
+export const getUserStorageKey = (userId: string): string => `tracker_user_data_${userId}`;
+
+export const saveUserData = (userId: string, data: AppStateData): void => {
+  if (!userId || typeof userId !== 'string') return;
+  try {
+    localStorage.setItem(getUserStorageKey(userId), JSON.stringify(data));
+  } catch (err) {
+    console.error(`Failed to persist user data for ${userId}:`, err);
+  }
+};
+
+export const sanitizeLoadedState = (parsed: any): AppStateData => {
+  if (!parsed || typeof parsed !== 'object') {
+    return {
+      ...EMPTY_STATE,
+      profile: { ...DEFAULT_PROFILE },
+      settings: { ...DEFAULT_SETTINGS },
+      customPlaylists: JSON.parse(JSON.stringify(DEFAULT_CUSTOM_PLAYLISTS)),
+      hasSampleData: false,
+      schemaVersion: 2,
+    };
+  }
+  const playlists = sanitizeEntityArray<CustomPlaylist>(parsed.customPlaylists);
+  return {
+    hasSampleData: Boolean(parsed.hasSampleData),
+    subjects: sanitizeEntityArray(parsed.subjects),
+    timetable: sanitizeEntityArray(parsed.timetable),
+    attendanceLogs: sanitizeEntityArray(parsed.attendanceLogs),
+    studySessions: sanitizeEntityArray(parsed.studySessions).map((s: any) => ({
+      ...s,
+      status: s?.status ?? 'completed',
+    })),
+    gymWorkouts: sanitizeEntityArray(parsed.gymWorkouts),
+    reminders: sanitizeEntityArray(parsed.reminders),
+    schemaVersion: 2,
+    profile: {
+      displayName: typeof parsed.profile?.displayName === 'string' ? parsed.profile.displayName : '',
+      targetExam: typeof parsed.profile?.targetExam === 'string' ? parsed.profile.targetExam : '',
+      examDate: parsed.profile?.examDate,
+      examYear: parsed.profile?.examYear,
+      avatarUrl: typeof parsed.profile?.avatarUrl === 'string' ? parsed.profile.avatarUrl : undefined,
+      email: typeof parsed.profile?.email === 'string' ? parsed.profile.email : undefined,
+      institution: typeof parsed.profile?.institution === 'string' ? parsed.profile.institution : undefined,
+      department: typeof parsed.profile?.department === 'string' ? parsed.profile.department : undefined,
+      studentId: typeof parsed.profile?.studentId === 'string' ? parsed.profile.studentId : undefined,
+      bio: typeof parsed.profile?.bio === 'string' ? parsed.profile.bio : undefined,
+    },
+    settings: {
+      themeMode: parsed.settings?.themeMode ?? 'system',
+      accentColor: parsed.settings?.accentColor ?? 'terracotta',
+      backgroundStyle: parsed.settings?.backgroundStyle ?? 'minimal',
+      customBackgroundUrl: parsed.settings?.customBackgroundUrl,
+      studyDayRolloverHour: typeof parsed.settings?.studyDayRolloverHour === 'number' ? parsed.settings.studyDayRolloverHour : 0,
+      showExamCountdown: typeof parsed.settings?.showExamCountdown === 'boolean' ? parsed.settings.showExamCountdown : true,
+      showFocusRadio: typeof parsed.settings?.showFocusRadio === 'boolean' ? parsed.settings.showFocusRadio : false,
+      attendanceRequirement: typeof parsed.settings?.attendanceRequirement === 'number' ? parsed.settings.attendanceRequirement : undefined,
+      dashboardWidgetOrder: Array.isArray(parsed.settings?.dashboardWidgetOrder) ? parsed.settings.dashboardWidgetOrder : undefined,
+      dashboardLayoutMode: parsed.settings?.dashboardLayoutMode || 'bento',
+      dashboardDensity: parsed.settings?.dashboardDensity || 'compact',
+      userMode: parsed.settings?.userMode === 'class_based' ? 'class_based' : 'individual',
+    },
+    syllabusSubjects: sanitizeEntityArray(parsed.syllabusSubjects),
+    occurrenceOverrides: sanitizeEntityArray(parsed.occurrenceOverrides),
+    extraClasses: sanitizeEntityArray(parsed.extraClasses),
+    tasks: sanitizeEntityArray(parsed.tasks),
+    spacedReviews: sanitizeEntityArray(parsed.spacedReviews),
+    dailyQuestions: sanitizeEntityArray(parsed.dailyQuestions),
+    dailyQuestionTarget: typeof parsed.dailyQuestionTarget === 'number' ? parsed.dailyQuestionTarget : DEFAULT_DAILY_QUESTION_TARGET,
+    reviewIntervals: Array.isArray(parsed.reviewIntervals) ? parsed.reviewIntervals : DEFAULT_REVIEW_INTERVALS,
+    foodDiaryEntries: sanitizeEntityArray(parsed.foodDiaryEntries),
+    customFoods: sanitizeEntityArray(parsed.customFoods),
+    recipes: sanitizeEntityArray(parsed.recipes),
+    weightLogs: sanitizeEntityArray(parsed.weightLogs),
+    nutritionProfile: parsed.nutritionProfile ?? DEFAULT_NUTRITION_PROFILE,
+    radioUrls: sanitizeEntityArray(parsed.radioUrls),
+    radioQueue: sanitizeEntityArray(parsed.radioQueue),
+    radioLoopMode: parsed.radioLoopMode === 'all' || parsed.radioLoopMode === 'one' ? parsed.radioLoopMode : 'off',
+    radioIsShuffle: Boolean(parsed.radioIsShuffle),
+    customPlaylists: playlists.length > 0 ? playlists : JSON.parse(JSON.stringify(DEFAULT_CUSTOM_PLAYLISTS)),
+    mockTests: sanitizeEntityArray(parsed.mockTests),
+    errorLogs: sanitizeEntityArray(parsed.errorLogs),
+    events: sanitizeEntityArray(parsed.events),
+    tombstones: sanitizeEntityArray<SyncTombstone>(parsed.tombstones),
+  };
+};
+
+export const loadUserData = (userId: string): AppStateData | null => {
+  if (!userId || typeof userId !== 'string') return null;
+  try {
+    const serialized = localStorage.getItem(getUserStorageKey(userId));
+    if (!serialized) return null;
+    const parsed = JSON.parse(serialized);
+    return sanitizeLoadedState(parsed);
+  } catch (err) {
+    console.error(`Failed to load user data for ${userId}:`, err);
+    return null;
+  }
+};
+
+export const clearUserData = (userId: string): void => {
+  if (!userId || typeof userId !== 'string') return;
+  try {
+    localStorage.removeItem(getUserStorageKey(userId));
+  } catch {}
+};
+
+export const GUEST_BACKUP_KEY = 'tracker_guest_data_backup';
+
+export const saveGuestBackup = (data: AppStateData): void => {
+  try {
+    localStorage.setItem(GUEST_BACKUP_KEY, JSON.stringify(data));
+  } catch (err) {
+    console.error('Failed to save guest backup:', err);
+  }
+};
+
+export const loadGuestBackup = (): AppStateData | null => {
+  try {
+    const raw = localStorage.getItem(GUEST_BACKUP_KEY);
+    if (!raw) return null;
+    return sanitizeLoadedState(JSON.parse(raw));
+  } catch {
+    return null;
+  }
+};
+
 export const loadData = (): AppStateData => {
   // Try loading v2 data first
   const v2Serialized = localStorage.getItem(STORAGE_KEY_V2);
@@ -277,70 +417,7 @@ export const loadData = (): AppStateData => {
     try {
       const parsed = JSON.parse(v2Serialized);
       if (parsed && typeof parsed === 'object') {
-        return {
-          hasSampleData: Boolean(parsed.hasSampleData),
-          subjects: Array.isArray(parsed.subjects) ? parsed.subjects : [],
-          timetable: Array.isArray(parsed.timetable) ? parsed.timetable : [],
-          attendanceLogs: Array.isArray(parsed.attendanceLogs) ? parsed.attendanceLogs : [],
-          studySessions: Array.isArray(parsed.studySessions)
-            ? parsed.studySessions.map((s: any) => ({
-                ...s,
-                status: s.status ?? 'completed',
-              }))
-            : [],
-          gymWorkouts: Array.isArray(parsed.gymWorkouts) ? parsed.gymWorkouts : [],
-          reminders: Array.isArray(parsed.reminders) ? parsed.reminders : [],
-          schemaVersion: 2,
-          profile: {
-            displayName: typeof parsed.profile?.displayName === 'string' ? parsed.profile.displayName : '',
-            targetExam: typeof parsed.profile?.targetExam === 'string' ? parsed.profile.targetExam : '',
-            examDate: parsed.profile?.examDate,
-            examYear: parsed.profile?.examYear,
-            avatarUrl: typeof parsed.profile?.avatarUrl === 'string' ? parsed.profile.avatarUrl : undefined,
-            email: typeof parsed.profile?.email === 'string' ? parsed.profile.email : undefined,
-            institution: typeof parsed.profile?.institution === 'string' ? parsed.profile.institution : undefined,
-            department: typeof parsed.profile?.department === 'string' ? parsed.profile.department : undefined,
-            studentId: typeof parsed.profile?.studentId === 'string' ? parsed.profile.studentId : undefined,
-            bio: typeof parsed.profile?.bio === 'string' ? parsed.profile.bio : undefined,
-          },
-          settings: {
-            themeMode: parsed.settings?.themeMode ?? 'system',
-            accentColor: parsed.settings?.accentColor ?? 'terracotta',
-            backgroundStyle: parsed.settings?.backgroundStyle ?? 'minimal',
-            customBackgroundUrl: parsed.settings?.customBackgroundUrl,
-            studyDayRolloverHour: typeof parsed.settings?.studyDayRolloverHour === 'number' ? parsed.settings.studyDayRolloverHour : 0,
-            showExamCountdown: typeof parsed.settings?.showExamCountdown === 'boolean' ? parsed.settings.showExamCountdown : true,
-            showFocusRadio: typeof parsed.settings?.showFocusRadio === 'boolean' ? parsed.settings.showFocusRadio : false,
-            attendanceRequirement: typeof parsed.settings?.attendanceRequirement === 'number' ? parsed.settings.attendanceRequirement : undefined,
-            dashboardWidgetOrder: Array.isArray(parsed.settings?.dashboardWidgetOrder) ? parsed.settings.dashboardWidgetOrder : undefined,
-            dashboardLayoutMode: parsed.settings?.dashboardLayoutMode || 'bento',
-            dashboardDensity: parsed.settings?.dashboardDensity || 'compact',
-            userMode: parsed.settings?.userMode === 'class_based' ? 'class_based' : 'individual',
-          },
-          syllabusSubjects: Array.isArray(parsed.syllabusSubjects)
-            ? parsed.syllabusSubjects
-            : [],
-          occurrenceOverrides: Array.isArray(parsed.occurrenceOverrides) ? parsed.occurrenceOverrides : [],
-          extraClasses: Array.isArray(parsed.extraClasses) ? parsed.extraClasses : [],
-          tasks: Array.isArray(parsed.tasks) ? parsed.tasks : [],
-          spacedReviews: Array.isArray(parsed.spacedReviews) ? parsed.spacedReviews : [],
-          dailyQuestions: Array.isArray(parsed.dailyQuestions) ? parsed.dailyQuestions : [],
-          dailyQuestionTarget: typeof parsed.dailyQuestionTarget === 'number' ? parsed.dailyQuestionTarget : DEFAULT_DAILY_QUESTION_TARGET,
-          reviewIntervals: Array.isArray(parsed.reviewIntervals) ? parsed.reviewIntervals : DEFAULT_REVIEW_INTERVALS,
-          foodDiaryEntries: Array.isArray(parsed.foodDiaryEntries) ? parsed.foodDiaryEntries : [],
-          customFoods: Array.isArray(parsed.customFoods) ? parsed.customFoods : [],
-          recipes: Array.isArray(parsed.recipes) ? parsed.recipes : [],
-          weightLogs: Array.isArray(parsed.weightLogs) ? parsed.weightLogs : [],
-          nutritionProfile: parsed.nutritionProfile ?? DEFAULT_NUTRITION_PROFILE,
-          radioUrls: Array.isArray(parsed.radioUrls) ? parsed.radioUrls : [],
-          radioQueue: Array.isArray(parsed.radioQueue) ? parsed.radioQueue : [],
-          radioLoopMode: parsed.radioLoopMode === 'all' || parsed.radioLoopMode === 'one' ? parsed.radioLoopMode : 'off',
-          radioIsShuffle: Boolean(parsed.radioIsShuffle),
-          customPlaylists: Array.isArray(parsed.customPlaylists) ? parsed.customPlaylists : DEFAULT_CUSTOM_PLAYLISTS,
-          mockTests: Array.isArray(parsed.mockTests) ? parsed.mockTests : [],
-          errorLogs: Array.isArray(parsed.errorLogs) ? parsed.errorLogs : [],
-          events: Array.isArray(parsed.events) ? parsed.events : [],
-        };
+        return sanitizeLoadedState(parsed);
       }
     } catch (err) {
       console.error('Corrupt v2 data, attempting migration from v1');
@@ -403,6 +480,7 @@ export const saveData = (data: AppStateData): void => {
       mockTests: Array.isArray(data.mockTests) ? data.mockTests : [],
       errorLogs: Array.isArray(data.errorLogs) ? data.errorLogs : [],
       events: Array.isArray(data.events) ? data.events : [],
+      tombstones: Array.isArray(data.tombstones) ? data.tombstones : [],
     };
     localStorage.setItem(STORAGE_KEY_V2, JSON.stringify(toSave));
   } catch (err) {
@@ -884,6 +962,11 @@ export const SAMPLE_DATA: AppStateData = {
 export interface IStorageService {
   loadData(): AppStateData;
   saveData(data: AppStateData): void;
+  loadUserData(userId: string): AppStateData | null;
+  saveUserData(userId: string, data: AppStateData): void;
+  clearUserData(userId: string): void;
+  loadGuestBackup(): AppStateData | null;
+  saveGuestBackup(data: AppStateData): void;
   loadTheme(): ThemeMode;
   saveTheme(mode: ThemeMode): void;
   populateSampleData(): AppStateData;
@@ -899,6 +982,26 @@ class LocalStorageService implements IStorageService {
 
   saveData(data: AppStateData): void {
     saveData(data);
+  }
+
+  loadUserData(userId: string): AppStateData | null {
+    return loadUserData(userId);
+  }
+
+  saveUserData(userId: string, data: AppStateData): void {
+    saveUserData(userId, data);
+  }
+
+  clearUserData(userId: string): void {
+    clearUserData(userId);
+  }
+
+  loadGuestBackup(): AppStateData | null {
+    return loadGuestBackup();
+  }
+
+  saveGuestBackup(data: AppStateData): void {
+    saveGuestBackup(data);
   }
 
   loadTheme(): ThemeMode {
@@ -1033,9 +1136,9 @@ class LocalStorageService implements IStorageService {
 
     const existing = this.loadData();
 
-    const readCollection = <T>(key: string, existingList: T[] = []): T[] => {
+    const readCollection = <T extends { id: string }>(key: string, existingList: T[] = []): T[] => {
       if (key in parsed) {
-        return Array.isArray(parsed[key]) ? (parsed[key] as T[]) : [];
+        return sanitizeEntityArray<T>(parsed[key]);
       }
       return existingList;
     };

@@ -153,6 +153,8 @@ export interface AppSettings {
   userMode?: UserMode;
   /** Shared attendance requirement percentage (0-100). Default 75 when not set. */
   attendanceRequirement?: number;
+  /** Single source of truth for dashboard widget visibility toggles */
+  dashboardWidgetVisibility?: Record<string, boolean>;
   /** Custom arrangement of dashboard widget IDs */
   dashboardWidgetOrder?: string[];
   /** Custom layout style for Active Command Center */
@@ -348,6 +350,14 @@ export interface AppStateData {
   errorLogs?: ErrorLogEntry[];
   // Events & Tasks Calendar Module
   events?: CalendarEvent[];
+  // Milestone 2: Cross-Device Deletion Tombstones
+  tombstones?: SyncTombstone[];
+}
+
+export interface SyncTombstone {
+  id: string;
+  collection: string;
+  deletedAt: string;
 }
 
 // ----- Events & Tasks Calendar Types -----
@@ -384,6 +394,7 @@ export interface CalendarEvent {
   examType?: ExamType;
   linkedEntity?: string;
   createdAt: string;
+  updatedAt?: string;
   completedAt?: string;
   isSample?: boolean;
   subtasks?: Subtask[];
@@ -417,6 +428,7 @@ export interface PlannerTask {
   notes?: string;
   errorLogId?: string; // Link to ErrorLogEntry if created from error log
   createdAt: string; // ISO string
+  updatedAt?: string; // ISO string
   completedAt?: string; // ISO string
   isSample?: boolean;
   subtasks?: Subtask[];

@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useMemo, useCall
 import {
   ClassSpaceWorkspace,
   ClassSpaceMember,
+  ClassSpaceRole,
   ClassTimetableRule,
   ClassTimetableOverride,
   ResolvedClassOccurrence,
@@ -78,6 +79,10 @@ interface ClassSpaceContextType {
   leaveWorkspace: () => Promise<{ success: boolean; error?: string }>;
   deleteWorkspace: () => Promise<{ success: boolean; error?: string }>;
 
+  // Member Management Actions
+  updateMemberRole: (targetUserId: string, newRole: ClassSpaceRole) => Promise<{ success: boolean; error?: string }>;
+  removeMember: (targetUserId: string) => Promise<{ success: boolean; error?: string }>;
+
   // Timetable Actions
   addTimetableRule: (rule: Omit<ClassTimetableRule, 'id' | 'workspaceId' | 'createdAt' | 'updatedAt' | 'createdBy'>) => Promise<{ error?: string }>;
   updateTimetableRule: (ruleId: string, updates: Partial<ClassTimetableRule>) => Promise<{ error?: string }>;
@@ -151,7 +156,7 @@ export const ClassSpaceContext = createContext<ClassSpaceContextType | undefined
 export const useOptionalClassSpace = () => useContext(ClassSpaceContext);
 
 export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { authUser, state: appState } = useApp();
+  const { authUser, state: appState, addSubject, markAttendanceForEvent } = useApp();
 
   // Active student identity (syncs with user profile email, display name, and avatar)
   const effectiveUser: AuthUser = useMemo(() => {
@@ -390,6 +395,34 @@ export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const leaveWorkspace = async () => {
     if (!activeWorkspace) return { success: false, error: 'No active ClassSpace selected.' };
+
+    // Migrate attendance records from active workspace into personal tracker before leaving
+    // so historical academic attendance records are permanently retained in personal logs
+    if (attendanceRecords.length > 0) {
+      for (const rec of attendanceRecords) {
+        const rule = rules.find((r) => rec.occurrenceKey.startsWith(r.id));
+        const override = overrides.find((o) => o.id === rec.occurrenceKey);
+        const subjName = rule?.subjectName || override?.subjectName || 'Class';
+        const subjCode = rule?.subjectCode || override?.subjectCode || 'CLS';
+        const subjColor = rule?.subjectColor || override?.subjectColor || '#C45532';
+
+        const existingSubj = appState.subjects.find((s) => s.code.toUpperCase() === subjCode.toUpperCase());
+        if (!existingSubj) {
+          addSubject({
+            name: subjName,
+            code: subjCode,
+            color: subjColor,
+            attended: 0,
+            totalConducted: 0,
+            targetPct: 75,
+            isSample: false,
+          });
+        }
+        const subjId = existingSubj ? existingSubj.id : `subj_${subjCode.toLowerCase()}`;
+        markAttendanceForEvent(rec.occurrenceKey, subjId, rec.date, rec.status);
+      }
+    }
+
     const res = await classSpaceService.leaveWorkspace(activeWorkspace.id, effectiveUser.id);
     if (res.success) {
       setWorkspaces((prev) => prev.filter((w) => w.id !== activeWorkspace.id));
@@ -404,6 +437,36 @@ export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     if (res.success) {
       setWorkspaces((prev) => prev.filter((w) => w.id !== activeWorkspace.id));
       setActiveWorkspace(null);
+    }
+    return res;
+  };
+
+  // Member Management Actions
+  const updateMemberRole = async (targetUserId: string, newRole: ClassSpaceRole) => {
+    if (!activeWorkspace) return { success: false, error: 'No active workspace.' };
+    const res = await classSpaceService.updateMemberRole(
+      activeWorkspace.id,
+      effectiveUser.id,
+      targetUserId,
+      newRole
+    );
+    if (res.success) {
+      setMembers((prev) =>
+        prev.map((m) => (m.userId === targetUserId ? { ...m, role: newRole } : m))
+      );
+    }
+    return res;
+  };
+
+  const removeMember = async (targetUserId: string) => {
+    if (!activeWorkspace) return { success: false, error: 'No active workspace.' };
+    const res = await classSpaceService.removeMember(
+      activeWorkspace.id,
+      effectiveUser.id,
+      targetUserId
+    );
+    if (res.success) {
+      setMembers((prev) => prev.filter((m) => m.userId !== targetUserId));
     }
     return res;
   };
@@ -919,6 +982,8 @@ export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         rotateJoinCode,
         leaveWorkspace,
         deleteWorkspace,
+        updateMemberRole,
+        removeMember,
         addTimetableRule,
         updateTimetableRule,
         deleteTimetableRule,

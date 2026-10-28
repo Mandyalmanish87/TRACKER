@@ -15,6 +15,9 @@ interface FocusRadioContextType {
   isMiniPlayerOpen: boolean;
   isMiniPlayerCollapsed: boolean;
   errorMessage: string | null;
+  currentTime: number;
+  duration: number;
+  savedPlaybackPosition: number;
 
   // Actions
   play: () => void;
@@ -22,6 +25,8 @@ interface FocusRadioContextType {
   togglePlay: () => void;
   next: () => void;
   prev: () => void;
+  seekTo: (seconds: number) => void;
+  resumeFromSavedPosition: () => void;
   setVolume: (val: number) => void;
   toggleMute: () => void;
   setShuffle: (val: boolean) => void;
@@ -111,6 +116,15 @@ export const FocusRadioProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  // Playback progress & duration (Spotify-style)
+  const [savedPlaybackPosition, setSavedPlaybackPosition] = useState<number>(
+    typeof initialData?.savedPlaybackPosition === 'number' ? initialData.savedPlaybackPosition : 0
+  );
+  const [currentTime, setCurrentTime] = useState<number>(
+    typeof initialData?.savedPlaybackPosition === 'number' ? initialData.savedPlaybackPosition : 0
+  );
+  const [duration, setDuration] = useState<number>(0);
+
   const playerRef = useRef<any>(null);
   const isApiReadyRef = useRef<boolean>(false);
   const consecutiveErrorsRef = useRef<number>(0);
@@ -131,10 +145,32 @@ export const FocusRadioProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           repeatMode,
           isMiniPlayerOpen,
           isMiniPlayerCollapsed,
+          savedPlaybackPosition: Math.round(savedPlaybackPosition),
         })
       );
     } catch {}
-  }, [queue, currentIndex, volume, shuffle, repeatMode, isMiniPlayerOpen, isMiniPlayerCollapsed]);
+  }, [queue, currentIndex, volume, shuffle, repeatMode, isMiniPlayerOpen, isMiniPlayerCollapsed, savedPlaybackPosition]);
+
+  // Track playback time and duration while playing
+  useEffect(() => {
+    let interval: any = null;
+    if (isPlaying) {
+      interval = setInterval(() => {
+        if (playerRef.current && typeof playerRef.current.getCurrentTime === 'function') {
+          try {
+            const cur = playerRef.current.getCurrentTime() || 0;
+            const dur = playerRef.current.getDuration() || 0;
+            setCurrentTime(cur);
+            setSavedPlaybackPosition(cur);
+            if (dur > 0) setDuration(dur);
+          } catch {}
+        }
+      }, 500);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [isPlaying]);
 
   // Persist playlists
   useEffect(() => {
@@ -171,6 +207,13 @@ export const FocusRadioProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           onReady: (event: any) => {
             isApiReadyRef.current = true;
             event.target.setVolume(volume);
+            try {
+              const dur = event.target.getDuration();
+              if (dur > 0) setDuration(dur);
+              if (savedPlaybackPosition > 3) {
+                event.target.seekTo(savedPlaybackPosition, true);
+              }
+            } catch {}
           },
           onStateChange: (event: any) => {
             // 1 = playing, 2 = paused, 3 = buffering, 0 = ended
@@ -331,6 +374,31 @@ export const FocusRadioProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setCurrentIndex(queue.length - 1);
     }
   }, [queue.length, currentIndex, repeatMode]);
+
+  const seekTo = useCallback((seconds: number) => {
+    const clamped = Math.max(0, Math.min(duration || 100000, seconds));
+    setCurrentTime(clamped);
+    setSavedPlaybackPosition(clamped);
+    if (playerRef.current && typeof playerRef.current.seekTo === 'function') {
+      try {
+        playerRef.current.seekTo(clamped, true);
+      } catch {}
+    }
+  }, [duration]);
+
+  const resumeFromSavedPosition = useCallback(() => {
+    if (playerRef.current) {
+      try {
+        if (savedPlaybackPosition > 0 && typeof playerRef.current.seekTo === 'function') {
+          playerRef.current.seekTo(savedPlaybackPosition, true);
+        }
+        if (typeof playerRef.current.playVideo === 'function') {
+          playerRef.current.playVideo();
+          setIsPlaying(true);
+        }
+      } catch {}
+    }
+  }, [savedPlaybackPosition]);
 
   const setVolume = useCallback((val: number) => {
     const clamped = Math.max(0, Math.min(100, val));
@@ -511,11 +579,16 @@ export const FocusRadioProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         isMiniPlayerOpen,
         isMiniPlayerCollapsed,
         errorMessage,
+        currentTime,
+        duration,
+        savedPlaybackPosition,
         play,
         pause,
         togglePlay,
         next,
         prev,
+        seekTo,
+        resumeFromSavedPosition,
         setVolume,
         toggleMute,
         setShuffle,
@@ -569,11 +642,16 @@ const FALLBACK_FOCUS_RADIO_CONTEXT: FocusRadioContextType = {
   isMiniPlayerOpen: false,
   isMiniPlayerCollapsed: false,
   errorMessage: null,
+  currentTime: 0,
+  duration: 0,
+  savedPlaybackPosition: 0,
   play: () => {},
   pause: () => {},
   togglePlay: () => {},
   next: () => {},
   prev: () => {},
+  seekTo: () => {},
+  resumeFromSavedPosition: () => {},
   setVolume: () => {},
   toggleMute: () => {},
   setShuffle: () => {},

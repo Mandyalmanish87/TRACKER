@@ -187,7 +187,8 @@ export const AttendanceView: React.FC = () => {
                     max="15"
                     value={simExtraAttend}
                     onChange={(e) => setSimExtraAttend(parseInt(e.target.value, 10))}
-                    className="w-full accent-terracotta-500 cursor-pointer"
+                    className="w-full cursor-pointer h-1.5 rounded-lg bg-ivory-200 dark:bg-espresso-750"
+                    style={{ accentColor: 'var(--accent)' }}
                   />
                   <div className="flex justify-between text-[10px] text-espresso-400 font-mono">
                     <span>+1 class</span>

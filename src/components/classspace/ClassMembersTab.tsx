@@ -20,11 +20,13 @@ export const ClassMembersTab: React.FC = () => {
     members,
     currentMember,
     isCR,
+    removeMember,
   } = useClassSpace();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<'all' | 'cr' | 'co_admin' | 'member'>('all');
   const [memberToRemove, setMemberToRemove] = useState<ClassSpaceMember | null>(null);
+  const [removeError, setRemoveError] = useState<string | null>(null);
 
   // Filter members based on query and role filter
   const filteredMembers = useMemo(() => {
@@ -299,6 +301,19 @@ export const ClassMembersTab: React.FC = () => {
         )}
       </div>
 
+      {/* Error notification if removal fails */}
+      {removeError && (
+        <div className="p-3 text-xs rounded-xl bg-destructive/15 text-destructive border border-destructive/30 flex items-center justify-between">
+          <span>{removeError}</span>
+          <button
+            onClick={() => setRemoveError(null)}
+            className="text-destructive font-bold hover:opacity-80"
+          >
+            &times;
+          </button>
+        </div>
+      )}
+
       {/* Confirmation Modal for Removing Member */}
       <ConfirmModal
         isOpen={Boolean(memberToRemove)}
@@ -307,8 +322,15 @@ export const ClassMembersTab: React.FC = () => {
         confirmLabel="Remove Member"
         cancelLabel="Cancel"
         variant="danger"
-        onConfirm={() => {
-          setMemberToRemove(null);
+        onConfirm={async () => {
+          if (memberToRemove) {
+            setRemoveError(null);
+            const res = await removeMember(memberToRemove.userId);
+            if (!res.success) {
+              setRemoveError(res.error || 'Failed to remove member.');
+            }
+            setMemberToRemove(null);
+          }
         }}
         onCancel={() => setMemberToRemove(null)}
       />

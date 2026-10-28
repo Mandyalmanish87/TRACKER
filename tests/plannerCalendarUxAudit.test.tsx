@@ -293,11 +293,12 @@ describe('Phase 4E: Planner & Calendar UX Audit Regressions', () => {
 
   // 8. Review C: Hour 23 drop bounds end time to 23:59
   it('clamps hour 23 drop end time to 23:59 without creating a zero-duration interval', () => {
+    const todayStr = toLocalDateString(new Date());
     const timedEvent: CalendarEvent = {
       id: 'evt-drag-clamp',
       title: 'Night Study Session',
       category: 'task',
-      date: '2026-10-25',
+      date: todayStr,
       startTime: '10:00',
       endTime: '11:00',
       isAllDay: false,

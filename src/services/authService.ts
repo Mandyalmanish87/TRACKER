@@ -12,22 +12,46 @@ const env = (import.meta as unknown as { env?: Record<string, string> }).env || 
 const supabaseUrl = env.VITE_SUPABASE_URL;
 const supabaseAnonKey = env.VITE_SUPABASE_ANON_KEY;
 
-export const isSupabaseConfigured = Boolean(
-  supabaseUrl &&
-  supabaseAnonKey &&
-  supabaseUrl !== 'https://your-project.supabase.co' &&
-  supabaseAnonKey !== 'your-anon-key'
-);
+const isValidSupabaseUrl = (url?: string): boolean => {
+  if (!url || typeof url !== 'string') return false;
+  const trimmed = url.trim();
+  if (
+    trimmed === '' ||
+    trimmed === 'https://your-project.supabase.co' ||
+    trimmed === 'https://xyzcompany.supabase.co' ||
+    trimmed === 'your-supabase-url'
+  ) {
+    return false;
+  }
+  try {
+    const parsed = new URL(trimmed);
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:';
+  } catch {
+    return false;
+  }
+};
+
+const isValidSupabaseKey = (key?: string): boolean => {
+  if (!key || typeof key !== 'string') return false;
+  const trimmed = key.trim();
+  if (trimmed === '' || trimmed === 'your-anon-key' || trimmed === 'your-anon-public-key') {
+    return false;
+  }
+  return trimmed.length > 20;
+};
 
 let supabaseClient: SupabaseClient | null = null;
 
-if (isSupabaseConfigured) {
+if (isValidSupabaseUrl(supabaseUrl) && isValidSupabaseKey(supabaseAnonKey)) {
   try {
-    supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
+    supabaseClient = createClient(supabaseUrl!, supabaseAnonKey!);
   } catch (err) {
     console.warn('[AuthService] Failed to initialize Supabase client:', err);
+    supabaseClient = null;
   }
 }
+
+export const isSupabaseConfigured = Boolean(supabaseClient);
 
 export const getSupabaseClient = () => supabaseClient;
 
@@ -35,7 +59,9 @@ export const getSupabaseClient = () => supabaseClient;
 let testUserFixture: AuthUser | null = null;
 
 export const authService = {
-  isConfigured: isSupabaseConfigured,
+  get isConfigured(): boolean {
+    return Boolean(supabaseClient);
+  },
 
   /**
    * Test-only helper: strictly isolated to test runs and ignored in production builds.

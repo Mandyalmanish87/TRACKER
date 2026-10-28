@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ThemeProvider } from './theme/ThemeContext';
 import { AppProvider, useApp } from './context/AppContext';
 import { AppearanceManager } from './theme/AppearanceManager';
@@ -17,13 +17,39 @@ import { TestsView } from './components/views/TestsView';
 import { SettingsView } from './components/views/SettingsView';
 import { ClassSpaceView } from './components/classspace/ClassSpaceView';
 import { ClassSpaceProvider } from './context/ClassSpaceContext';
+import { AdminRoute } from './components/admin/AdminRoute';
+import { EduHubView } from './components/eduhub/EduHubView';
 
 import { FocusRadioProvider, MiniPlayer } from './components/focus-radio';
 import { motion } from 'motion/react';
 
 export const MainApp: React.FC = () => {
   const { state } = useApp();
-  const [currentTab, setCurrentTab] = useState<NavTab>('dashboard');
+  const [currentTab, setCurrentTab] = useState<NavTab>(() => {
+    if (typeof window !== 'undefined') {
+      if (window.location.pathname === '/admin' || window.location.hash === '#admin') {
+        return 'admin';
+      }
+    }
+    return 'dashboard';
+  });
+
+  useEffect(() => {
+    const handleLocationChange = () => {
+      if (typeof window !== 'undefined') {
+        if (window.location.pathname === '/admin' || window.location.hash === '#admin') {
+          setCurrentTab('admin');
+        }
+      }
+    };
+
+    window.addEventListener('popstate', handleLocationChange);
+    window.addEventListener('hashchange', handleLocationChange);
+    return () => {
+      window.removeEventListener('popstate', handleLocationChange);
+      window.removeEventListener('hashchange', handleLocationChange);
+    };
+  }, []);
 
   // Guard: if user is in Individual mode, redirect 'classspace' requests to dashboard
   const effectiveTab: NavTab = currentTab === 'classspace' && state.settings?.userMode !== 'class_based'
@@ -70,8 +96,24 @@ export const MainApp: React.FC = () => {
             {effectiveTab === 'gym'        && <GymView />}
             {effectiveTab === 'nutrition'  && <NutritionView />}
             {effectiveTab === 'reminders'  && <RemindersView />}
+            {effectiveTab === 'eduhub'     && <EduHubView />}
             {effectiveTab === 'classspace' && <ClassSpaceView onNavigateToSettings={() => setCurrentTab('settings')} />}
-            {effectiveTab === 'settings'   && <SettingsView onNavigateToClassSpace={() => setCurrentTab('classspace')} />}
+            {effectiveTab === 'settings'   && (
+              <SettingsView
+                onNavigateToClassSpace={() => setCurrentTab('classspace')}
+                onNavigateToAdmin={() => setCurrentTab('admin')}
+              />
+            )}
+            {effectiveTab === 'admin'      && (
+              <AdminRoute
+                onExit={() => {
+                  if (typeof window !== 'undefined' && window.location.hash === '#admin') {
+                    window.location.hash = '';
+                  }
+                  setCurrentTab('dashboard');
+                }}
+              />
+            )}
           </motion.div>
         </main>
 

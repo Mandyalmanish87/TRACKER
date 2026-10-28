@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import {
   AppStateData,
   AttendanceMark,
@@ -35,7 +35,15 @@ import {
   ErrorLogEntry,
   CalendarEvent,
 } from '../types';
-import { storageService, DEFAULT_SYLLABUS_SUBJECTS, STORAGE_KEY_V2 } from '../services/storage';
+import {
+  storageService,
+  DEFAULT_SYLLABUS_SUBJECTS,
+  STORAGE_KEY_V2,
+  DEFAULT_PROFILE,
+  DEFAULT_SETTINGS,
+  DEFAULT_CUSTOM_PLAYLISTS,
+  EMPTY_STATE,
+} from '../services/storage';
 import { getAttendanceRequirement } from '../utils/scheduleResolver';
 import { completeReviewStep, DEFAULT_REVIEW_INTERVALS, hasActiveReviewForTopic } from '../utils/spacedRepetitionUtils';
 import {
@@ -49,6 +57,7 @@ import {
 } from '../utils/youtubeValidator';
 import { authService, AuthUser } from '../services/authService';
 import { cloudSyncService, CloudRecord } from '../services/cloudSyncService';
+import { classSpaceService } from '../services/classSpaceService';
 import { SyncConflictModal } from '../components/common/SyncConflictModal';
 
 interface AppContextType {
@@ -214,11 +223,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [activeRadioSource, setActiveRadioSource] = useState<'stations' | 'queue' | 'playlist'>('stations');
   const [activeCustomPlaylistId, setActiveCustomPlaylistId] = useState<string | null>(null);
 
-  // Automatically persist to storage layer whenever state changes
-  useEffect(() => {
-    storageService.saveData(state);
-  }, [state]);
-
   // Google Auth & Cloud Sync States
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error' | 'offline'>('idle');
@@ -226,31 +230,143 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [conflictData, setConflictData] = useState<{
     cloudRecord: CloudRecord;
   } | null>(null);
+  const initialSyncedUserIdRef = useRef<string | null>(null);
+  const stateVersionRef = useRef<number>(0);
+
+  // Automatically track state mutations for upload in-flight correctness
+  useEffect(() => {
+    stateVersionRef.current += 1;
+  }, [state]);
+
+  // Automatically persist to storage layer whenever state changes
+  useEffect(() => {
+    storageService.saveData(state);
+    if (authUser?.id) {
+      storageService.saveUserData(authUser.id, state);
+    }
+  }, [state, authUser]);
 
   // Handle Initial Sync when user logs in
   const handleInitialSync = async (user: AuthUser) => {
     setSyncStatus('syncing');
+    classSpaceService.restoreArchivedData(user.id);
     try {
-      const cloudRecord = await cloudSyncService.fetchCloudData(user.id);
-      if (!cloudRecord) {
-        await cloudSyncService.uploadToCloud(user.id, state);
-        setSyncStatus('synced');
-        setLastSyncedAt(new Date());
+      const userArchive = storageService.loadUserData(user.id);
+      const fetchResult = await cloudSyncService.fetchCloudDataDetailed(user.id);
+
+      // Scenario 1: Network, auth, timeout, or RLS error
+      // We MUST NOT assume remote is empty and MUST NOT overwrite remote data with empty/guest state!
+      if (fetchResult.status === 'error') {
+        if (userArchive) {
+          // Serve local user archive offline, but DO NOT upload to cloud
+          setState(userArchive);
+          storageService.saveData(userArchive);
+          setSyncStatus('offline');
+          initialSyncedUserIdRef.current = user.id;
+        } else {
+          // No local archive and cloud fetch failed: preserve state, flag error
+          setSyncStatus('error');
+        }
         return;
       }
 
-      const hasLocalCustomData = !state.hasSampleData && (
-        (state.timetable?.length || 0) > 0 || (state.tasks?.length || 0) > 0 || (state.subjects?.length || 0) > 0
-      );
+      // Scenario 2: Cloud services unconfigured (local-only mode)
+      if (fetchResult.status === 'unconfigured') {
+        if (userArchive) {
+          setState(userArchive);
+          storageService.saveData(userArchive);
+        }
+        setSyncStatus('offline');
+        initialSyncedUserIdRef.current = user.id;
+        return;
+      }
 
-      if (hasLocalCustomData) {
-        setConflictData({ cloudRecord });
-        setSyncStatus('idle');
-      } else {
-        setState(cloudRecord.data);
-        storageService.saveData(cloudRecord.data);
-        setSyncStatus('synced');
-        setLastSyncedAt(new Date(cloudRecord.updatedAt));
+      // Scenario 3: Cloud record genuinely exists
+      if (fetchResult.status === 'found' && fetchResult.record) {
+        const cloudRecord = fetchResult.record;
+        if (userArchive) {
+          // Merge local archived edits with cloud dataset without losing any records
+          const merged = cloudSyncService.mergeDatasets(userArchive, cloudRecord.data);
+          setState(merged);
+          storageService.saveData(merged);
+          storageService.saveUserData(user.id, merged);
+          const uploadRes = await cloudSyncService.uploadToCloud(user.id, merged);
+          if (uploadRes.success) {
+            cloudSyncService.clearPendingSync(user.id);
+            setSyncStatus('synced');
+            setLastSyncedAt(new Date());
+          } else {
+            cloudSyncService.markPendingSync(user.id);
+            setSyncStatus('offline');
+          }
+          initialSyncedUserIdRef.current = user.id;
+          return;
+        }
+
+        // No prior local archive on this device: check for guest data conflict
+        const hasLocalGuestData = !state.hasSampleData && (
+          (state.timetable?.length || 0) > 0 || (state.tasks?.length || 0) > 0 || (state.subjects?.length || 0) > 0
+        );
+
+        if (hasLocalGuestData) {
+          storageService.saveGuestBackup(state);
+          setConflictData({ cloudRecord });
+          setSyncStatus('idle');
+        } else {
+          setState(cloudRecord.data);
+          storageService.saveData(cloudRecord.data);
+          storageService.saveUserData(user.id, cloudRecord.data);
+          cloudSyncService.clearPendingSync(user.id);
+          setSyncStatus('synced');
+          setLastSyncedAt(new Date(cloudRecord.updatedAt));
+          initialSyncedUserIdRef.current = user.id;
+        }
+        return;
+      }
+
+      // Scenario 4: Confirmed empty cloud account (brand new user with no row in database)
+      if (fetchResult.status === 'not_found') {
+        if (userArchive) {
+          setState(userArchive);
+          storageService.saveData(userArchive);
+          const uploadRes = await cloudSyncService.uploadToCloud(user.id, userArchive);
+          if (uploadRes.success) {
+            cloudSyncService.clearPendingSync(user.id);
+            setSyncStatus('synced');
+            setLastSyncedAt(new Date());
+          } else {
+            cloudSyncService.markPendingSync(user.id);
+            setSyncStatus('offline');
+          }
+          initialSyncedUserIdRef.current = user.id;
+          return;
+        }
+
+        // Brand new user with no cloud record and no prior archive on this device
+        // Check if they created guest data offline before signing in for the first time
+        const hasLocalGuestData = !state.hasSampleData && (
+          (state.timetable?.length || 0) > 0 || (state.tasks?.length || 0) > 0 || (state.subjects?.length || 0) > 0
+        );
+        if (hasLocalGuestData) {
+          storageService.saveGuestBackup(state);
+          storageService.saveUserData(user.id, state);
+          const uploadRes = await cloudSyncService.uploadToCloud(user.id, state);
+          if (uploadRes.success) {
+            cloudSyncService.clearPendingSync(user.id);
+            setSyncStatus('synced');
+            setLastSyncedAt(new Date());
+          } else {
+            cloudSyncService.markPendingSync(user.id);
+            setSyncStatus('offline');
+          }
+          initialSyncedUserIdRef.current = user.id;
+        } else {
+          cloudSyncService.clearPendingSync(user.id);
+          setSyncStatus('synced');
+          setLastSyncedAt(new Date());
+          initialSyncedUserIdRef.current = user.id;
+        }
+        return;
       }
     } catch {
       setSyncStatus('error');
@@ -284,20 +400,40 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Auto-sync debounced when state changes and user is signed in
   useEffect(() => {
-    if (!authUser || conflictData) return;
+    if (!authUser || conflictData || syncStatus === 'syncing' || initialSyncedUserIdRef.current !== authUser.id) return;
+    const versionAtStart = stateVersionRef.current;
     const timeout = setTimeout(async () => {
       setSyncStatus('syncing');
       const res = await cloudSyncService.uploadToCloud(authUser.id, state);
       if (res.success) {
-        setSyncStatus('synced');
-        setLastSyncedAt(new Date());
+        // If state was modified while this upload was in flight, preserve pending sync
+        if (stateVersionRef.current === versionAtStart) {
+          cloudSyncService.clearPendingSync(authUser.id);
+          setSyncStatus('synced');
+          setLastSyncedAt(new Date());
+        } else {
+          cloudSyncService.markPendingSync(authUser.id);
+        }
       } else {
-        setSyncStatus('error');
+        cloudSyncService.markPendingSync(authUser.id);
+        setSyncStatus('offline');
       }
     }, 2500);
 
     return () => clearTimeout(timeout);
-  }, [state, authUser, conflictData]);
+  }, [state, authUser, conflictData, syncStatus]);
+
+  // Network reconnect listener to auto-flush pending syncs when connection is restored
+  useEffect(() => {
+    const unsubscribe = cloudSyncService.onNetworkReconnect(async () => {
+      if (authUser?.id && (cloudSyncService.hasPendingSync(authUser.id) || syncStatus === 'offline')) {
+        await syncNow();
+      }
+    });
+    return () => {
+      unsubscribe();
+    };
+  }, [authUser, syncStatus, state]);
 
   const signInWithGoogle = async (): Promise<{ success: boolean; error?: string }> => {
     setSyncStatus('syncing');
@@ -315,40 +451,85 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const signOut = async () => {
+    if (authUser?.id) {
+      // 1. Safely archive this user's current data so any unsynced offline changes
+      // are never destroyed if the same user signs back in on this device.
+      storageService.saveUserData(authUser.id, state);
+
+      // Attempt to sync to cloud if network is available
+      try {
+        await cloudSyncService.uploadToCloud(authUser.id, state);
+      } catch {
+        // Safe to ignore network failure: local user archive preserves unsynced edits
+      }
+    }
+
+    initialSyncedUserIdRef.current = null;
+    classSpaceService.archiveAndClearLocalData(authUser?.id);
     await authService.signOut();
     setAuthUser(null);
     setSyncStatus('idle');
     setConflictData(null);
+
+    // 2. Eradicate active session from shared guest store so User B does not inherit User A's data
+    const cleanGuestState: AppStateData = {
+      ...EMPTY_STATE,
+      profile: { ...DEFAULT_PROFILE },
+      settings: { ...DEFAULT_SETTINGS },
+      customPlaylists: JSON.parse(JSON.stringify(DEFAULT_CUSTOM_PLAYLISTS)),
+      hasSampleData: false,
+      schemaVersion: 2,
+    };
+    setState(cleanGuestState);
+    storageService.saveData(cleanGuestState);
   };
 
   const syncNow = async () => {
     if (!authUser) return;
+    const versionAtStart = stateVersionRef.current;
     setSyncStatus('syncing');
     const res = await cloudSyncService.uploadToCloud(authUser.id, state);
     if (res.success) {
-      setSyncStatus('synced');
-      setLastSyncedAt(new Date());
+      if (stateVersionRef.current === versionAtStart) {
+        cloudSyncService.clearPendingSync(authUser.id);
+        setSyncStatus('synced');
+        setLastSyncedAt(new Date());
+      } else {
+        cloudSyncService.markPendingSync(authUser.id);
+      }
     } else {
-      setSyncStatus('error');
+      cloudSyncService.markPendingSync(authUser.id);
+      setSyncStatus('offline');
     }
   };
 
   const handleKeepLocal = async () => {
     if (!authUser) return;
     setSyncStatus('syncing');
-    await cloudSyncService.uploadToCloud(authUser.id, state);
+    storageService.saveUserData(authUser.id, state);
+    const res = await cloudSyncService.uploadToCloud(authUser.id, state);
     setConflictData(null);
-    setSyncStatus('synced');
-    setLastSyncedAt(new Date());
+    if (res.success) {
+      cloudSyncService.clearPendingSync(authUser.id);
+      setSyncStatus('synced');
+      setLastSyncedAt(new Date());
+    } else {
+      cloudSyncService.markPendingSync(authUser.id);
+      setSyncStatus('offline');
+    }
+    initialSyncedUserIdRef.current = authUser.id;
   };
 
   const handleLoadCloud = async () => {
-    if (!conflictData) return;
+    if (!conflictData || !authUser) return;
     setState(conflictData.cloudRecord.data);
     storageService.saveData(conflictData.cloudRecord.data);
+    storageService.saveUserData(authUser.id, conflictData.cloudRecord.data);
     setConflictData(null);
+    cloudSyncService.clearPendingSync(authUser.id);
     setSyncStatus('synced');
     setLastSyncedAt(new Date(conflictData.cloudRecord.updatedAt));
+    initialSyncedUserIdRef.current = authUser.id;
   };
 
   const handleMergeBoth = async () => {
@@ -357,10 +538,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const merged = cloudSyncService.mergeDatasets(state, conflictData.cloudRecord.data);
     setState(merged);
     storageService.saveData(merged);
-    await cloudSyncService.uploadToCloud(authUser.id, merged);
+    storageService.saveUserData(authUser.id, merged);
+    const res = await cloudSyncService.uploadToCloud(authUser.id, merged);
     setConflictData(null);
-    setSyncStatus('synced');
-    setLastSyncedAt(new Date());
+    if (res.success) {
+      cloudSyncService.clearPendingSync(authUser.id);
+      setSyncStatus('synced');
+      setLastSyncedAt(new Date());
+    } else {
+      cloudSyncService.markPendingSync(authUser.id);
+      setSyncStatus('offline');
+    }
+    initialSyncedUserIdRef.current = authUser.id;
   };
 
   const handleCancelConflict = async () => {
@@ -613,6 +802,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setState((prev) => ({
       ...prev,
       studySessions: prev.studySessions.filter((s) => s.id !== id),
+      tombstones: cloudSyncService.addTombstone(prev.tombstones, id, 'studySessions'),
     }));
   };
 
@@ -722,6 +912,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const addReminder = (item: Omit<Reminder, 'id' | 'isCompleted'>) => {
     setState((prev) => {
       const id = `rem-${Date.now()}`;
+      const nowIso = new Date().toISOString();
       const newReminder: Reminder = {
         ...item,
         id,
@@ -737,13 +928,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         priority: item.priority,
         isCompleted: false,
         status: 'todo',
-        createdAt: new Date().toISOString(),
+        createdAt: nowIso,
+        updatedAt: nowIso,
         isSample: false,
       };
+      const cleanTombstones = (prev.tombstones || []).filter(
+        (t) => !(t.id === id && (t.collection === 'reminders' || t.collection === 'events'))
+      );
       return {
         ...prev,
         reminders: [newReminder, ...prev.reminders],
         events: [mirrorEvent, ...(prev.events || [])],
+        tombstones: cleanTombstones,
       };
     });
   };
@@ -756,6 +952,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ...prev,
       reminders: prev.reminders.filter((r) => r.id !== id),
       events: (prev.events || []).filter((e) => e.id !== id),
+      tombstones: cloudSyncService.addTombstone(
+        cloudSyncService.addTombstone(prev.tombstones, id, 'reminders'),
+        id,
+        'events'
+      ),
     }));
   };
 
@@ -764,15 +965,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
    */
   const addEvent = (item: Omit<CalendarEvent, 'id' | 'createdAt'>): string => {
     const id = (item as any).id || `evt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const nowIso = new Date().toISOString();
     const isCompleted = item.isCompleted ?? (item.status === 'done');
     const status = item.status ?? (isCompleted ? 'done' : 'todo');
     const completedAt = item.completedAt !== undefined
       ? item.completedAt
-      : isCompleted ? new Date().toISOString() : undefined;
+      : isCompleted ? nowIso : undefined;
     const newEvent: CalendarEvent = {
       ...item,
       id,
-      createdAt: new Date().toISOString(),
+      createdAt: nowIso,
+      updatedAt: nowIso,
       isSample: false,
       isCompleted,
       status,
@@ -793,10 +996,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         };
         updatedReminders = [mirrorReminder, ...prev.reminders];
       }
+      const cleanTombstones = (prev.tombstones || []).filter(
+        (t) => !(t.id === id && (t.collection === 'events' || t.collection === 'reminders'))
+      );
       return {
         ...prev,
         events: [newEvent, ...(prev.events || [])],
         reminders: updatedReminders,
+        tombstones: cleanTombstones,
       };
     });
     return id;
@@ -807,6 +1014,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
    */
   const updateEvent = (id: string, updates: Partial<CalendarEvent>) => {
     setState((prev) => {
+      const nowIso = new Date().toISOString();
       const updatedEvents = (prev.events || []).map((evt) => {
         if (evt.id !== id) return evt;
         const isDone = updates.status === 'done' || updates.isCompleted === true;
@@ -814,7 +1022,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         let completedAt = updates.completedAt !== undefined ? updates.completedAt : evt.completedAt;
         if (isDone && !completedAt) {
-          completedAt = new Date().toISOString();
+          completedAt = nowIso;
         } else if (isNotDone) {
           completedAt = undefined;
         }
@@ -828,6 +1036,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           status: nextStatus,
           isCompleted: nextIsCompleted,
           completedAt,
+          updatedAt: nowIso,
           isSample: false,
         };
         return updated;
@@ -857,6 +1066,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setState((prev) => {
       const target = (prev.events || []).find((e) => e.id === eventId);
       if (!target || !target.subtasks) return prev;
+      const nowIso = new Date().toISOString();
 
       const updatedSubtasks = target.subtasks.map((st) => {
         if (st.id !== subtaskId) return st;
@@ -864,12 +1074,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return {
           ...st,
           isCompleted: nextCompleted,
-          completedAt: nextCompleted ? new Date().toISOString() : undefined,
+          completedAt: nextCompleted ? nowIso : undefined,
         };
       });
 
       const updatedEvents = (prev.events || []).map((e) =>
-        e.id === eventId ? { ...e, subtasks: updatedSubtasks, isSample: false } : e
+        e.id === eventId ? { ...e, subtasks: updatedSubtasks, updatedAt: nowIso, isSample: false } : e
       );
       return { ...prev, events: updatedEvents };
     });
@@ -883,6 +1093,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ...prev,
       events: (prev.events || []).filter((e) => e.id !== id),
       reminders: prev.reminders.filter((r) => r.id !== id),
+      tombstones: cloudSyncService.addTombstone(
+        cloudSyncService.addTombstone(prev.tombstones, id, 'events'),
+        id,
+        'reminders'
+      ),
     }));
   };
 
@@ -893,13 +1108,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setState((prev) => {
       const target = (prev.events || []).find((e) => e.id === id);
       const nextCompleted = target ? !target.isCompleted : false;
+      const nowIso = new Date().toISOString();
       const updatedEvents = (prev.events || []).map((evt) => {
         if (evt.id !== id) return evt;
         return {
           ...evt,
           isCompleted: nextCompleted,
           status: (nextCompleted ? 'done' : 'todo') as TaskStatus,
-          completedAt: nextCompleted ? new Date().toISOString() : undefined,
+          completedAt: nextCompleted ? nowIso : undefined,
+          updatedAt: nowIso,
         };
       });
       const updatedReminders = prev.reminders.map((r) =>
@@ -1022,6 +1239,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return {
         ...prev,
         syllabusSubjects: currentList.filter((s) => s.id !== id),
+        tombstones: cloudSyncService.addTombstone(prev.tombstones, id, 'syllabusSubjects'),
       };
     });
   };
@@ -1255,12 +1473,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const deleteTimetableSlot = (id: string) => {
-    setState((prev) => ({
-      ...prev,
-      timetable: prev.timetable.filter((s) => s.id !== id),
-      // Also clean up related overrides
-      occurrenceOverrides: (prev.occurrenceOverrides || []).filter((o) => o.slotId !== id),
-    }));
+    setState((prev) => {
+      const removedOverrides = (prev.occurrenceOverrides || []).filter((o) => o.slotId === id);
+      let updatedTombstones = cloudSyncService.addTombstone(prev.tombstones, id, 'timetable');
+      for (const ovr of removedOverrides) {
+        updatedTombstones = cloudSyncService.addTombstone(updatedTombstones, ovr.id, 'occurrenceOverrides');
+      }
+      return {
+        ...prev,
+        timetable: prev.timetable.filter((s) => s.id !== id),
+        // Also clean up related overrides
+        occurrenceOverrides: (prev.occurrenceOverrides || []).filter((o) => o.slotId !== id),
+        tombstones: updatedTombstones,
+      };
+    });
   };
 
   const importTimetableClasses = (
@@ -1405,12 +1631,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const restoreOccurrence = (slotId: string, originalDate: string) => {
-    setState((prev) => ({
-      ...prev,
-      occurrenceOverrides: (prev.occurrenceOverrides || []).filter(
-        (o) => !(o.slotId === slotId && o.originalDate === originalDate)
-      ),
-    }));
+    setState((prev) => {
+      const removedOverrides = (prev.occurrenceOverrides || []).filter(
+        (o) => o.slotId === slotId && o.originalDate === originalDate
+      );
+      let updatedTombstones = prev.tombstones || [];
+      for (const ovr of removedOverrides) {
+        updatedTombstones = cloudSyncService.addTombstone(updatedTombstones, ovr.id, 'occurrenceOverrides');
+      }
+      return {
+        ...prev,
+        occurrenceOverrides: (prev.occurrenceOverrides || []).filter(
+          (o) => !(o.slotId === slotId && o.originalDate === originalDate)
+        ),
+        tombstones: updatedTombstones,
+      };
+    });
   };
 
   // ── Extra Class Actions ──
@@ -1431,6 +1667,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setState((prev) => ({
       ...prev,
       extraClasses: (prev.extraClasses || []).filter((e) => e.id !== id),
+      tombstones: cloudSyncService.addTombstone(prev.tombstones, id, 'extraClasses'),
     }));
   };
 
@@ -1529,17 +1766,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // ─── Milestone 5: Planner Tasks ───────────────────────────────────────────
   const addTask = (task: Omit<PlannerTask, 'id' | 'createdAt'>): string => {
-    const id = 'task-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
-    const createdAt = new Date().toISOString();
+    const id = (task as any).id || ('task-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7));
+    const nowIso = new Date().toISOString();
     const newTask: PlannerTask = {
       ...task,
       id,
-      createdAt,
-      completedAt: task.status === 'done' ? new Date().toISOString() : undefined,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+      completedAt: task.status === 'done' ? nowIso : undefined,
     };
     setState((prev) => ({
       ...prev,
       tasks: [newTask, ...(prev.tasks || [])],
+      tombstones: (prev.tombstones || []).filter((t) => !(t.id === id && t.collection === 'tasks')),
     }));
     return id;
   };
@@ -1549,15 +1788,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const existing = (prev.tasks || []).find((t) => t.id === id);
       if (!existing) return prev;
 
+      const nowIso = new Date().toISOString();
       let completedAt = updates.completedAt !== undefined ? updates.completedAt : existing.completedAt;
       if (updates.status === 'done' && existing.status !== 'done' && !completedAt) {
-        completedAt = new Date().toISOString();
+        completedAt = nowIso;
       } else if (updates.status && updates.status !== 'done') {
         completedAt = undefined;
       }
 
       const updated = (prev.tasks || []).map((t) =>
-        t.id === id ? { ...t, ...updates, completedAt, isSample: false } : t
+        t.id === id ? { ...t, ...updates, completedAt, updatedAt: nowIso, isSample: false } : t
       );
       return { ...prev, tasks: updated };
     });
@@ -1567,6 +1807,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setState((prev) => ({
       ...prev,
       tasks: (prev.tasks || []).filter((t) => t.id !== id),
+      tombstones: cloudSyncService.addTombstone(prev.tombstones, id, 'tasks'),
     }));
   };
 
@@ -1578,6 +1819,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setState((prev) => {
       const task = (prev.tasks || []).find((t) => t.id === taskId);
       if (!task || !task.subtasks) return prev;
+      const nowIso = new Date().toISOString();
 
       const updatedSubtasks = task.subtasks.map((st) => {
         if (st.id !== subtaskId) return st;
@@ -1585,12 +1827,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return {
           ...st,
           isCompleted: nextCompleted,
-          completedAt: nextCompleted ? new Date().toISOString() : undefined,
+          completedAt: nextCompleted ? nowIso : undefined,
         };
       });
 
       const updatedTasks = (prev.tasks || []).map((t) =>
-        t.id === taskId ? { ...t, subtasks: updatedSubtasks, isSample: false } : t
+        t.id === taskId ? { ...t, subtasks: updatedSubtasks, updatedAt: nowIso, isSample: false } : t
       );
       return { ...prev, tasks: updatedTasks };
     });
@@ -1636,6 +1878,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setState((prev) => ({
       ...prev,
       spacedReviews: (prev.spacedReviews || []).filter((r) => r.id !== id),
+      tombstones: cloudSyncService.addTombstone(prev.tombstones, id, 'spacedReviews'),
     }));
   };
 
@@ -1692,6 +1935,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setState((prev) => ({
       ...prev,
       dailyQuestions: (prev.dailyQuestions || []).filter((q) => q.id !== id),
+      tombstones: cloudSyncService.addTombstone(prev.tombstones, id, 'dailyQuestions'),
     }));
   };
 
@@ -1745,6 +1989,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setState((prev) => ({
       ...prev,
       foodDiaryEntries: (prev.foodDiaryEntries || []).filter((e) => e.id !== id),
+      tombstones: cloudSyncService.addTombstone(prev.tombstones, id, 'foodDiaryEntries'),
     }));
   };
 
@@ -1768,6 +2013,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setState((prev) => ({
       ...prev,
       customFoods: (prev.customFoods || []).filter((f) => f.id !== id),
+      tombstones: cloudSyncService.addTombstone(prev.tombstones, id, 'customFoods'),
     }));
   };
 
@@ -1790,6 +2036,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setState((prev) => ({
       ...prev,
       recipes: (prev.recipes || []).filter((r) => r.id !== id),
+      tombstones: cloudSyncService.addTombstone(prev.tombstones, id, 'recipes'),
     }));
   };
 
@@ -1817,6 +2064,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setState((prev) => ({
       ...prev,
       weightLogs: (prev.weightLogs || []).filter((w) => w.id !== id),
+      tombstones: cloudSyncService.addTombstone(prev.tombstones, id, 'weightLogs'),
     }));
   };
 
@@ -1864,6 +2112,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setState((prev) => ({
       ...prev,
       radioUrls: (prev.radioUrls ?? []).filter((r) => r.id !== id),
+      tombstones: cloudSyncService.addTombstone(prev.tombstones, id, 'radioUrls'),
     }));
   };
 
@@ -2123,6 +2372,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setState((prev) => ({
       ...prev,
       customPlaylists: (prev.customPlaylists ?? []).filter((p) => p.id !== playlistId),
+      tombstones: cloudSyncService.addTombstone(prev.tombstones, playlistId, 'customPlaylists'),
     }));
     if (activeRadioSource === 'playlist' && activeCustomPlaylistId === playlistId) {
       setActiveRadioIndex(null);
@@ -2274,6 +2524,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setState((prev) => ({
       ...prev,
       mockTests: (prev.mockTests || []).filter((t) => t.id !== id),
+      tombstones: cloudSyncService.addTombstone(prev.tombstones, id, 'mockTests'),
     }));
   };
 
@@ -2304,6 +2555,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setState((prev) => ({
       ...prev,
       errorLogs: (prev.errorLogs || []).filter((e) => e.id !== id),
+      tombstones: cloudSyncService.addTombstone(prev.tombstones, id, 'errorLogs'),
     }));
   };
 

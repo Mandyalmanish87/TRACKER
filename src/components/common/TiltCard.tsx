@@ -33,7 +33,7 @@ export const TiltCard: React.FC<TiltCardProps> = ({
     const rotateY = ((xPct - 50) / 50) * maxTilt;
 
     setTransform(`perspective(1000px) rotateX(${rotateX.toFixed(2)}deg) rotateY(${rotateY.toFixed(2)}deg) scale3d(${scale}, ${scale}, 1)`);
-    setGlarePos({ x: xPct, y: yPct, opacity: 0.15 });
+    setGlarePos({ x: xPct, y: yPct, opacity: 0.1 });
   }, [maxTilt, scale]);
 
   const handleMouseLeave = useCallback(() => {

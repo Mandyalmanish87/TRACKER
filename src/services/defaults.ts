@@ -128,5 +128,6 @@ export const EMPTY_STATE: AppStateData = {
   mockTests: [],
   errorLogs: [],
   events: [],
+  tombstones: [],
 };
 

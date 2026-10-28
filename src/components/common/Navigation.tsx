@@ -1,11 +1,11 @@
 import React from 'react';
-import { LayoutDashboard, Calendar, GraduationCap, BookOpen, Flame, Dumbbell, Salad, Settings, ListTodo, Award, Building } from 'lucide-react';
+import { LayoutDashboard, Calendar, GraduationCap, BookOpen, Flame, Dumbbell, Salad, Settings, ListTodo, Award, Building, Tv } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useApp } from '../../context/AppContext';
 import { isTaskOverdue } from '../../utils/plannerUtils';
 import { detectRecurringWeaknesses } from '../../utils/testAnalytics';
 
-export type NavTab = 'dashboard' | 'timetable' | 'attendance' | 'syllabus' | 'planner' | 'tests' | 'focus' | 'gym' | 'reminders' | 'nutrition' | 'classspace' | 'settings';
+export type NavTab = 'dashboard' | 'timetable' | 'attendance' | 'syllabus' | 'planner' | 'tests' | 'focus' | 'gym' | 'reminders' | 'nutrition' | 'eduhub' | 'classspace' | 'settings' | 'admin';
 
 interface NavigationProps {
   currentTab: NavTab;
@@ -87,6 +87,11 @@ export const Navigation: React.FC<NavigationProps> = ({ currentTab, onSelectTab 
       badge: pendingRemindersCount > 0 ? pendingRemindersCount : undefined,
       badgeVariant: 'neutral',
     },
+    {
+      id: 'eduhub',
+      label: 'EduHub',
+      icon: <Tv className="w-4 h-4" />,
+    },
     ...(state.settings?.userMode === 'class_based'
       ? [
           {
@@ -113,12 +118,12 @@ export const Navigation: React.FC<NavigationProps> = ({ currentTab, onSelectTab 
               key={tab.id}
               aria-label={tab.id === 'classspace' ? 'Classroom Hub' : tab.label}
               onClick={() => onSelectTab(tab.id)}
-              whileHover={{ scale: 1.02 }}
+              whileHover={{ scale: 1.015 }}
               whileTap={{ scale: 0.98 }}
-              className={`relative flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-medium whitespace-nowrap shrink-0 transition-colors duration-150 ${
+              className={`relative flex items-center gap-1.5 sm:gap-2 px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-xl text-xs sm:text-[13px] font-medium whitespace-nowrap shrink-0 transition-colors duration-150 cursor-pointer select-none ${
                 isActive
-                  ? 'text-white shadow-xs'
-                  : 'text-espresso-600 dark:text-espresso-300 hover:text-espresso-900 dark:hover:text-ivory-100 hover:bg-ivory-200/60 dark:hover:bg-espresso-800/60'
+                  ? 'text-white shadow-xs font-semibold'
+                  : 'text-espresso-600 dark:text-espresso-300 hover:text-espresso-950 dark:hover:text-ivory-50 hover:bg-ivory-200/50 dark:hover:bg-espresso-800/50'
               }`}
               style={isActive ? { backgroundColor: 'var(--accent)' } : undefined}
             >
@@ -132,13 +137,13 @@ export const Navigation: React.FC<NavigationProps> = ({ currentTab, onSelectTab 
               )}
 
               {/* Tab Content */}
-              <span className="relative z-10 flex items-center gap-2">
-                {tab.icon}
+              <span className="relative z-10 flex items-center gap-1.5 sm:gap-2">
+                <span className="shrink-0">{tab.icon}</span>
                 <span>{tab.label}</span>
                 {tab.id === 'reminders' && <span className="sr-only">Reminders</span>}
                 {tab.badge !== undefined && (
                   <span
-                    className={`text-[11px] font-mono tabular-nums px-1.5 py-0.2 rounded-full font-semibold leading-none ${
+                    className={`text-[10px] sm:text-[11px] font-mono tabular-nums px-1.5 py-0.5 rounded-full font-semibold leading-none ${
                       isActive
                         ? 'bg-white/25 text-white'
                         : tab.badgeVariant === 'danger'
