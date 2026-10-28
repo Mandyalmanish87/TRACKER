@@ -40,6 +40,11 @@ describe('YouTube Playlist Import & Extraction', () => {
     // Bare playlist ID with UU prefix
     expect(parseYouTubePlaylistId('UUrAXtmErZgOeiKm4sgNOknGvNjby9efdf')).toBe('UUrAXtmErZgOeiKm4sgNOknGvNjby9efdf');
 
+    // HTML entity-encoded playlist link (e.g. copied from formatted rich text or web interfaces)
+    expect(
+      parseYouTubePlaylistId('https://www.youtube.com/watch?v=dQw4w9WgXcQ&amp;list=PLrAXtmErZgOeiKm4sgNOknGvNjby9efdf')
+    ).toBe('PLrAXtmErZgOeiKm4sgNOknGvNjby9efdf');
+
     // Invalid URLs or non-playlist links
     expect(parseYouTubePlaylistId('https://www.youtube.com/watch?v=dQw4w9WgXcQ')).toBe(null);
     expect(parseYouTubePlaylistId('invalid-string')).toBe(null);
@@ -224,6 +229,14 @@ describe('YouTube Service Error Handling & Diagnostics', () => {
     expect(res.success).toBe(false);
     expect(res.errorCode).toBe('INVALID_URL');
     expect(res.error).toContain('Invalid YouTube playlist URL');
+  });
+
+  it('identifies single YouTube video links and provides explicit guidance', async () => {
+    const res = await fetchYouTubePlaylistPreview('https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+    expect(res.success).toBe(false);
+    expect(res.errorCode).toBe('INVALID_URL');
+    expect(res.error).toContain('The link you pasted is for a single YouTube video, not a course playlist');
+    expect(res.error).toContain('click "Add Lecture"');
   });
 
   it('returns informative error response for invalid/offline playlist queries', async () => {

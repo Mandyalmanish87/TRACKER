@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { SyllabusImportPayload } from '../../types';
+import { preprocessAndParseSyllabusJson } from '../../utils/syllabusJsonSanitizer';
 
 interface GptSyllabusImportModalProps {
   isOpen: boolean;
@@ -95,14 +96,9 @@ export const GptSyllabusImportModal: React.FC<GptSyllabusImportModalProps> = ({
       return;
     }
 
-    let cleanJson = trimmed;
-    if (cleanJson.startsWith('```')) {
-      cleanJson = cleanJson.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '');
-    }
-
     let payload: any;
     try {
-      payload = JSON.parse(cleanJson);
+      payload = preprocessAndParseSyllabusJson(trimmed);
     } catch (err: any) {
       setValidationError(`Invalid JSON syntax: ${err.message}. Please check your pasted text.`);
       return;

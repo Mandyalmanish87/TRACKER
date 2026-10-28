@@ -1,6 +1,6 @@
 import { getSupabaseClient, isSupabaseConfigured } from './authService';
 import { ImportPlaylistResponse, YouTubePlaylistPreview } from '../types/eduhub';
-import { parseYouTubePlaylistId } from '../components/focus-radio/youtubeUtils';
+import { parseYouTubePlaylistId, parseYouTubeVideoId } from '../components/focus-radio/youtubeUtils';
 
 /**
  * Parses ISO 8601 duration strings into total seconds.
@@ -32,6 +32,16 @@ export async function fetchYouTubePlaylistPreview(
   const playlistId = parseYouTubePlaylistId(playlistUrlOrId);
 
   if (!playlistId) {
+    const videoId = parseYouTubeVideoId(playlistUrlOrId);
+    if (videoId) {
+      return {
+        success: false,
+        errorCode: 'INVALID_URL',
+        error:
+          'The link you pasted is for a single YouTube video, not a course playlist. To import a single video, click "Add Lecture" on your course. For a full playlist, paste a link containing "list=" (e.g. https://www.youtube.com/playlist?list=PL...).',
+      };
+    }
+
     return {
       success: false,
       errorCode: 'INVALID_URL',

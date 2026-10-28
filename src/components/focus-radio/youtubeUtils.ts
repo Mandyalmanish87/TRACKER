@@ -45,28 +45,33 @@ export function parseYouTubeVideoId(input: string): string | null {
  */
 export function parseYouTubePlaylistId(input: string): string | null {
   if (!input) return null;
-  const trimmed = input.trim();
+  // Decode HTML entities (e.g. &amp;list= -> &list=, &#x20; -> space) and trim
+  const decoded = input
+    .replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#x20;/gi, ' ')
+    .trim();
 
-  // Match URL parameter list=...
-  const match = trimmed.match(/[?&]list=([a-zA-Z0-9_-]+)/i);
+  // Match URL parameter list=... (supports ?list=, &list=, or &amp;list=)
+  const match = decoded.match(/(?:[?&]|&amp;)list=([a-zA-Z0-9_-]+)/i);
   if (match && match[1]) {
     return match[1];
   }
 
   // If user pasted a bare playlist ID (e.g. PL..., UU..., FL..., RD..., OLAK5uy_...)
-  if (/^[a-zA-Z0-9_-]{12,64}$/.test(trimmed) && (
-    trimmed.startsWith('PL') ||
-    trimmed.startsWith('UU') ||
-    trimmed.startsWith('FL') ||
-    trimmed.startsWith('RD') ||
-    trimmed.startsWith('OL')
+  if (/^[a-zA-Z0-9_-]{12,64}$/.test(decoded) && (
+    decoded.startsWith('PL') ||
+    decoded.startsWith('UU') ||
+    decoded.startsWith('FL') ||
+    decoded.startsWith('RD') ||
+    decoded.startsWith('OL')
   )) {
-    return trimmed;
+    return decoded;
   }
 
   // Fallback for bare playlist ID without standard prefix if between 16 and 50 characters
-  if (/^[a-zA-Z0-9_-]{16,50}$/.test(trimmed) && !trimmed.includes('/')) {
-    return trimmed;
+  if (/^[a-zA-Z0-9_-]{16,50}$/.test(decoded) && !decoded.includes('/')) {
+    return decoded;
   }
 
   return null;
