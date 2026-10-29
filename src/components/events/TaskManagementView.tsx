@@ -235,6 +235,26 @@ export const TaskManagementView: React.FC = () => {
         </div>
       </div>
 
+      {/* Empty State Banner when no events exist */}
+      {(state.events || []).length === 0 && (
+        <div className="py-8 px-4 text-center border border-dashed border-ivory-300 dark:border-espresso-750 rounded-2xl bg-white/40 dark:bg-espresso-850/40">
+          <CalendarIcon className="w-8 h-8 text-espresso-400 mx-auto mb-2" />
+          <h3 className="font-serif text-base font-semibold text-espresso-900 dark:text-ivory-100">
+            No events or tasks yet. Create your first task.
+          </h3>
+          <p className="text-xs text-espresso-500 dark:text-espresso-400 max-w-sm mx-auto mt-1 mb-3">
+            Plan exams, assignment deadlines, academic milestones, and daily to-dos.
+          </p>
+          <button
+            onClick={handleCreate}
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-white text-xs font-semibold shadow-subtle"
+            style={{ backgroundColor: 'var(--accent)' }}
+          >
+            <Plus className="w-3.5 h-3.5" /> New Task
+          </button>
+        </div>
+      )}
+
       {/* RENDER LAYOUT */}
       {layoutMode === 'board' ? (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
@@ -290,8 +310,21 @@ export const TaskManagementView: React.FC = () => {
         /* LIST VIEW */
         <div className="bg-white dark:bg-espresso-850 rounded-2xl border border-ivory-300 dark:border-espresso-750 shadow-xs divide-y divide-ivory-200 dark:divide-espresso-800 overflow-hidden">
           {filteredEvents.length === 0 ? (
-            <div className="p-8 text-center text-espresso-400 dark:text-espresso-500 text-sm">
-              No tasks or events found matching your criteria.
+            <div className="py-12 px-6 text-center">
+              <CalendarIcon className="w-8 h-8 text-espresso-400 mx-auto mb-2" />
+              <h4 className="font-serif text-base font-medium text-espresso-900 dark:text-ivory-100 mb-1">
+                No events or tasks yet. Create your first task.
+              </h4>
+              <p className="text-xs text-espresso-500 dark:text-espresso-400 max-w-sm mx-auto mb-4">
+                Plan exams, assignment deadlines, academic milestones, and daily to-dos.
+              </p>
+              <button
+                onClick={handleCreate}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-white text-xs font-semibold shadow-subtle"
+                style={{ backgroundColor: 'var(--accent)' }}
+              >
+                <Plus className="w-4 h-4" /> New Task
+              </button>
             </div>
           ) : (
             filteredEvents.map((evt) => {

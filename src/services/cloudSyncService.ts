@@ -1,5 +1,5 @@
 import { getSupabaseClient, isSupabaseConfigured } from './authService';
-import { AppStateData, NutritionProfile, SyncTombstone } from '../types';
+import { AppStateData, NutritionProfile, SyncTombstone, EduHubCourse, EduHubLecture } from '../types';
 import {
   DEFAULT_NUTRITION_PROFILE,
   DEFAULT_DAILY_QUESTION_TARGET,
@@ -335,6 +335,112 @@ export const cloudSyncService = {
       return cloudTime >= localTime ? cloudProf : localProf;
     };
 
+    const mergeEduHubCourses = (
+      localCourses: EduHubCourse[] = [],
+      cloudCourses: EduHubCourse[] = []
+    ): EduHubCourse[] => {
+      const courseMap = new Map<string, EduHubCourse>();
+
+      // Filter out sample courses if any real user course exists
+      const localReal = (Array.isArray(localCourses) ? localCourses : []).filter((c) => !c?.isSample);
+      const cloudReal = (Array.isArray(cloudCourses) ? cloudCourses : []).filter((c) => !c?.isSample);
+
+      const lList = (localReal.length > 0 || cloudReal.length > 0)
+        ? localReal
+        : (Array.isArray(localCourses) ? localCourses : []);
+      const cList = (localReal.length > 0 || cloudReal.length > 0)
+        ? cloudReal
+        : (Array.isArray(cloudCourses) ? cloudCourses : []);
+
+      for (const course of lList) {
+        if (course && course.id) {
+          courseMap.set(course.id, course);
+        }
+      }
+
+      for (const cloudCourse of cList) {
+        if (!cloudCourse || !cloudCourse.id) continue;
+        const localCourse = courseMap.get(cloudCourse.id);
+        if (!localCourse) {
+          courseMap.set(cloudCourse.id, cloudCourse);
+        } else {
+          // If one is sample and other is real, real always wins
+          if (localCourse.isSample && !cloudCourse.isSample) {
+            courseMap.set(cloudCourse.id, cloudCourse);
+            continue;
+          }
+          if (!localCourse.isSample && cloudCourse.isSample) {
+            continue;
+          }
+
+          const localTime = new Date(localCourse.updatedAt || localCourse.createdAt || 0).getTime();
+          const cloudTime = new Date(cloudCourse.updatedAt || cloudCourse.createdAt || 0).getTime();
+
+          const newerCourse = cloudTime >= localTime ? cloudCourse : localCourse;
+          const olderCourse = cloudTime >= localTime ? localCourse : cloudCourse;
+
+          // Merge lectures between the two versions of the course
+          const lectureMap = new Map<string, EduHubLecture>();
+          for (const l of (olderCourse.lectures || [])) {
+            if (l && l.id) lectureMap.set(l.id, l);
+          }
+          for (const l of (newerCourse.lectures || [])) {
+            if (!l || !l.id) continue;
+            const existing = lectureMap.get(l.id);
+            if (!existing) {
+              lectureMap.set(l.id, l);
+            } else {
+              // Intelligently merge lecture state:
+              // 1. Completion: if either is completed, keep completed unless explicitly uncompleted later
+              const isCompleted = l.completed || existing.completed;
+              const completedAt = (l.completed && l.completedAt) || (existing.completed && existing.completedAt) || (isCompleted ? (l.completedAt || existing.completedAt || new Date().toISOString()) : undefined);
+              // 2. Playback position: student never loses watch progress
+              const lastPositionSeconds = Math.max(l.lastPositionSeconds || 0, existing.lastPositionSeconds || 0);
+              const durationSeconds = Math.max(l.durationSeconds || 0, existing.durationSeconds || 0);
+              // 3. Notes: preserve notes from whichever side has them; if both have notes, prefer newer
+              const notes = (l.notes && l.notes.trim()) ? l.notes : existing.notes;
+
+              lectureMap.set(l.id, {
+                ...existing,
+                ...l,
+                completed: isCompleted,
+                completedAt,
+                lastPositionSeconds,
+                durationSeconds,
+                notes,
+              });
+            }
+          }
+
+          const mergedCourse: EduHubCourse = {
+            ...newerCourse,
+            lectures: Array.from(lectureMap.values()),
+            updatedAt: new Date(Math.max(isNaN(localTime) ? 0 : localTime, isNaN(cloudTime) ? 0 : cloudTime, Date.now())).toISOString(),
+          };
+          courseMap.set(cloudCourse.id, mergedCourse);
+        }
+      }
+
+      // Filter via tombstones for 'eduhubCourses'
+      const result: EduHubCourse[] = [];
+      for (const course of courseMap.values()) {
+        const key = `eduhubCourses:${course.id}`;
+        const deletedAt = tombstoneMap.get(key);
+        if (deletedAt) {
+          const courseTime = new Date(course.updatedAt || course.createdAt || 0).getTime();
+          const delTime = new Date(deletedAt).getTime();
+          if (!isNaN(courseTime) && !isNaN(delTime) && courseTime > delTime) {
+            result.push(course);
+            supersededTombstoneKeys.add(key);
+          }
+        } else {
+          result.push(course);
+        }
+      }
+
+      return result;
+    };
+
     return {
       schemaVersion: 2,
       hasSampleData: false, // Once merged with user account, sample data flag is turned off
@@ -395,6 +501,7 @@ export const cloudSyncService = {
       mockTests: mergeById(local.mockTests, cloud.mockTests, 'mockTests'),
       errorLogs: mergeById(local.errorLogs, cloud.errorLogs, 'errorLogs'),
       events: mergeById(local.events, cloud.events, 'events'),
+      eduhubCourses: mergeEduHubCourses(local.eduhubCourses, cloud.eduhubCourses),
       tombstones: mergedTombstones.filter((t) => !supersededTombstoneKeys.has(`${t.collection}:${t.id}`)),
     };
   },

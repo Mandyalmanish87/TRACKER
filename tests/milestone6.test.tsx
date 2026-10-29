@@ -15,10 +15,103 @@ import {
 import { MockTest, ErrorLogEntry } from '../src/types';
 import { storageService } from '../src/services/storage';
 
+const TEST_MOCK_TESTS: MockTest[] = [
+  {
+    id: 'm6-test-1',
+    title: 'Mid-Semester Practice Test 1',
+    category: 'Mid-Semester Exam',
+    date: '2026-10-05',
+    totalScore: 78,
+    maxMarks: 100,
+    questionsAttempted: 45,
+    questionsCorrect: 39,
+    notes: 'Good pacing, made two calculation slips in section B.',
+    createdAt: '2026-10-05T10:00:00.000Z',
+    isSample: false,
+  },
+  {
+    id: 'm6-test-2',
+    title: 'Full Length Mock 1',
+    category: 'Full Length Mock',
+    date: '2026-10-10',
+    totalScore: 215,
+    maxMarks: 300,
+    questionsAttempted: 65,
+    questionsCorrect: 54,
+    notes: 'Attempted more questions; time management in Algorithms was solid.',
+    createdAt: '2026-10-10T14:00:00.000Z',
+    isSample: false,
+  },
+  {
+    id: 'm6-test-3',
+    title: 'Full Length Mock 2',
+    category: 'Full Length Mock',
+    date: '2026-10-15',
+    totalScore: 232,
+    maxMarks: 300,
+    questionsAttempted: 70,
+    questionsCorrect: 61,
+    notes: 'Improved accuracy in Discrete Math.',
+    createdAt: '2026-10-15T15:30:00.000Z',
+    isSample: false,
+  },
+];
+
+const TEST_ERROR_LOGS: ErrorLogEntry[] = [
+  {
+    id: 'm6-err-1',
+    title: 'Off-by-one in binary search index bounds',
+    subjectId: 'sub-1',
+    syllabusChapterId: 'chap-algo-1',
+    mockTestId: 'm6-test-1',
+    errorType: 'conceptual',
+    description: 'Used low < high instead of low <= high leading to early loop termination on target element.',
+    correctApproach: 'Maintain inclusive invariant [low, high] and update high = mid - 1.',
+    reviewedCount: 2,
+    lastReviewedAt: '2026-10-12T10:00:00Z',
+    resolved: false,
+    createdAt: '2026-10-05T14:30:00Z',
+    isSample: false,
+  },
+  {
+    id: 'm6-err-2',
+    title: 'Sign error in recurrence relation calculation',
+    subjectId: 'sub-1',
+    syllabusChapterId: 'chap-algo-1',
+    mockTestId: 'm6-test-2',
+    errorType: 'calculation',
+    description: 'Subtracted 2T(n/2) instead of adding when expanding the master theorem tree.',
+    correctApproach: 'Always write down tree layer cost explicitly before summing.',
+    reviewedCount: 1,
+    lastReviewedAt: '2026-10-14T09:00:00Z',
+    resolved: false,
+    createdAt: '2026-10-10T16:00:00Z',
+    isSample: false,
+  },
+  {
+    id: 'm6-err-3',
+    title: 'Forgot graph cycle constraint in topological sort',
+    subjectId: 'sub-1',
+    syllabusChapterId: 'chap-algo-1',
+    mockTestId: 'm6-test-3',
+    errorType: 'formula',
+    description: 'Did not check in-degrees counter for cycle detection in Kahns algorithm.',
+    correctApproach: 'If processed node count != V, graph contains a directed cycle.',
+    reviewedCount: 0,
+    lastReviewedAt: '2026-10-15T16:00:00Z',
+    resolved: false,
+    createdAt: '2026-10-15T16:00:00Z',
+    isSample: false,
+  },
+];
+
 describe('Milestone 6: Mock-Test Analytics & Systematic Error Log', () => {
   beforeEach(() => {
     localStorage.clear();
-    storageService.populateSampleData();
+    const data = storageService.populateSampleData();
+    data.mockTests = JSON.parse(JSON.stringify(TEST_MOCK_TESTS));
+    data.errorLogs = JSON.parse(JSON.stringify(TEST_ERROR_LOGS));
+    storageService.saveData(data);
   });
 
   describe('1. Mathematical Calculations & Analytics Safety', () => {

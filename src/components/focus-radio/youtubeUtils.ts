@@ -1,3 +1,5 @@
+import { YouTubePlaylistItemPreview } from '../../types/eduhub';
+
 export interface RadioTrack {
   id: string; // unique UUID in queue
   videoId: string;
@@ -12,6 +14,23 @@ export interface SavedPlaylist {
   name: string;
   createdAt: string;
   tracks: RadioTrack[];
+}
+
+/**
+ * Adapts an EduHub YouTube playlist item preview into a Focus Radio track.
+ */
+export function playlistItemToRadioTrack(
+  item: YouTubePlaylistItemPreview,
+  author?: string
+): RadioTrack {
+  return {
+    id: `track-${Date.now()}-${item.videoId}-${Math.random().toString(36).substring(2, 6)}`,
+    videoId: item.videoId,
+    title: item.title || `Track (${item.videoId})`,
+    author: author || undefined,
+    thumbnailUrl: item.thumbnailUrl || `https://img.youtube.com/vi/${item.videoId}/hqdefault.jpg`,
+    duration: item.durationSeconds,
+  };
 }
 
 /**

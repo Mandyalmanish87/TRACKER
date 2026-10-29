@@ -102,7 +102,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   );
 
   const todayWorkout = state.gymWorkouts.find(
-    (w) => w.date === todayStr || (w.isSample && state.gymWorkouts.length > 0)
+    (w) => w.date === todayStr && !w.isSample
   );
 
   const pendingReminders = state.reminders.filter((r) => !r.isCompleted).length;

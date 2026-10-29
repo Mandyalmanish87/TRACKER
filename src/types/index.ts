@@ -1,3 +1,13 @@
+// ----- Milestone: EduHub Video & Playlist Types -----
+export type {
+  EduHubCourse,
+  EduHubLecture,
+  YouTubePlaylistPreview,
+  YouTubePlaylistItemPreview,
+  ImportPlaylistResponse,
+} from './eduhub';
+import type { EduHubCourse } from './eduhub';
+
 export type ThemeMode = 'light' | 'dark' | 'system';
 
 export type DayOfWeek = 1 | 2 | 3 | 4 | 5 | 6 | 7; // 1 = Monday, 7 = Sunday
@@ -198,6 +208,7 @@ export interface SyllabusSubject {
   color?: string;
   code?: string;
   chapters: SyllabusChapter[];
+  isSample?: boolean;
 }
 
 // ----- Timetable Import types (GPT copy/paste integration) -----
@@ -350,6 +361,8 @@ export interface AppStateData {
   errorLogs?: ErrorLogEntry[];
   // Events & Tasks Calendar Module
   events?: CalendarEvent[];
+  // Milestone: EduHub Courses & Playlists
+  eduhubCourses?: EduHubCourse[];
   // Milestone 2: Cross-Device Deletion Tombstones
   tombstones?: SyncTombstone[];
 }

@@ -67,8 +67,11 @@ export const ClassSpaceView: React.FC<ClassSpaceViewProps> = ({ onNavigateToSett
           <div className="w-16 h-16 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mx-auto shadow-inner border border-primary/20">
             <Building className="w-8 h-8" />
           </div>
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold">
+            <span>Welcome to ClassSpace</span>
+          </div>
           <h1 className="text-3xl font-extrabold text-foreground tracking-tight sm:text-4xl">
-            Welcome to <span className="text-primary">ClassSpace</span>
+            No classes yet. Create or join a ClassSpace.
           </h1>
           <p className="text-base text-muted-foreground leading-relaxed">
             A collaborative workspace for your class batch. Synchronize authoritative timetables, receive instant reschedule alerts, discuss coursework, and track your personal attendance with ease.
@@ -77,17 +80,19 @@ export const ClassSpaceView: React.FC<ClassSpaceViewProps> = ({ onNavigateToSett
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
             <button
               onClick={() => setShowCreateModal(true)}
+              aria-label="Create ClassSpace (Create Class)"
               className="w-full sm:w-auto px-6 py-3 rounded-xl bg-primary text-primary-foreground font-semibold shadow-lg hover:bg-primary/90 transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
               <Plus className="w-5 h-5" />
-              <span>Create ClassSpace (for CRs)</span>
+              <span>Create Class</span>
             </button>
             <button
               onClick={() => setShowJoinModal(true)}
+              aria-label="Join with Code (Join Class)"
               className="w-full sm:w-auto px-6 py-3 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground font-semibold border border-border transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
               <LogIn className="w-5 h-5" />
-              <span>Join with Code</span>
+              <span>Join Class</span>
             </button>
           </div>
         </div>

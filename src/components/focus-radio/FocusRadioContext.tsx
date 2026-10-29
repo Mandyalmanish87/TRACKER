@@ -38,6 +38,7 @@ interface FocusRadioContextType {
   playTrackAtIndex: (index: number) => void;
   clearQueue: () => void;
   saveCurrentPlaylist: (name: string) => void;
+  savePlaylistDirectly: (name: string, tracks: RadioTrack[]) => void;
   loadSavedPlaylist: (playlistId: string) => void;
   deleteSavedPlaylist: (playlistId: string) => void;
   renameSavedPlaylist: (playlistId: string, newName: string) => void;
@@ -129,6 +130,8 @@ export const FocusRadioProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const isApiReadyRef = useRef<boolean>(false);
   const consecutiveErrorsRef = useRef<number>(0);
   const skipTimeoutRef = useRef<any>(null);
+  // Guard to ensure audio does NOT automatically start on full page reload
+  const userInitiatedPlayRef = useRef<boolean>(false);
 
   const currentTrack: RadioTrack | null = queue[currentIndex] || null;
 
@@ -210,23 +213,48 @@ export const FocusRadioProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             try {
               const dur = event.target.getDuration();
               if (dur > 0) setDuration(dur);
-              if (savedPlaybackPosition > 3) {
-                event.target.seekTo(savedPlaybackPosition, true);
+              if (currentTrack?.videoId) {
+                const startSeconds =
+                  savedPlaybackPosition > 3 ? Math.floor(savedPlaybackPosition) : 0;
+                // Always cue the track paused on initial load, restoring saved position without autoplay
+                if (typeof event.target.cueVideoById === 'function') {
+                  try {
+                    event.target.cueVideoById({
+                      videoId: currentTrack.videoId,
+                      startSeconds,
+                    });
+                  } catch {
+                    event.target.cueVideoById(currentTrack.videoId, startSeconds);
+                  }
+                }
               }
+              setIsPlaying(false);
             } catch {}
           },
           onStateChange: (event: any) => {
             // 1 = playing, 2 = paused, 3 = buffering, 0 = ended
-            if (event.data === 1) {
+            if (event?.data === 1) {
+              // Guard: If playback was not user-initiated (e.g. browser or YouTube seek autoplaying on reload)
+              if (!userInitiatedPlayRef.current) {
+                const target = event?.target || playerRef.current;
+                if (target && typeof target.pauseVideo === 'function') {
+                  try {
+                    target.pauseVideo();
+                  } catch {}
+                }
+                setIsPlaying(false);
+                return;
+              }
+
               setIsPlaying(true);
               setIsBuffering(false);
               consecutiveErrorsRef.current = 0;
-            } else if (event.data === 2) {
+            } else if (event?.data === 2) {
               setIsPlaying(false);
               setIsBuffering(false);
-            } else if (event.data === 3) {
+            } else if (event?.data === 3) {
               setIsBuffering(true);
-            } else if (event.data === 0) {
+            } else if (event?.data === 0) {
               handleTrackEnded();
             }
           },
@@ -331,6 +359,7 @@ export const FocusRadioProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   }, [repeatMode, shuffle, queue.length, currentIndex]);
 
   const play = useCallback(() => {
+    userInitiatedPlayRef.current = true;
     if (playerRef.current?.playVideo) {
       playerRef.current.playVideo();
       setIsPlaying(true);
@@ -338,6 +367,7 @@ export const FocusRadioProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   }, []);
 
   const pause = useCallback(() => {
+    userInitiatedPlayRef.current = false;
     if (playerRef.current?.pauseVideo) {
       playerRef.current.pauseVideo();
       setIsPlaying(false);
@@ -387,6 +417,7 @@ export const FocusRadioProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   }, [duration]);
 
   const resumeFromSavedPosition = useCallback(() => {
+    userInitiatedPlayRef.current = true;
     if (playerRef.current) {
       try {
         if (savedPlaybackPosition > 0 && typeof playerRef.current.seekTo === 'function') {
@@ -471,6 +502,7 @@ export const FocusRadioProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const playTrackAtIndex = useCallback((index: number) => {
     if (index >= 0 && index < queue.length) {
+      userInitiatedPlayRef.current = true;
       setCurrentIndex(index);
       setIsPlaying(true);
       setTimeout(() => {
@@ -497,9 +529,21 @@ export const FocusRadioProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     setSavedPlaylists((prev) => [newPlaylist, ...prev]);
   }, [queue]);
 
+  const savePlaylistDirectly = useCallback((name: string, tracks: RadioTrack[]) => {
+    if (!name.trim() || tracks.length === 0) return;
+    const newPlaylist: SavedPlaylist = {
+      id: `playlist-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      name: name.trim(),
+      createdAt: new Date().toISOString(),
+      tracks: [...tracks],
+    };
+    setSavedPlaylists((prev) => [newPlaylist, ...prev]);
+  }, []);
+
   const loadSavedPlaylist = useCallback((playlistId: string) => {
     const found = savedPlaylists.find((p) => p.id === playlistId);
     if (found && found.tracks.length > 0) {
+      userInitiatedPlayRef.current = true;
       setQueue([...found.tracks]);
       setCurrentIndex(0);
       setIsPlaying(true);
@@ -600,6 +644,7 @@ export const FocusRadioProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         playTrackAtIndex,
         clearQueue,
         saveCurrentPlaylist,
+        savePlaylistDirectly,
         loadSavedPlaylist,
         deleteSavedPlaylist,
         renameSavedPlaylist,
@@ -663,6 +708,7 @@ const FALLBACK_FOCUS_RADIO_CONTEXT: FocusRadioContextType = {
   playTrackAtIndex: () => {},
   clearQueue: () => {},
   saveCurrentPlaylist: () => {},
+  savePlaylistDirectly: () => {},
   loadSavedPlaylist: () => {},
   deleteSavedPlaylist: () => {},
   renameSavedPlaylist: () => {},

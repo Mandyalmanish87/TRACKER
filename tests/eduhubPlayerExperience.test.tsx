@@ -24,6 +24,7 @@ describe('EduHubPlayer & Custom Fallback Experience', () => {
     mockPlayerInstance = {
       destroy: vi.fn(),
       seekTo: vi.fn(),
+      loadVideoById: vi.fn(),
       getDuration: vi.fn(() => 1800),
       getCurrentTime: vi.fn(() => 120),
     };
@@ -155,5 +156,161 @@ describe('EduHubPlayer & Custom Fallback Experience', () => {
     // Error info is cleared and player re-instantiated
     expect(screen.queryByText('Video Embedding Restricted by Creator')).not.toBeInTheDocument();
     expect((window as any).YT.Player).toHaveBeenCalledTimes(2);
+  });
+
+  it('smoothly switches videos in a playlist using loadVideoById without destroying player or turning black', () => {
+    const onUpdateProgress = vi.fn();
+    const lecture1: EduHubLecture = {
+      ...sampleLecture,
+      id: 'lec-1',
+      videoId: 'video-111',
+      title: 'Lecture 1: Introduction',
+      lastPositionSeconds: 15,
+      durationSeconds: 1200,
+    };
+
+    const lecture2: EduHubLecture = {
+      ...sampleLecture,
+      id: 'lec-2',
+      videoId: 'video-222',
+      title: 'Lecture 2: Advanced Topics',
+      lastPositionSeconds: 45,
+      durationSeconds: 2400,
+    };
+
+    const { rerender } = render(
+      <EduHubPlayer
+        lecture={lecture1}
+        onUpdateProgress={onUpdateProgress}
+        onMarkComplete={vi.fn()}
+      />
+    );
+
+    expect((window as any).YT.Player).toHaveBeenCalledTimes(1);
+    expect(mockPlayerInstance.destroy).not.toHaveBeenCalled();
+
+    // Mark player as ready via onReady event
+    act(() => {
+      if (mockPlayerEvents.onReady) {
+        mockPlayerEvents.onReady({
+          target: mockPlayerInstance,
+        });
+      }
+    });
+
+    // Switch to Lecture 2 in playlist
+    rerender(
+      <EduHubPlayer
+        lecture={lecture2}
+        onUpdateProgress={onUpdateProgress}
+        onMarkComplete={vi.fn()}
+      />
+    );
+
+    // Verify player is REUSED instead of destroyed & recreated:
+    // 1. loadVideoById was called with new videoId and startSeconds
+    expect(mockPlayerInstance.loadVideoById).toHaveBeenCalledWith(
+      expect.objectContaining({
+        videoId: 'video-222',
+        startSeconds: 45,
+      })
+    );
+    // 2. YT.Player was NOT instantiated again
+    expect((window as any).YT.Player).toHaveBeenCalledTimes(1);
+    // 3. destroy was NOT called
+    expect(mockPlayerInstance.destroy).not.toHaveBeenCalled();
+    // 4. Container element is still in the DOM and not blank
+    const container = document.getElementById('eduhub-youtube-player-frame');
+    expect(container).not.toBeNull();
+    expect(container).not.toHaveClass('hidden');
+  });
+
+  it('switches across multiple consecutive playlist videos while maintaining player state', () => {
+    const lecture1: EduHubLecture = { ...sampleLecture, id: 'lec-1', videoId: 'vid-1' };
+    const lecture2: EduHubLecture = { ...sampleLecture, id: 'lec-2', videoId: 'vid-2' };
+    const lecture3: EduHubLecture = { ...sampleLecture, id: 'lec-3', videoId: 'vid-3', lastPositionSeconds: 0 };
+
+    const { rerender } = render(
+      <EduHubPlayer lecture={lecture1} onUpdateProgress={vi.fn()} />
+    );
+
+    act(() => {
+      if (mockPlayerEvents.onReady) {
+        mockPlayerEvents.onReady({ target: mockPlayerInstance });
+      }
+    });
+
+    // Switch to video 2
+    rerender(<EduHubPlayer lecture={lecture2} onUpdateProgress={vi.fn()} />);
+    expect(mockPlayerInstance.loadVideoById).toHaveBeenLastCalledWith(
+      expect.objectContaining({ videoId: 'vid-2' })
+    );
+
+    // Switch to video 3
+    rerender(<EduHubPlayer lecture={lecture3} onUpdateProgress={vi.fn()} />);
+    expect(mockPlayerInstance.loadVideoById).toHaveBeenLastCalledWith(
+      expect.objectContaining({ videoId: 'vid-3', startSeconds: 0 })
+    );
+
+    // Single player instance across 3 video switches
+    expect((window as any).YT.Player).toHaveBeenCalledTimes(1);
+    expect(mockPlayerInstance.destroy).not.toHaveBeenCalled();
+  });
+
+  it('switching away from a restricted video recovers player and loads new video', () => {
+    const restrictedLecture: EduHubLecture = { ...sampleLecture, id: 'lec-restricted', videoId: 'vid-restricted' };
+    const regularLecture: EduHubLecture = { ...sampleLecture, id: 'lec-regular', videoId: 'vid-regular' };
+
+    const { rerender } = render(
+      <EduHubPlayer lecture={restrictedLecture} onUpdateProgress={vi.fn()} />
+    );
+
+    act(() => {
+      if (mockPlayerEvents.onReady) {
+        mockPlayerEvents.onReady({ target: mockPlayerInstance });
+      }
+    });
+
+    // Video reports restricted error (150)
+    act(() => {
+      if (mockPlayerEvents.onError) {
+        mockPlayerEvents.onError({ data: 150 });
+      }
+    });
+
+    expect(screen.getByText('Playback Restricted by Creator')).toBeInTheDocument();
+
+    // User selects the next video in playlist
+    rerender(<EduHubPlayer lecture={regularLecture} onUpdateProgress={vi.fn()} />);
+
+    // Fallback UI is cleared immediately
+    expect(screen.queryByText('Playback Restricted by Creator')).not.toBeInTheDocument();
+
+    // New video is loaded into player
+    expect(mockPlayerInstance.loadVideoById).toHaveBeenCalledWith(
+      expect.objectContaining({ videoId: 'vid-regular' })
+    );
+  });
+
+  it('updating completion state of active lecture does not reload or restart the player', () => {
+    const lectureActive: EduHubLecture = { ...sampleLecture, id: 'lec-1', videoId: 'vid-1', completed: false };
+    const lectureCompleted: EduHubLecture = { ...lectureActive, completed: true };
+
+    const { rerender } = render(
+      <EduHubPlayer lecture={lectureActive} onUpdateProgress={vi.fn()} />
+    );
+
+    act(() => {
+      if (mockPlayerEvents.onReady) {
+        mockPlayerEvents.onReady({ target: mockPlayerInstance });
+      }
+    });
+
+    // Rerender with completed: true for the same lecture
+    rerender(<EduHubPlayer lecture={lectureCompleted} onUpdateProgress={vi.fn()} />);
+
+    // loadVideoById should NOT have been called because it's the same lecture
+    expect(mockPlayerInstance.loadVideoById).not.toHaveBeenCalled();
+    expect((window as any).YT.Player).toHaveBeenCalledTimes(1);
   });
 });

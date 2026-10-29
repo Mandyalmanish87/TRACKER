@@ -52,6 +52,18 @@ export const EduHubView: React.FC = () => {
     return courses.find((c) => c.id === selectedCourseId) || courses[0] || null;
   }, [courses, selectedCourseId]);
 
+  // Listen for storage / cloud sync updates
+  useEffect(() => {
+    const handleUpdate = (e: any) => {
+      const freshCourses = e?.detail || loadEduHubCourses();
+      setCourses(freshCourses);
+    };
+    window.addEventListener('tracker_eduhub_updated', handleUpdate as EventListener);
+    return () => {
+      window.removeEventListener('tracker_eduhub_updated', handleUpdate as EventListener);
+    };
+  }, []);
+
   // Default lecture selection
   useEffect(() => {
     if (currentCourse && currentCourse.lectures.length > 0) {
@@ -430,16 +442,28 @@ export const EduHubView: React.FC = () => {
       ) : (
         <div className="p-12 text-center rounded-2xl border border-dashed border-ivory-300 dark:border-espresso-750 bg-ivory-50/50 dark:bg-espresso-850/50 space-y-3">
           <GraduationCap className="w-12 h-12 mx-auto text-terracotta-500 opacity-60" />
-          <h3 className="font-serif text-xl font-bold">No Courses Available</h3>
-          <p className="text-xs text-espresso-400 max-w-sm mx-auto">
-            Create your first EduHub course to organize YouTube lectures and calculate your study workload.
+          <h3 className="font-serif text-xl font-bold text-espresso-950 dark:text-ivory-50">
+            No courses yet. Import or create your first course.
+          </h3>
+          <p className="text-xs text-espresso-500 dark:text-espresso-400 max-w-sm mx-auto">
+            Create your first EduHub course or import a YouTube playlist to organize lectures and calculate your study workload.
           </p>
-          <button
-            onClick={() => setIsCreateCourseOpen(true)}
-            className="px-4 py-2 rounded-xl text-xs font-semibold bg-terracotta-600 text-white shadow-subtle hover:bg-terracotta-500 transition cursor-pointer"
-          >
-            Create First Course
-          </button>
+          <div className="flex items-center justify-center gap-3 pt-2">
+            <button
+              onClick={() => setIsCreateCourseOpen(true)}
+              className="px-4 py-2 rounded-xl text-xs font-semibold bg-terracotta-600 text-white shadow-subtle hover:bg-terracotta-500 transition cursor-pointer flex items-center gap-1.5"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Create Course</span>
+            </button>
+            <button
+              onClick={() => setIsImportPlaylistOpen(true)}
+              className="px-4 py-2 rounded-xl text-xs font-semibold border border-ivory-300 dark:border-espresso-700 bg-white dark:bg-espresso-800 hover:bg-ivory-50 dark:hover:bg-espresso-750 text-espresso-800 dark:text-ivory-100 flex items-center gap-1.5 transition cursor-pointer"
+            >
+              <Video className="w-4 h-4 text-red-500" />
+              <span>Import Playlist</span>
+            </button>
+          </div>
         </div>
       )}
 

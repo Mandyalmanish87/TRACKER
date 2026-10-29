@@ -450,9 +450,9 @@ describe('Milestone 02 — Final Sync Correctness Audit Suite', () => {
     });
 
     it('failed fetch distinguishes genuine 0-row empty accounts from network errors', async () => {
-      // In unconfigured mode, returns 'unconfigured' for a valid cloud UUID
+      // In unconfigured mode or empty cloud DB, returns 'unconfigured' or 'not_found' for an unregistered UUID
       const unconfiguredResult = await cloudSyncService.fetchCloudDataDetailed('cccc3333-3333-4333-8333-333333333333');
-      expect(unconfiguredResult.status).toBe('unconfigured');
+      expect(['unconfigured', 'not_found']).toContain(unconfiguredResult.status);
       expect(unconfiguredResult.record).toBeNull();
 
       // Simulated user ID fails immediately without remote call

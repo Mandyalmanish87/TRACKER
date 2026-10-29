@@ -5,6 +5,8 @@ import {
   StudySession,
   SessionStatus,
   Reminder,
+  GymWorkout,
+  GymExercise,
   Subject,
   UserProfile,
   AppSettings,
@@ -37,7 +39,6 @@ import {
 } from '../types';
 import {
   storageService,
-  DEFAULT_SYLLABUS_SUBJECTS,
   STORAGE_KEY_V2,
   DEFAULT_PROFILE,
   DEFAULT_SETTINGS,
@@ -58,6 +59,7 @@ import {
 import { authService, AuthUser } from '../services/authService';
 import { cloudSyncService, CloudRecord } from '../services/cloudSyncService';
 import { classSpaceService } from '../services/classSpaceService';
+import { SAMPLE_EDUHUB_COURSE } from '../services/eduhubStorage';
 import { SyncConflictModal } from '../components/common/SyncConflictModal';
 
 interface AppContextType {
@@ -90,6 +92,8 @@ interface AppContextType {
   // Gym workout actions
   toggleGymSet: (exerciseIndex: number, setIndex: number) => void;
   toggleGymWorkoutComplete: () => void;
+  startTodayWorkout: (splitTitle?: string) => void;
+  addGymExercise: (exerciseName: string, setsCount?: number) => void;
   // Reminder actions
   toggleReminder: (id: string) => void;
   addReminder: (reminder: Omit<Reminder, 'id' | 'isCompleted'>) => void;
@@ -238,13 +242,72 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     stateVersionRef.current += 1;
   }, [state]);
 
+  // Listen for EduHub storage updates to keep AppStateData synchronized
+  useEffect(() => {
+    const handleEduHubUpdate = (e: any) => {
+      const updatedCourses = e.detail;
+      if (!Array.isArray(updatedCourses)) return;
+      setState((prev) => {
+        if (JSON.stringify(prev.eduhubCourses) === JSON.stringify(updatedCourses)) {
+          return prev;
+        }
+        return {
+          ...prev,
+          eduhubCourses: updatedCourses,
+        };
+      });
+    };
+
+    const handleEduHubDelete = (e: any) => {
+      const courseId = e.detail?.courseId;
+      if (!courseId || typeof courseId !== 'string') return;
+      setState((prev) => {
+        const updatedTombstones = cloudSyncService.addTombstone(prev.tombstones, courseId, 'eduhubCourses');
+        return {
+          ...prev,
+          tombstones: updatedTombstones,
+        };
+      });
+    };
+
+    window.addEventListener('tracker_eduhub_updated', handleEduHubUpdate as EventListener);
+    window.addEventListener('tracker_eduhub_deleted', handleEduHubDelete as EventListener);
+    return () => {
+      window.removeEventListener('tracker_eduhub_updated', handleEduHubUpdate as EventListener);
+      window.removeEventListener('tracker_eduhub_deleted', handleEduHubDelete as EventListener);
+    };
+  }, []);
+
   // Automatically persist to storage layer whenever state changes
   useEffect(() => {
     storageService.saveData(state);
-    if (authUser?.id) {
+    if (authUser?.id && initialSyncedUserIdRef.current === authUser.id) {
       storageService.saveUserData(authUser.id, state);
     }
   }, [state, authUser]);
+
+  // Helper to determine if unauthenticated guest user has created real local work
+  const checkHasGuestData = (data: AppStateData): boolean => {
+    if (data.hasSampleData) return false;
+    return Boolean(
+      (data.timetable?.length || 0) > 0 ||
+      (data.tasks?.length || 0) > 0 ||
+      (data.subjects?.length || 0) > 0 ||
+      (data.extraClasses?.length || 0) > 0 ||
+      (data.attendanceLogs?.length || 0) > 0 ||
+      (data.studySessions?.length || 0) > 0 ||
+      (data.gymWorkouts?.length || 0) > 0 ||
+      (data.reminders?.length || 0) > 0 ||
+      (data.eduhubCourses?.some((c) => !c.isSample) ?? false) ||
+      (data.events?.some((e) => !e.isSample) ?? false) ||
+      (data.mockTests?.some((m) => !m.isSample) ?? false) ||
+      (data.errorLogs?.some((e) => !e.isSample) ?? false) ||
+      (data.foodDiaryEntries?.length || 0) > 0 ||
+      (data.customFoods?.length || 0) > 0 ||
+      (data.recipes?.length || 0) > 0 ||
+      (data.weightLogs?.length || 0) > 0
+    );
+  };
 
   // Handle Initial Sync when user logs in
   const handleInitialSync = async (user: AuthUser) => {
@@ -290,6 +353,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setState(merged);
           storageService.saveData(merged);
           storageService.saveUserData(user.id, merged);
+          if (Array.isArray(merged.eduhubCourses)) {
+            try {
+              localStorage.setItem('tracker_eduhub_courses_v1', JSON.stringify(merged.eduhubCourses));
+              window.dispatchEvent(new CustomEvent('tracker_eduhub_updated', { detail: merged.eduhubCourses }));
+            } catch {}
+          }
           const uploadRes = await cloudSyncService.uploadToCloud(user.id, merged);
           if (uploadRes.success) {
             cloudSyncService.clearPendingSync(user.id);
@@ -304,9 +373,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
 
         // No prior local archive on this device: check for guest data conflict
-        const hasLocalGuestData = !state.hasSampleData && (
-          (state.timetable?.length || 0) > 0 || (state.tasks?.length || 0) > 0 || (state.subjects?.length || 0) > 0
-        );
+        const hasLocalGuestData = checkHasGuestData(state);
 
         if (hasLocalGuestData) {
           storageService.saveGuestBackup(state);
@@ -316,6 +383,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setState(cloudRecord.data);
           storageService.saveData(cloudRecord.data);
           storageService.saveUserData(user.id, cloudRecord.data);
+          if (Array.isArray(cloudRecord.data.eduhubCourses)) {
+            try {
+              localStorage.setItem('tracker_eduhub_courses_v1', JSON.stringify(cloudRecord.data.eduhubCourses));
+              window.dispatchEvent(new CustomEvent('tracker_eduhub_updated', { detail: cloudRecord.data.eduhubCourses }));
+            } catch {}
+          }
           cloudSyncService.clearPendingSync(user.id);
           setSyncStatus('synced');
           setLastSyncedAt(new Date(cloudRecord.updatedAt));
@@ -329,6 +402,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (userArchive) {
           setState(userArchive);
           storageService.saveData(userArchive);
+          if (Array.isArray(userArchive.eduhubCourses)) {
+            try {
+              localStorage.setItem('tracker_eduhub_courses_v1', JSON.stringify(userArchive.eduhubCourses));
+              window.dispatchEvent(new CustomEvent('tracker_eduhub_updated', { detail: userArchive.eduhubCourses }));
+            } catch {}
+          }
           const uploadRes = await cloudSyncService.uploadToCloud(user.id, userArchive);
           if (uploadRes.success) {
             cloudSyncService.clearPendingSync(user.id);
@@ -344,9 +423,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         // Brand new user with no cloud record and no prior archive on this device
         // Check if they created guest data offline before signing in for the first time
-        const hasLocalGuestData = !state.hasSampleData && (
-          (state.timetable?.length || 0) > 0 || (state.tasks?.length || 0) > 0 || (state.subjects?.length || 0) > 0
-        );
+        const hasLocalGuestData = checkHasGuestData(state);
         if (hasLocalGuestData) {
           storageService.saveGuestBackup(state);
           storageService.saveUserData(user.id, state);
@@ -402,20 +479,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     if (!authUser || conflictData || syncStatus === 'syncing' || initialSyncedUserIdRef.current !== authUser.id) return;
     const versionAtStart = stateVersionRef.current;
+    const targetUserId = authUser.id;
     const timeout = setTimeout(async () => {
+      if (initialSyncedUserIdRef.current !== targetUserId) return;
       setSyncStatus('syncing');
-      const res = await cloudSyncService.uploadToCloud(authUser.id, state);
+      const res = await cloudSyncService.uploadToCloud(targetUserId, state);
+      if (initialSyncedUserIdRef.current !== targetUserId) return;
       if (res.success) {
         // If state was modified while this upload was in flight, preserve pending sync
         if (stateVersionRef.current === versionAtStart) {
-          cloudSyncService.clearPendingSync(authUser.id);
+          cloudSyncService.clearPendingSync(targetUserId);
           setSyncStatus('synced');
           setLastSyncedAt(new Date());
         } else {
-          cloudSyncService.markPendingSync(authUser.id);
+          cloudSyncService.markPendingSync(targetUserId);
         }
       } else {
-        cloudSyncService.markPendingSync(authUser.id);
+        cloudSyncService.markPendingSync(targetUserId);
         setSyncStatus('offline');
       }
     }, 2500);
@@ -477,28 +557,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       profile: { ...DEFAULT_PROFILE },
       settings: { ...DEFAULT_SETTINGS },
       customPlaylists: JSON.parse(JSON.stringify(DEFAULT_CUSTOM_PLAYLISTS)),
+      eduhubCourses: [SAMPLE_EDUHUB_COURSE],
       hasSampleData: false,
       schemaVersion: 2,
     };
     setState(cleanGuestState);
     storageService.saveData(cleanGuestState);
+    try {
+      localStorage.setItem('tracker_eduhub_courses_v1', JSON.stringify([SAMPLE_EDUHUB_COURSE]));
+      window.dispatchEvent(new CustomEvent('tracker_eduhub_updated', { detail: [SAMPLE_EDUHUB_COURSE] }));
+    } catch {}
   };
 
   const syncNow = async () => {
-    if (!authUser) return;
+    if (!authUser || initialSyncedUserIdRef.current !== authUser.id) return;
+    const targetUserId = authUser.id;
     const versionAtStart = stateVersionRef.current;
     setSyncStatus('syncing');
-    const res = await cloudSyncService.uploadToCloud(authUser.id, state);
+    const res = await cloudSyncService.uploadToCloud(targetUserId, state);
+    if (initialSyncedUserIdRef.current !== targetUserId) return;
     if (res.success) {
       if (stateVersionRef.current === versionAtStart) {
-        cloudSyncService.clearPendingSync(authUser.id);
+        cloudSyncService.clearPendingSync(targetUserId);
         setSyncStatus('synced');
         setLastSyncedAt(new Date());
       } else {
-        cloudSyncService.markPendingSync(authUser.id);
+        cloudSyncService.markPendingSync(targetUserId);
       }
     } else {
-      cloudSyncService.markPendingSync(authUser.id);
+      cloudSyncService.markPendingSync(targetUserId);
       setSyncStatus('offline');
     }
   };
@@ -525,6 +612,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setState(conflictData.cloudRecord.data);
     storageService.saveData(conflictData.cloudRecord.data);
     storageService.saveUserData(authUser.id, conflictData.cloudRecord.data);
+    if (Array.isArray(conflictData.cloudRecord.data.eduhubCourses)) {
+      try {
+        localStorage.setItem('tracker_eduhub_courses_v1', JSON.stringify(conflictData.cloudRecord.data.eduhubCourses));
+        window.dispatchEvent(new CustomEvent('tracker_eduhub_updated', { detail: conflictData.cloudRecord.data.eduhubCourses }));
+      } catch {}
+    }
     setConflictData(null);
     cloudSyncService.clearPendingSync(authUser.id);
     setSyncStatus('synced');
@@ -539,6 +632,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setState(merged);
     storageService.saveData(merged);
     storageService.saveUserData(authUser.id, merged);
+    if (Array.isArray(merged.eduhubCourses)) {
+      try {
+        localStorage.setItem('tracker_eduhub_courses_v1', JSON.stringify(merged.eduhubCourses));
+        window.dispatchEvent(new CustomEvent('tracker_eduhub_updated', { detail: merged.eduhubCourses }));
+      } catch {}
+    }
     const res = await cloudSyncService.uploadToCloud(authUser.id, merged);
     setConflictData(null);
     if (res.success) {
@@ -879,6 +978,82 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
+  const startTodayWorkout = (splitTitle?: string) => {
+    setState((prev) => {
+      const todayStr = new Date().toISOString().split('T')[0];
+      const existingIdx = prev.gymWorkouts.findIndex((w) => w.date === todayStr);
+      if (existingIdx >= 0) return prev;
+
+      const dayOfWeek = new Date().getDay();
+      const defaultSplits: Record<number, string> = {
+        0: 'Rest & Recovery',
+        1: 'Push Day (Chest, Shoulders, Triceps)',
+        2: 'Pull Day (Back, Rear Delts, Biceps)',
+        3: 'Legs & Core',
+        4: 'Active Recovery & Cardio',
+        5: 'Upper Hypertrophy',
+        6: 'Lower Hypertrophy',
+      };
+
+      const newWorkout: GymWorkout = {
+        id: 'gym-' + Date.now(),
+        date: todayStr,
+        split: splitTitle || defaultSplits[dayOfWeek] || 'Daily Training Session',
+        completed: false,
+        durationMinutes: 45,
+        exercises: [],
+        isSample: false,
+      };
+
+      return {
+        ...prev,
+        gymWorkouts: [newWorkout, ...prev.gymWorkouts],
+      };
+    });
+  };
+
+  const addGymExercise = (exerciseName: string, setsCount: number = 3) => {
+    setState((prev) => {
+      const todayStr = new Date().toISOString().split('T')[0];
+      let workoutIdx = prev.gymWorkouts.findIndex((w) => w.date === todayStr);
+      let newWorkouts = [...prev.gymWorkouts];
+
+      const newExercise: GymExercise = {
+        name: exerciseName.trim(),
+        sets: Array.from({ length: Math.max(1, setsCount) }, () => ({
+          reps: 10,
+          weightKg: 20,
+          completed: false,
+        })),
+      };
+
+      if (workoutIdx < 0) {
+        const newWorkout: GymWorkout = {
+          id: 'gym-' + Date.now(),
+          date: todayStr,
+          split: 'Custom Workout',
+          completed: false,
+          durationMinutes: 45,
+          exercises: [newExercise],
+          isSample: false,
+        };
+        newWorkouts = [newWorkout, ...newWorkouts];
+      } else {
+        const current = newWorkouts[workoutIdx];
+        newWorkouts[workoutIdx] = {
+          ...current,
+          exercises: [...current.exercises, newExercise],
+          isSample: false,
+        };
+      }
+
+      return {
+        ...prev,
+        gymWorkouts: newWorkouts,
+      };
+    });
+  };
+
   /**
    * Toggle completion of a reminder task.
    */
@@ -1207,7 +1382,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // ── Syllabus Tracker Actions ──
   const addSyllabusSubject = (name: string, color?: string) => {
     setState((prev) => {
-      const currentList = prev.syllabusSubjects ?? DEFAULT_SYLLABUS_SUBJECTS;
+      const currentList = prev.syllabusSubjects ?? [];
       const newSubject: SyllabusSubject = {
         id: 'syl-' + Date.now() + '-' + Math.random().toString(36).slice(2, 5),
         name: name.trim(),
@@ -1223,7 +1398,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const updateSyllabusSubject = (id: string, name: string, color?: string) => {
     setState((prev) => {
-      const currentList = prev.syllabusSubjects ?? DEFAULT_SYLLABUS_SUBJECTS;
+      const currentList = prev.syllabusSubjects ?? [];
       return {
         ...prev,
         syllabusSubjects: currentList.map((s) =>
@@ -1235,7 +1410,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const deleteSyllabusSubject = (id: string) => {
     setState((prev) => {
-      const currentList = prev.syllabusSubjects ?? DEFAULT_SYLLABUS_SUBJECTS;
+      const currentList = prev.syllabusSubjects ?? [];
       return {
         ...prev,
         syllabusSubjects: currentList.filter((s) => s.id !== id),
@@ -1246,7 +1421,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const addChapter = (subjectId: string, name: string) => {
     setState((prev) => {
-      const currentList = prev.syllabusSubjects ?? DEFAULT_SYLLABUS_SUBJECTS;
+      const currentList = prev.syllabusSubjects ?? [];
       return {
         ...prev,
         syllabusSubjects: currentList.map((s) => {
@@ -1267,7 +1442,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const updateChapter = (subjectId: string, chapterId: string, name: string) => {
     setState((prev) => {
-      const currentList = prev.syllabusSubjects ?? DEFAULT_SYLLABUS_SUBJECTS;
+      const currentList = prev.syllabusSubjects ?? [];
       return {
         ...prev,
         syllabusSubjects: currentList.map((s) => {
@@ -1285,7 +1460,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const deleteChapter = (subjectId: string, chapterId: string) => {
     setState((prev) => {
-      const currentList = prev.syllabusSubjects ?? DEFAULT_SYLLABUS_SUBJECTS;
+      const currentList = prev.syllabusSubjects ?? [];
       return {
         ...prev,
         syllabusSubjects: currentList.map((s) => {
@@ -1305,7 +1480,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     subtopic: Omit<Subtopic, 'id' | 'revisionCount'>
   ) => {
     setState((prev) => {
-      const currentList = prev.syllabusSubjects ?? DEFAULT_SYLLABUS_SUBJECTS;
+      const currentList = prev.syllabusSubjects ?? [];
       return {
         ...prev,
         syllabusSubjects: currentList.map((s) => {
@@ -1337,7 +1512,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     updates: Partial<Subtopic>
   ) => {
     setState((prev) => {
-      const currentList = prev.syllabusSubjects ?? DEFAULT_SYLLABUS_SUBJECTS;
+      const currentList = prev.syllabusSubjects ?? [];
       return {
         ...prev,
         syllabusSubjects: currentList.map((s) => {
@@ -1361,7 +1536,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const deleteSubtopic = (subjectId: string, chapterId: string, subtopicId: string) => {
     setState((prev) => {
-      const currentList = prev.syllabusSubjects ?? DEFAULT_SYLLABUS_SUBJECTS;
+      const currentList = prev.syllabusSubjects ?? [];
       return {
         ...prev,
         syllabusSubjects: currentList.map((s) => {
@@ -1392,7 +1567,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const incrementRevision = (subjectId: string, chapterId: string, subtopicId: string) => {
     setState((prev) => {
-      const currentList = prev.syllabusSubjects ?? DEFAULT_SYLLABUS_SUBJECTS;
+      const currentList = prev.syllabusSubjects ?? [];
       const todayStr = new Date().toISOString().split('T')[0];
       return {
         ...prev,
@@ -1681,7 +1856,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const subjectName = payload.subject.name;
 
     setState((prev) => {
-      const currentList = [...(prev.syllabusSubjects ?? DEFAULT_SYLLABUS_SUBJECTS)];
+      const currentList = [...(prev.syllabusSubjects ?? [])];
       const now = Date.now();
 
       // Find or create target subject
@@ -2657,6 +2832,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         deleteStudySession,
         toggleGymSet,
         toggleGymWorkoutComplete,
+        startTodayWorkout,
+        addGymExercise,
         toggleReminder,
         addReminder,
         deleteReminder,

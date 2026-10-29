@@ -36,6 +36,9 @@ export const SyncConflictModal: React.FC<SyncConflictModalProps> = ({
   const localLogCount = localData.attendanceLogs?.length || 0;
   const cloudLogCount = cloudData.attendanceLogs?.length || 0;
 
+  const localCourseCount = (localData.eduhubCourses || []).filter((c) => !c.isSample).length;
+  const cloudCourseCount = (cloudData.eduhubCourses || []).filter((c) => !c.isSample).length;
+
   const formattedCloudDate = cloudUpdatedAt
     ? new Date(cloudUpdatedAt).toLocaleString('en-US', {
         month: 'short',
@@ -93,6 +96,9 @@ export const SyncConflictModal: React.FC<SyncConflictModalProps> = ({
               <li>• {localClassCount} Classes</li>
               <li>• {localTaskCount} Tasks</li>
               <li>• {localLogCount} Attendance Logs</li>
+              {(localCourseCount > 0 || cloudCourseCount > 0) && (
+                <li>• {localCourseCount} EduHub Courses</li>
+              )}
               <li className="text-[10px] text-espresso-400 italic">Current Session</li>
             </ul>
           </div>
@@ -107,6 +113,9 @@ export const SyncConflictModal: React.FC<SyncConflictModalProps> = ({
               <li>• {cloudClassCount} Classes</li>
               <li>• {cloudTaskCount} Tasks</li>
               <li>• {cloudLogCount} Attendance Logs</li>
+              {(localCourseCount > 0 || cloudCourseCount > 0) && (
+                <li>• {cloudCourseCount} EduHub Courses</li>
+              )}
               <li className="text-[10px] text-espresso-400">Saved: {formattedCloudDate}</li>
             </ul>
           </div>

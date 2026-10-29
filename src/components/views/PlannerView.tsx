@@ -274,7 +274,26 @@ export const PlannerView: React.FC<PlannerViewProps> = ({ onNavigateToSyllabus }
           </div>
 
           {/* Kanban Board Component */}
-          <KanbanBoard tasks={filteredTasks} onNavigateToSyllabus={onNavigateToSyllabus} />
+          {allTasks.length === 0 ? (
+            <div className="py-16 text-center border border-dashed border-ivory-300 dark:border-espresso-750 rounded-2xl bg-white/40 dark:bg-espresso-850/40">
+              <CheckSquare className="w-10 h-10 text-espresso-400 mx-auto mb-3" />
+              <h3 className="font-serif text-lg font-semibold text-espresso-900 dark:text-ivory-100">
+                No events or tasks yet. Create your first task.
+              </h3>
+              <p className="text-xs text-espresso-500 dark:text-espresso-400 max-w-sm mx-auto mt-1 mb-4">
+                Plan exams, assignment deadlines, academic milestones, and daily to-dos.
+              </p>
+              <button
+                onClick={() => setIsTaskModalOpen(true)}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-white text-xs font-semibold shadow-subtle"
+                style={{ backgroundColor: 'var(--accent)' }}
+              >
+                <Plus className="w-4 h-4" /> New Task
+              </button>
+            </div>
+          ) : (
+            <KanbanBoard tasks={filteredTasks} onNavigateToSyllabus={onNavigateToSyllabus} />
+          )}
         </div>
       )}
 

@@ -21,25 +21,104 @@ import { AdminRoute } from './components/admin/AdminRoute';
 import { EduHubView } from './components/eduhub/EduHubView';
 
 import { FocusRadioProvider, MiniPlayer } from './components/focus-radio';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { motion } from 'motion/react';
+
+export const VALID_NAV_TABS: Record<string, NavTab> = {
+  dashboard: 'dashboard',
+  today: 'dashboard',
+  timetable: 'timetable',
+  attendance: 'attendance',
+  syllabus: 'syllabus',
+  planner: 'planner',
+  tests: 'tests',
+  focus: 'focus',
+  gym: 'gym',
+  reminders: 'reminders',
+  nutrition: 'nutrition',
+  eduhub: 'eduhub',
+  classspace: 'classspace',
+  settings: 'settings',
+  admin: 'admin',
+};
+
+export const ACTIVE_TAB_STORAGE_KEY = 'tracker_active_nav_tab';
+
+export function resolveNavTabFromLocation(): NavTab | null {
+  if (typeof window === 'undefined') return null;
+
+  // 1. Pathname check (e.g. /admin, /eduhub)
+  const pathClean = window.location.pathname.replace(/^\/+|\/+$/g, '').toLowerCase();
+  if (pathClean && pathClean in VALID_NAV_TABS) {
+    return VALID_NAV_TABS[pathClean];
+  }
+
+  // 2. Hash check (e.g. #eduhub, #timetable, #admin)
+  // Ensure we ignore OAuth query-like hash fragments (e.g. #access_token=... or #error=...)
+  const rawHash = window.location.hash.replace(/^#/, '').toLowerCase();
+  if (rawHash && !rawHash.includes('=') && !rawHash.includes('&')) {
+    if (rawHash in VALID_NAV_TABS) {
+      return VALID_NAV_TABS[rawHash];
+    }
+  }
+
+  return null;
+}
+
+export function getInitialNavTab(): NavTab {
+  // Check location first (URL takes precedence)
+  const fromLocation = resolveNavTabFromLocation();
+  if (fromLocation) return fromLocation;
+
+  // Check persisted storage
+  try {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem(ACTIVE_TAB_STORAGE_KEY);
+      if (saved && saved in VALID_NAV_TABS) {
+        return VALID_NAV_TABS[saved];
+      }
+    }
+  } catch {}
+
+  return 'dashboard';
+}
 
 export const MainApp: React.FC = () => {
   const { state } = useApp();
-  const [currentTab, setCurrentTab] = useState<NavTab>(() => {
-    if (typeof window !== 'undefined') {
-      if (window.location.pathname === '/admin' || window.location.hash === '#admin') {
-        return 'admin';
+  const [currentTab, setCurrentTab] = useState<NavTab>(() => getInitialNavTab());
+
+  const handleSelectTab = (tab: NavTab) => {
+    setCurrentTab(tab);
+
+    try {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, tab);
+
+        // Keep URL hash in sync with active tab (leaving clean URL for dashboard)
+        if (tab === 'dashboard') {
+          if (window.location.hash && !window.location.hash.includes('=')) {
+            window.history.replaceState(null, '', '/' + (window.location.search || ''));
+          } else if (window.location.pathname !== '/') {
+            window.history.replaceState(null, '', '/' + (window.location.search || ''));
+          }
+        } else {
+          // Avoid overwriting OAuth hashes
+          if (!window.location.hash.includes('=')) {
+            window.history.replaceState(null, '', `#${tab}`);
+          }
+        }
       }
-    }
-    return 'dashboard';
-  });
+    } catch {}
+  };
 
   useEffect(() => {
     const handleLocationChange = () => {
-      if (typeof window !== 'undefined') {
-        if (window.location.pathname === '/admin' || window.location.hash === '#admin') {
-          setCurrentTab('admin');
-        }
+      const tabFromLoc = resolveNavTabFromLocation();
+      if (tabFromLoc) {
+        setCurrentTab(tabFromLoc);
+        try {
+          localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, tabFromLoc);
+        } catch {}
       }
     };
 
@@ -66,7 +145,7 @@ export const MainApp: React.FC = () => {
         <Header />
 
         {/* Horizontal Fast Tab Strip */}
-        <Navigation currentTab={effectiveTab} onSelectTab={setCurrentTab} />
+        <Navigation currentTab={effectiveTab} onSelectTab={handleSelectTab} />
 
         {/* Main Content Area */}
         <main className="flex-1 w-full max-w-[1680px] 2xl:max-w-[1840px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 py-6 sm:py-8">
@@ -79,38 +158,39 @@ export const MainApp: React.FC = () => {
           >
             {effectiveTab === 'dashboard' && (
               <Dashboard
-                onNavigateToSyllabus={() => setCurrentTab('syllabus')}
-                onNavigateToFocus={() => setCurrentTab('focus')}
-                onNavigateToPlanner={() => setCurrentTab('planner')}
-                onNavigateToNutrition={() => setCurrentTab('nutrition')}
-                onNavigateToTests={() => setCurrentTab('tests')}
-                onSelectTab={setCurrentTab}
+                onNavigateToSyllabus={() => handleSelectTab('syllabus')}
+                onNavigateToFocus={() => handleSelectTab('focus')}
+                onNavigateToPlanner={() => handleSelectTab('planner')}
+                onNavigateToNutrition={() => handleSelectTab('nutrition')}
+                onNavigateToTests={() => handleSelectTab('tests')}
+                onSelectTab={handleSelectTab}
               />
             )}
             {effectiveTab === 'timetable'  && <TimetableView />}
-            {effectiveTab === 'syllabus'   && <SyllabusView onNavigateToPlanner={() => setCurrentTab('planner')} />}
-            {effectiveTab === 'planner'    && <PlannerView onNavigateToSyllabus={() => setCurrentTab('syllabus')} />}
-            {effectiveTab === 'tests'      && <TestsView onNavigateToPlanner={() => setCurrentTab('planner')} />}
+            {effectiveTab === 'syllabus'   && <SyllabusView onNavigateToPlanner={() => handleSelectTab('planner')} />}
+            {effectiveTab === 'planner'    && <PlannerView onNavigateToSyllabus={() => handleSelectTab('syllabus')} />}
+            {effectiveTab === 'tests'      && <TestsView onNavigateToPlanner={() => handleSelectTab('planner')} />}
             {effectiveTab === 'attendance' && <AttendanceView />}
             {effectiveTab === 'focus'      && <FocusView />}
             {effectiveTab === 'gym'        && <GymView />}
             {effectiveTab === 'nutrition'  && <NutritionView />}
             {effectiveTab === 'reminders'  && <RemindersView />}
             {effectiveTab === 'eduhub'     && <EduHubView />}
-            {effectiveTab === 'classspace' && <ClassSpaceView onNavigateToSettings={() => setCurrentTab('settings')} />}
+            {effectiveTab === 'classspace' && <ClassSpaceView onNavigateToSettings={() => handleSelectTab('settings')} />}
             {effectiveTab === 'settings'   && (
               <SettingsView
-                onNavigateToClassSpace={() => setCurrentTab('classspace')}
-                onNavigateToAdmin={() => setCurrentTab('admin')}
+                onNavigateToClassSpace={() => handleSelectTab('classspace')}
               />
             )}
             {effectiveTab === 'admin'      && (
               <AdminRoute
                 onExit={() => {
-                  if (typeof window !== 'undefined' && window.location.hash === '#admin') {
-                    window.location.hash = '';
+                  if (typeof window !== 'undefined') {
+                    try {
+                      window.history.replaceState(null, '', '/' + (window.location.search || ''));
+                    } catch {}
                   }
-                  setCurrentTab('dashboard');
+                  handleSelectTab('dashboard');
                 }}
               />
             )}
@@ -133,14 +213,16 @@ export const MainApp: React.FC = () => {
 
 export default function App() {
   return (
-    <ThemeProvider>
-      <AppProvider>
-        <ClassSpaceProvider>
-          <FocusRadioProvider>
-            <MainApp />
-          </FocusRadioProvider>
-        </ClassSpaceProvider>
-      </AppProvider>
-    </ThemeProvider>
+    <ErrorBoundary>
+      <ThemeProvider>
+        <AppProvider>
+          <ClassSpaceProvider>
+            <FocusRadioProvider>
+              <MainApp />
+            </FocusRadioProvider>
+          </ClassSpaceProvider>
+        </AppProvider>
+      </ThemeProvider>
+    </ErrorBoundary>
   );
 }

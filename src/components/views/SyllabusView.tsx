@@ -550,7 +550,7 @@ export const SyllabusView: React.FC<SyllabusViewProps> = ({ onNavigateToPlanner 
             <div className="py-16 text-center border border-dashed border-ivory-300 dark:border-espresso-700 rounded-2xl bg-white/40 dark:bg-espresso-850/40">
               <BookOpen className="w-10 h-10 text-espresso-400 mx-auto mb-3" />
               <h3 className="font-serif text-lg font-semibold text-espresso-900 dark:text-ivory-100">
-                No syllabus subjects configured
+                No subjects yet. Add your first subject.
               </h3>
               <p className="text-xs text-espresso-500 dark:text-espresso-400 max-w-sm mx-auto mt-1 mb-4">
                 Add your semester or curriculum subjects (e.g. Physics, Data Structures, Fluid Mechanics) to track chapter-level mastery.
@@ -560,7 +560,7 @@ export const SyllabusView: React.FC<SyllabusViewProps> = ({ onNavigateToPlanner 
                 className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-white text-xs font-semibold shadow-subtle"
                 style={{ backgroundColor: 'var(--accent)' }}
               >
-                <Plus className="w-4 h-4" /> Add First Subject
+                <Plus className="w-4 h-4" /> Add Subject
               </button>
             </div>
           ) : activeSubject ? (

@@ -2,11 +2,15 @@ import {
   AppStateData,
   ThemeMode,
   SyllabusSubject,
+  GymWorkout,
+  Reminder,
+  PlannerTask,
   MockTest,
   ErrorLogEntry,
   CalendarEvent,
   CustomPlaylist,
   SyncTombstone,
+  EduHubCourse,
 } from '../types';
 
 import { migrateV1ToV2 } from './migration';
@@ -33,244 +37,19 @@ export {
 export const STORAGE_KEY_V2 = 'tracker_app_data_v2';
 export const THEME_KEY = 'tracker_app_theme';
 
-export const DEFAULT_EVENTS: CalendarEvent[] = [
-  {
-    id: 'evt-exam-1',
-    title: 'Mid-Semester Exam: Algorithms & Data Structures',
-    category: 'exam',
-    date: '2026-10-26',
-    startTime: '10:00',
-    endTime: '12:00',
-    location: 'Main Examination Hall A',
-    priority: 'high',
-    examType: 'mid_sem',
-    description: 'Covers graph algorithms, dynamic programming, and greedy methods.',
-    isSample: true,
-    createdAt: '2026-10-18T00:00:00.000Z',
-  },
-  {
-    id: 'evt-deadline-1',
-    title: 'Operating Systems Milestone 2 Submission',
-    category: 'deadline',
-    date: '2026-10-28',
-    isAllDay: true,
-    priority: 'high',
-    description: 'Submit memory management kernel code and architecture report.',
-    isSample: true,
-    createdAt: '2026-10-18T00:00:00.000Z',
-  },
-  {
-    id: 'evt-holiday-1',
-    title: 'Autumn Break / College Holiday',
-    category: 'holiday',
-    date: '2026-11-01',
-    isAllDay: true,
-    description: 'Campus closed for autumn semester break.',
-    isSample: true,
-    createdAt: '2026-10-18T00:00:00.000Z',
-  },
-  {
-    id: 'evt-campus-1',
-    title: 'Annual Hackathon & Tech Fest 2026',
-    category: 'college_event',
-    date: '2026-10-24',
-    startTime: '14:00',
-    endTime: '18:00',
-    location: 'Campus Auditorium',
-    description: 'Keynotes, networking sessions, and project pitch rounds.',
-    isSample: true,
-    createdAt: '2026-10-18T00:00:00.000Z',
-  },
-  {
-    id: 'evt-rem-1',
-    title: 'Submit Algorithms Lab 4 Writeup',
-    category: 'reminder',
-    date: '2026-10-22',
-    isAllDay: true,
-    priority: 'high',
-    isCompleted: false,
-    status: 'todo',
-    isSample: true,
-    createdAt: '2026-10-18T00:00:00.000Z',
-  },
-];
+// Pre-filled defaults are clean and empty for new users (no demo records in production)
+export const DEFAULT_EVENTS: CalendarEvent[] = [];
+export const DEFAULT_SYLLABUS_SUBJECTS: SyllabusSubject[] = [];
+export const DEFAULT_MOCK_TESTS: MockTest[] = [];
+export const DEFAULT_ERROR_LOGS: ErrorLogEntry[] = [];
 
-export const DEFAULT_SYLLABUS_SUBJECTS: SyllabusSubject[] = [
-  {
-    id: 'syl-phy',
-    name: 'Physics',
-    color: '#C45532',
-    chapters: [
-      {
-        id: 'chap-phy-1',
-        name: 'Classical Mechanics & Oscillations',
-        subtopics: [
-          { id: 'top-p1', name: 'Newtonian Laws & Friction', status: 'done', revisionCount: 2, pyqCovered: true, deadline: '2026-10-20', priority: 'high' },
-          { id: 'top-p2', name: 'Work, Energy & Conservative Forces', status: 'in_progress', revisionCount: 1, pyqCovered: true, deadline: '2026-10-28', priority: 'medium' },
-          { id: 'top-p3', name: 'Simple Harmonic Motion & Resonance', status: 'not_started', revisionCount: 0, pyqCovered: false, deadline: '2026-11-05', priority: 'low' },
-        ],
-      },
-      {
-        id: 'chap-phy-2',
-        name: 'Electrodynamics & Magnetism',
-        subtopics: [
-          { id: 'top-p4', name: 'Gauss Law & Electrostatic Potential', status: 'done', revisionCount: 1, pyqCovered: true, priority: 'high' },
-          { id: 'top-p5', name: 'Ampere Law & Magnetic Induction', status: 'not_started', revisionCount: 0, pyqCovered: false, priority: 'medium' },
-        ],
-      },
-    ],
-  },
-  {
-    id: 'syl-chem',
-    name: 'Chemistry',
-    color: '#B8732E',
-    chapters: [
-      {
-        id: 'chap-chem-1',
-        name: 'Thermodynamics & Equilibrium',
-        subtopics: [
-          { id: 'top-c1', name: 'First & Second Laws of Thermodynamics', status: 'done', revisionCount: 3, pyqCovered: true, priority: 'high' },
-          { id: 'top-c2', name: 'Chemical Equilibrium & Le Chatelier Principle', status: 'in_progress', revisionCount: 1, pyqCovered: false, priority: 'medium' },
-        ],
-      },
-      {
-        id: 'chap-chem-2',
-        name: 'Organic Reaction Mechanisms',
-        subtopics: [
-          { id: 'top-c3', name: 'Nucleophilic Substitution (SN1/SN2)', status: 'revision_needed', revisionCount: 2, pyqCovered: true, priority: 'high', notes: 'Revisit stereochemistry inversion' },
-          { id: 'top-c4', name: 'Electrophilic Aromatic Substitution', status: 'not_started', revisionCount: 0, pyqCovered: false, priority: 'medium' },
-        ],
-      },
-    ],
-  },
-  {
-    id: 'syl-math',
-    name: 'Mathematics',
-    color: '#3D6A8A',
-    chapters: [
-      {
-        id: 'chap-math-1',
-        name: 'Calculus & Differential Equations',
-        subtopics: [
-          { id: 'top-m1', name: 'Limits, Continuity & Mean Value Theorems', status: 'done', revisionCount: 2, pyqCovered: true, priority: 'medium' },
-          { id: 'top-m2', name: 'Definite Integrals & Area under Curves', status: 'done', revisionCount: 1, pyqCovered: true, priority: 'high' },
-          { id: 'top-m3', name: 'First-Order Differential Equations', status: 'in_progress', revisionCount: 0, pyqCovered: false, priority: 'high' },
-        ],
-      },
-      {
-        id: 'chap-math-2',
-        name: 'Linear Algebra & Vectors',
-        subtopics: [
-          { id: 'top-m4', name: 'Matrices, Determinants & Eigenvalues', status: 'not_started', revisionCount: 0, pyqCovered: false, priority: 'medium' },
-        ],
-      },
-    ],
-  },
-  {
-    id: 'syl-bio',
-    name: 'Biology',
-    color: '#436650',
-    chapters: [
-      {
-        id: 'chap-bio-1',
-        name: 'Cell Biology & Genetics',
-        subtopics: [
-          { id: 'top-b1', name: 'Cell Membrane Structure & Transport', status: 'done', revisionCount: 1, pyqCovered: true, priority: 'low' },
-          { id: 'top-b2', name: 'Mendelian Genetics & Gene Expression', status: 'in_progress', revisionCount: 0, pyqCovered: false, priority: 'high' },
-        ],
-      },
-    ],
-  },
-];
-
-export const DEFAULT_MOCK_TESTS: MockTest[] = [
-  {
-    id: 'test-1',
-    title: 'Mid-Semester Practice Test 1',
-    category: 'Mid-Semester Exam',
-    date: '2026-10-05',
-    totalScore: 78,
-    maxMarks: 100,
-    questionsAttempted: 45,
-    questionsCorrect: 39,
-    notes: 'Good pacing, made two calculation slips in section B.',
-    createdAt: '2026-10-05T10:00:00.000Z',
-    isSample: true,
-  },
-  {
-    id: 'test-2',
-    title: 'Full Length Mock 1',
-    category: 'Full Length Mock',
-    date: '2026-10-10',
-    totalScore: 215,
-    maxMarks: 300,
-    questionsAttempted: 65,
-    questionsCorrect: 54,
-    notes: 'Attempted more questions; time management in Algorithms was solid.',
-    createdAt: '2026-10-10T14:00:00.000Z',
-    isSample: true,
-  },
-  {
-    id: 'test-3',
-    title: 'Full Length Mock 2',
-    category: 'Full Length Mock',
-    date: '2026-10-15',
-    totalScore: 232,
-    maxMarks: 300,
-    questionsAttempted: 70,
-    questionsCorrect: 61,
-    notes: 'Improved accuracy in Discrete Math.',
-    createdAt: '2026-10-15T15:30:00.000Z',
-    isSample: true,
-  },
-];
-
-export const DEFAULT_ERROR_LOGS: ErrorLogEntry[] = [
-  {
-    id: 'err-1',
-    title: 'Off-by-one in binary search index bounds',
-    subjectId: 'sub-1',
-    syllabusChapterId: 'chap-algo-1',
-    mockTestId: 'test-1',
-    errorType: 'conceptual',
-    description: 'Used low < high instead of low <= high leading to early loop termination on target element.',
-    correctApproach: 'Maintain inclusive invariant [low, high] and update high = mid - 1.',
-    reviewedCount: 2,
-    lastReviewedAt: '2026-10-12T10:00:00Z',
-    resolved: false,
-    createdAt: '2026-10-05T14:30:00Z',
-    isSample: true,
-  },
-  {
-    id: 'err-2',
-    title: 'Sign error in recurrence relation calculation',
-    subjectId: 'sub-1',
-    syllabusChapterId: 'chap-algo-1',
-    mockTestId: 'test-2',
-    errorType: 'calculation',
-    description: 'Subtracted 2T(n/2) instead of adding when expanding the master theorem tree.',
-    correctApproach: 'Always write down tree layer cost explicitly before summing.',
-    reviewedCount: 1,
-    lastReviewedAt: '2026-10-14T09:00:00Z',
-    resolved: false,
-    createdAt: '2026-10-10T16:00:00Z',
-    isSample: true,
-  },
-  {
-    id: 'err-3',
-    title: 'Forgot graph cycle constraint in topological sort',
-    subjectId: 'sub-1',
-    syllabusChapterId: 'chap-algo-1',
-    mockTestId: 'test-3',
-    errorType: 'formula',
-    description: 'Did not check in-degrees counter for cycle detection in Kahns algorithm.',
-    correctApproach: 'If processed node count != V, graph contains a directed cycle.',
-    reviewedCount: 0,
-    resolved: false,
-    createdAt: '2026-10-15T18:00:00Z',
-    isSample: true,
-  },
-];
+// Known pre-filled / seeded demo record IDs to clean up on load (excluding Nutrition)
+export const DEMO_SYLLABUS_IDS = new Set(['syl-phy', 'syl-chem', 'syl-math', 'syl-bio']);
+export const DEMO_MOCK_TEST_IDS = new Set(['test-mock-1', 'test-mock-2']);
+export const DEMO_ERROR_LOG_IDS = new Set(['err-1', 'err-2', 'err-3', 'err-log-1', 'err-log-2']);
+export const DEMO_EVENT_IDS = new Set(['evt-exam-1', 'evt-deadline-1', 'evt-holiday-1', 'evt-campus-1', 'evt-rem-1']);
+export const DEMO_TASK_IDS = new Set(['task-sample-1', 'task-sample-2', 'task-sample-3']);
+export const DEMO_REMINDER_IDS = new Set(['rem-1', 'rem-2', 'rem-3']);
 
 export const sanitizeEntityArray = <T extends { id: string }>(arr: unknown): T[] => {
   if (!Array.isArray(arr)) return [];
@@ -282,6 +61,59 @@ export const sanitizeEntityArray = <T extends { id: string }>(arr: unknown): T[]
       typeof (item as any).id === 'string' &&
       (item as any).id.trim().length > 0
   );
+};
+
+export const sanitizeEduHubCourses = (courses: unknown): EduHubCourse[] => {
+  if (!Array.isArray(courses)) return [];
+  return courses
+    .filter(
+      (c): c is any =>
+        Boolean(c) &&
+        typeof c === 'object' &&
+        !Array.isArray(c) &&
+        typeof c.id === 'string' &&
+        c.id.trim().length > 0 &&
+        typeof c.title === 'string' &&
+        !c.isSample &&
+        c.id.trim() !== 'sample-cs50-intro'
+    )
+    .map((c) => ({
+      id: c.id.trim(),
+      title: c.title.trim() || 'Untitled Course',
+      description: typeof c.description === 'string' ? c.description : '',
+      color: typeof c.color === 'string' ? c.color : 'terracotta',
+      playlistId: typeof c.playlistId === 'string' ? c.playlistId : undefined,
+      playlistUrl: typeof c.playlistUrl === 'string' ? c.playlistUrl : undefined,
+      lastSyncedAt: typeof c.lastSyncedAt === 'string' ? c.lastSyncedAt : undefined,
+      lectures: Array.isArray(c.lectures)
+        ? c.lectures
+            .filter(
+              (l: any) =>
+                Boolean(l) &&
+                typeof l === 'object' &&
+                !Array.isArray(l) &&
+                typeof l.id === 'string' &&
+                l.id.trim().length > 0 &&
+                typeof l.title === 'string'
+            )
+            .map((l: any) => ({
+              id: l.id.trim(),
+              title: l.title.trim() || 'Untitled Lecture',
+              youtubeUrl: typeof l.youtubeUrl === 'string' ? l.youtubeUrl : '',
+              videoId: typeof l.videoId === 'string' ? l.videoId : '',
+              durationSeconds: typeof l.durationSeconds === 'number' && !isNaN(l.durationSeconds) && l.durationSeconds >= 0 ? Math.round(l.durationSeconds) : 0,
+              lastPositionSeconds: typeof l.lastPositionSeconds === 'number' && !isNaN(l.lastPositionSeconds) && l.lastPositionSeconds >= 0 ? Math.round(l.lastPositionSeconds) : 0,
+              completed: Boolean(l.completed),
+              notes: typeof l.notes === 'string' ? l.notes : undefined,
+              thumbnailUrl: typeof l.thumbnailUrl === 'string' ? l.thumbnailUrl : undefined,
+              addedAt: typeof l.addedAt === 'string' ? l.addedAt : new Date().toISOString(),
+              completedAt: typeof l.completedAt === 'string' ? l.completedAt : undefined,
+            }))
+        : [],
+      createdAt: typeof c.createdAt === 'string' ? c.createdAt : new Date().toISOString(),
+      updatedAt: typeof c.updatedAt === 'string' ? c.updatedAt : new Date().toISOString(),
+      isSample: Boolean(c.isSample),
+    }));
 };
 
 export const getUserStorageKey = (userId: string): string => `tracker_user_data_${userId}`;
@@ -316,8 +148,12 @@ export const sanitizeLoadedState = (parsed: any): AppStateData => {
       ...s,
       status: s?.status ?? 'completed',
     })),
-    gymWorkouts: sanitizeEntityArray(parsed.gymWorkouts),
-    reminders: sanitizeEntityArray(parsed.reminders),
+    gymWorkouts: sanitizeEntityArray<GymWorkout>(parsed.gymWorkouts).filter(
+      (g) => !g.isSample && g.id !== 'gym-today'
+    ),
+    reminders: sanitizeEntityArray<Reminder>(parsed.reminders).filter(
+      (r) => !r.isSample && !DEMO_REMINDER_IDS.has(r.id)
+    ),
     schemaVersion: 2,
     profile: {
       displayName: typeof parsed.profile?.displayName === 'string' ? parsed.profile.displayName : '',
@@ -345,14 +181,19 @@ export const sanitizeLoadedState = (parsed: any): AppStateData => {
       dashboardDensity: parsed.settings?.dashboardDensity || 'compact',
       userMode: parsed.settings?.userMode === 'class_based' ? 'class_based' : 'individual',
     },
-    syllabusSubjects: sanitizeEntityArray(parsed.syllabusSubjects),
+    syllabusSubjects: sanitizeEntityArray<SyllabusSubject>(parsed.syllabusSubjects).filter(
+      (s) => !s.isSample && !DEMO_SYLLABUS_IDS.has(s.id)
+    ),
     occurrenceOverrides: sanitizeEntityArray(parsed.occurrenceOverrides),
     extraClasses: sanitizeEntityArray(parsed.extraClasses),
-    tasks: sanitizeEntityArray(parsed.tasks),
+    tasks: sanitizeEntityArray<PlannerTask>(parsed.tasks).filter(
+      (t) => !t.isSample && !DEMO_TASK_IDS.has(t.id)
+    ),
     spacedReviews: sanitizeEntityArray(parsed.spacedReviews),
     dailyQuestions: sanitizeEntityArray(parsed.dailyQuestions),
     dailyQuestionTarget: typeof parsed.dailyQuestionTarget === 'number' ? parsed.dailyQuestionTarget : DEFAULT_DAILY_QUESTION_TARGET,
     reviewIntervals: Array.isArray(parsed.reviewIntervals) ? parsed.reviewIntervals : DEFAULT_REVIEW_INTERVALS,
+    // Nutrition section: PRESERVE demo data, seed logic, food database, recipes, and defaults intact
     foodDiaryEntries: sanitizeEntityArray(parsed.foodDiaryEntries),
     customFoods: sanitizeEntityArray(parsed.customFoods),
     recipes: sanitizeEntityArray(parsed.recipes),
@@ -363,9 +204,16 @@ export const sanitizeLoadedState = (parsed: any): AppStateData => {
     radioLoopMode: parsed.radioLoopMode === 'all' || parsed.radioLoopMode === 'one' ? parsed.radioLoopMode : 'off',
     radioIsShuffle: Boolean(parsed.radioIsShuffle),
     customPlaylists: playlists.length > 0 ? playlists : JSON.parse(JSON.stringify(DEFAULT_CUSTOM_PLAYLISTS)),
-    mockTests: sanitizeEntityArray(parsed.mockTests),
-    errorLogs: sanitizeEntityArray(parsed.errorLogs),
-    events: sanitizeEntityArray(parsed.events),
+    mockTests: sanitizeEntityArray<MockTest>(parsed.mockTests).filter(
+      (m) => !m.isSample && !DEMO_MOCK_TEST_IDS.has(m.id)
+    ),
+    errorLogs: sanitizeEntityArray<ErrorLogEntry>(parsed.errorLogs).filter(
+      (e) => !e.isSample && !DEMO_ERROR_LOG_IDS.has(e.id)
+    ),
+    events: sanitizeEntityArray<CalendarEvent>(parsed.events).filter(
+      (e) => !e.isSample && !DEMO_EVENT_IDS.has(e.id)
+    ),
+    eduhubCourses: sanitizeEduHubCourses(parsed.eduhubCourses),
     tombstones: sanitizeEntityArray<SyncTombstone>(parsed.tombstones),
   };
 };
@@ -411,13 +259,35 @@ export const loadGuestBackup = (): AppStateData | null => {
 };
 
 export const loadData = (): AppStateData => {
+  // Helper to fallback to legacy EduHub courses if v2 does not have them yet
+  const getLegacyEduHubCourses = (): EduHubCourse[] => {
+    try {
+      const raw = localStorage.getItem('tracker_eduhub_courses_v1');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return sanitizeEduHubCourses(parsed);
+        }
+      }
+    } catch {}
+    return [];
+  };
+
   // Try loading v2 data first
   const v2Serialized = localStorage.getItem(STORAGE_KEY_V2);
   if (v2Serialized) {
     try {
       const parsed = JSON.parse(v2Serialized);
       if (parsed && typeof parsed === 'object') {
-        return sanitizeLoadedState(parsed);
+        const state = sanitizeLoadedState(parsed);
+        // Backwards compatibility: if v2 has no courses or only sample courses, migrate from legacy store
+        if (!state.eduhubCourses || state.eduhubCourses.length === 0 || state.eduhubCourses.every((c) => c.isSample)) {
+          const legacy = getLegacyEduHubCourses();
+          if (legacy.length > 0 && legacy.some((c) => !c.isSample)) {
+            state.eduhubCourses = legacy;
+          }
+        }
+        return state;
       }
     } catch (err) {
       console.error('Corrupt v2 data, attempting migration from v1');
@@ -432,6 +302,10 @@ export const loadData = (): AppStateData => {
     try {
       const raw = JSON.parse(v1Serialized);
       const migrated = migrateV1ToV2(raw);
+      const legacy = getLegacyEduHubCourses();
+      if (legacy.length > 0) {
+        migrated.eduhubCourses = legacy;
+      }
       // Save migrated data under v2 key
       localStorage.setItem(STORAGE_KEY_V2, JSON.stringify(migrated));
       return migrated;
@@ -440,11 +314,13 @@ export const loadData = (): AppStateData => {
     }
   }
   // Fresh installation: initialize with a valid, clean, empty default state without demo data
+  const legacy = getLegacyEduHubCourses();
   const fresh: AppStateData = {
     ...EMPTY_STATE,
     profile: { ...DEFAULT_PROFILE },
     settings: { ...DEFAULT_SETTINGS },
     customPlaylists: JSON.parse(JSON.stringify(DEFAULT_CUSTOM_PLAYLISTS)),
+    eduhubCourses: legacy.length > 0 ? legacy : [],
     hasSampleData: false,
     schemaVersion: 2,
   };
@@ -480,9 +356,16 @@ export const saveData = (data: AppStateData): void => {
       mockTests: Array.isArray(data.mockTests) ? data.mockTests : [],
       errorLogs: Array.isArray(data.errorLogs) ? data.errorLogs : [],
       events: Array.isArray(data.events) ? data.events : [],
+      eduhubCourses: sanitizeEduHubCourses(data.eduhubCourses),
       tombstones: Array.isArray(data.tombstones) ? data.tombstones : [],
     };
     localStorage.setItem(STORAGE_KEY_V2, JSON.stringify(toSave));
+    // Synchronize legacy key for backwards compatibility
+    if (Array.isArray(toSave.eduhubCourses) && toSave.eduhubCourses.length > 0) {
+      try {
+        localStorage.setItem('tracker_eduhub_courses_v1', JSON.stringify(toSave.eduhubCourses));
+      } catch {}
+    }
   } catch (err) {
     console.error('Failed to persist to localStorage:', err);
   }
@@ -513,7 +396,7 @@ export const SAMPLE_DATA: AppStateData = {
     showFocusRadio: false,
     userMode: 'individual',
   },
-  syllabusSubjects: DEFAULT_SYLLABUS_SUBJECTS,
+  syllabusSubjects: [],
   subjects: [
     {
       id: 'sub-1',
@@ -633,174 +516,11 @@ export const SAMPLE_DATA: AppStateData = {
       isSample: true,
     },
   ],
-  gymWorkouts: [
-    {
-      id: 'gym-today',
-      date: '2026-10-14',
-      split: 'Push Day (Chest, Delts & Triceps)',
-      completed: false,
-      durationMinutes: 60,
-      exercises: [
-        {
-          name: 'Barbell Bench Press',
-          sets: [
-            { reps: 10, weightKg: 60, completed: true },
-            { reps: 8, weightKg: 70, completed: true },
-            { reps: 6, weightKg: 75, completed: false },
-          ],
-        },
-        {
-          name: 'Incline Dumbbell Press',
-          sets: [
-            { reps: 10, weightKg: 24, completed: false },
-            { reps: 10, weightKg: 24, completed: false },
-            { reps: 8, weightKg: 26, completed: false },
-          ],
-        },
-        {
-          name: 'Standing Overhead Press',
-          sets: [
-            { reps: 8, weightKg: 40, completed: false },
-            { reps: 8, weightKg: 40, completed: false },
-          ],
-        },
-      ],
-      notes: 'Focus on slow eccentric tempo on bench press',
-      isSample: true,
-    },
-  ],
-  reminders: [
-    {
-      id: 'rem-1',
-      title: 'Submit Algorithms Lab 4 Writeup',
-      category: 'academic',
-      dueDate: '2026-10-14',
-      priority: 'high',
-      isCompleted: false,
-      linkedEntity: 'CS301',
-      isSample: true,
-    },
-    {
-      id: 'rem-2',
-      title: 'Restock Whey Protein & Creatine',
-      category: 'fitness',
-      dueDate: '2026-10-15',
-      priority: 'medium',
-      isCompleted: false,
-      isSample: true,
-    },
-    {
-      id: 'rem-3',
-      title: 'Renew Library Book on Discrete Structures',
-      category: 'academic',
-      dueDate: '2026-10-16',
-      priority: 'low',
-      isCompleted: false,
-      linkedEntity: 'MA201',
-      isSample: true,
-    },
-  ],
-  tasks: [
-    {
-      id: 'task-sample-1',
-      title: 'Solve problem set on Newtonian Laws & Friction',
-      description: 'Complete practice problems 1 to 15 from course textbook.',
-      status: 'in_progress',
-      priority: 'high',
-      subjectId: 'sub-1',
-      syllabusSubjectId: 'syl-phy',
-      syllabusChapterId: 'chap-phy-1',
-      syllabusTopicId: 'top-p1',
-      dueDate: '2026-10-18',
-      dueTime: '17:00',
-      estimatedDuration: 45,
-      createdAt: '2026-10-15T10:00:00.000Z',
-      isSample: true,
-    },
-    {
-      id: 'task-sample-2',
-      title: 'Review Thermodynamics formulas & state functions',
-      description: 'Summarize First & Second Laws equations on review sheet.',
-      status: 'todo',
-      priority: 'medium',
-      subjectId: 'sub-2',
-      syllabusSubjectId: 'syl-chem',
-      syllabusChapterId: 'chap-chem-1',
-      syllabusTopicId: 'top-c1',
-      dueDate: '2026-10-20',
-      dueTime: '14:30',
-      estimatedDuration: 30,
-      createdAt: '2026-10-16T12:00:00.000Z',
-      isSample: true,
-    },
-    {
-      id: 'task-sample-3',
-      title: 'Read lecture slides on Graph Theory algorithms',
-      description: 'Depth-first search and breadth-first search examples.',
-      status: 'done',
-      priority: 'low',
-      subjectId: 'sub-3',
-      dueDate: '2026-10-14',
-      estimatedDuration: 40,
-      createdAt: '2026-10-13T09:00:00.000Z',
-      completedAt: '2026-10-14T11:20:00.000Z',
-      isSample: true,
-    },
-  ],
-  spacedReviews: [
-    {
-      id: 'sr-sample-1',
-      syllabusSubjectId: 'syl-phy',
-      syllabusChapterId: 'chap-phy-1',
-      syllabusTopicId: 'top-p1',
-      topicName: 'Newtonian Laws & Friction',
-      dueDate: '2026-10-18',
-      intervalDays: 3,
-      repetitionLevel: 1,
-      isCompleted: false,
-      history: [
-        { reviewedAt: '2026-10-15T10:00:00.000Z', nextDueDate: '2026-10-18' }
-      ],
-      isSample: true,
-    },
-    {
-      id: 'sr-sample-2',
-      syllabusSubjectId: 'syl-chem',
-      syllabusChapterId: 'chap-chem-1',
-      syllabusTopicId: 'top-c1',
-      topicName: 'First & Second Laws of Thermodynamics',
-      dueDate: '2026-10-22',
-      intervalDays: 7,
-      repetitionLevel: 2,
-      isCompleted: false,
-      history: [],
-      isSample: true,
-    },
-  ],
-  dailyQuestions: [
-    {
-      id: 'dq-sample-1',
-      date: '2026-10-18',
-      subjectId: 'sub-1',
-      subjectName: 'Design & Analysis of Algorithms',
-      attempted: 20,
-      correct: 17,
-      notes: 'Divide and conquer recurrence relations',
-      createdAt: '2026-10-18T08:30:00.000Z',
-      isSample: true,
-    },
-    {
-      id: 'dq-sample-2',
-      date: '2026-10-18',
-      subjectId: 'sub-2',
-      subjectName: 'Database Management Systems',
-      attempted: 10,
-      correct: 8,
-      notes: 'SQL subqueries and indexing',
-      createdAt: '2026-10-18T11:00:00.000Z',
-      isSample: true,
-    },
-  ],
+  gymWorkouts: [],
+  reminders: [],
+  tasks: [],
+  spacedReviews: [],
+  dailyQuestions: [],
   dailyQuestionTarget: DEFAULT_DAILY_QUESTION_TARGET,
   reviewIntervals: DEFAULT_REVIEW_INTERVALS,
   foodDiaryEntries: [
@@ -954,9 +674,9 @@ export const SAMPLE_DATA: AppStateData = {
     { id: 'wt-5', date: '2026-10-18', weightKg: 74.0, isSample: true },
   ],
   nutritionProfile: DEFAULT_NUTRITION_PROFILE,
-  mockTests: DEFAULT_MOCK_TESTS,
-  errorLogs: DEFAULT_ERROR_LOGS,
-  events: DEFAULT_EVENTS,
+  mockTests: [],
+  errorLogs: [],
+  events: [],
 };
 
 export interface IStorageService {
@@ -1030,20 +750,21 @@ class LocalStorageService implements IStorageService {
       ...SAMPLE_DATA,
       profile: existing.profile?.displayName ? existing.profile : SAMPLE_DATA.profile,
       settings: existing.settings ?? SAMPLE_DATA.settings,
-      syllabusSubjects: existing.syllabusSubjects?.length ? existing.syllabusSubjects : DEFAULT_SYLLABUS_SUBJECTS,
-      tasks: existing.tasks?.length ? existing.tasks : (SAMPLE_DATA.tasks ?? []),
-      spacedReviews: existing.spacedReviews?.length ? existing.spacedReviews : (SAMPLE_DATA.spacedReviews ?? []),
-      dailyQuestions: existing.dailyQuestions?.length ? existing.dailyQuestions : (SAMPLE_DATA.dailyQuestions ?? []),
+      syllabusSubjects: existing.syllabusSubjects?.length ? existing.syllabusSubjects : [],
+      tasks: existing.tasks?.length ? existing.tasks : [],
+      spacedReviews: existing.spacedReviews?.length ? existing.spacedReviews : [],
+      dailyQuestions: existing.dailyQuestions?.length ? existing.dailyQuestions : [],
       dailyQuestionTarget: existing.dailyQuestionTarget ?? SAMPLE_DATA.dailyQuestionTarget ?? DEFAULT_DAILY_QUESTION_TARGET,
       reviewIntervals: existing.reviewIntervals ?? SAMPLE_DATA.reviewIntervals ?? DEFAULT_REVIEW_INTERVALS,
+      // Nutrition section: strictly preserved
       foodDiaryEntries: existing.foodDiaryEntries?.length ? existing.foodDiaryEntries : (SAMPLE_DATA.foodDiaryEntries ?? []),
       customFoods: existing.customFoods?.length ? existing.customFoods : (SAMPLE_DATA.customFoods ?? []),
       recipes: existing.recipes?.length ? existing.recipes : (SAMPLE_DATA.recipes ?? []),
       weightLogs: existing.weightLogs?.length ? existing.weightLogs : (SAMPLE_DATA.weightLogs ?? []),
       nutritionProfile: existing.nutritionProfile ?? SAMPLE_DATA.nutritionProfile ?? DEFAULT_NUTRITION_PROFILE,
-      mockTests: existing.mockTests?.length ? existing.mockTests : (SAMPLE_DATA.mockTests ?? []),
-      errorLogs: existing.errorLogs?.length ? existing.errorLogs : (SAMPLE_DATA.errorLogs ?? []),
-      events: existing.events?.length ? existing.events : (SAMPLE_DATA.events ?? DEFAULT_EVENTS),
+      mockTests: existing.mockTests?.length ? existing.mockTests : [],
+      errorLogs: existing.errorLogs?.length ? existing.errorLogs : [],
+      events: existing.events?.length ? existing.events : [],
     };
     this.saveData(fresh);
     return fresh;
@@ -1055,33 +776,37 @@ class LocalStorageService implements IStorageService {
       schemaVersion: 2,
       profile: current.profile ?? DEFAULT_PROFILE,
       settings: current.settings ?? DEFAULT_SETTINGS,
-      syllabusSubjects: current.syllabusSubjects ?? [],
+      syllabusSubjects: (current.syllabusSubjects || []).filter(
+        (s) => !s.isSample && !DEMO_SYLLABUS_IDS.has(s.id)
+      ),
       subjects: current.subjects.filter((s) => !s.isSample),
       timetable: current.timetable.filter((t) => !t.isSample),
       attendanceLogs: current.attendanceLogs.filter((a) => !a.isSample),
       studySessions: current.studySessions.filter((s) => !s.isSample),
-      gymWorkouts: current.gymWorkouts.filter((g) => !g.isSample),
-      reminders: current.reminders.filter((r) => !r.isSample),
+      gymWorkouts: current.gymWorkouts.filter((g) => !g.isSample && g.id !== 'gym-today'),
+      reminders: current.reminders.filter((r) => !r.isSample && !DEMO_REMINDER_IDS.has(r.id)),
       occurrenceOverrides: current.occurrenceOverrides ?? [],
       extraClasses: current.extraClasses ?? [],
-      tasks: (current.tasks || []).filter((t) => !t.isSample),
+      tasks: (current.tasks || []).filter((t) => !t.isSample && !DEMO_TASK_IDS.has(t.id)),
       spacedReviews: (current.spacedReviews || []).filter((r) => !r.isSample),
       dailyQuestions: (current.dailyQuestions || []).filter((q) => !q.isSample),
       dailyQuestionTarget: current.dailyQuestionTarget ?? DEFAULT_DAILY_QUESTION_TARGET,
       reviewIntervals: current.reviewIntervals ?? DEFAULT_REVIEW_INTERVALS,
-      foodDiaryEntries: (current.foodDiaryEntries || []).filter((e) => !e.isSample),
-      customFoods: (current.customFoods || []).filter((c) => !c.isSample),
-      recipes: (current.recipes || []).filter((r) => !r.isSample),
-      weightLogs: (current.weightLogs || []).filter((w) => !w.isSample),
+      // NUTRITION SECTION: STRICTLY PRESERVED AS REQUIRED BY USER
+      foodDiaryEntries: current.foodDiaryEntries || [],
+      customFoods: current.customFoods || [],
+      recipes: current.recipes || [],
+      weightLogs: current.weightLogs || [],
       nutritionProfile: current.nutritionProfile ?? DEFAULT_NUTRITION_PROFILE,
       radioUrls: current.radioUrls ?? [],
       radioQueue: current.radioQueue ?? [],
       radioLoopMode: current.radioLoopMode ?? 'off',
       radioIsShuffle: Boolean(current.radioIsShuffle),
       customPlaylists: current.customPlaylists ?? JSON.parse(JSON.stringify(DEFAULT_CUSTOM_PLAYLISTS)),
-      mockTests: (current.mockTests || []).filter((m) => !m.isSample),
-      errorLogs: (current.errorLogs || []).filter((e) => !e.isSample),
-      events: (current.events || []).filter((e) => !e.isSample),
+      mockTests: (current.mockTests || []).filter((m) => !m.isSample && !DEMO_MOCK_TEST_IDS.has(m.id)),
+      errorLogs: (current.errorLogs || []).filter((e) => !e.isSample && !DEMO_ERROR_LOG_IDS.has(e.id)),
+      events: (current.events || []).filter((e) => !e.isSample && !DEMO_EVENT_IDS.has(e.id)),
+      eduhubCourses: (current.eduhubCourses || []).filter((c) => !c.isSample && c.id !== 'sample-cs50-intro'),
     };
     this.saveData(cleaned);
     return cleaned;

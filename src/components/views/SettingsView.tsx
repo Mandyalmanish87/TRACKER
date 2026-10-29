@@ -177,11 +177,10 @@ export const DASHBOARD_WIDGET_CONFIGS: DashboardWidgetConfig[] = [
 
 interface SettingsViewProps {
   onNavigateToClassSpace?: () => void;
-  onNavigateToAdmin?: () => void;
 }
 
 // ─── Main SettingsView ──────────────────────────────────────────────────────
-export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToClassSpace, onNavigateToAdmin }) => {
+export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToClassSpace }) => {
   const {
     state,
     updateSettings,
@@ -1467,14 +1466,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToClassSpa
           TRACKER v{APP_VERSION} · Local-First · No Cloud Sync
         </span>
         <div className="flex items-center gap-4">
-          {onNavigateToAdmin && (
-            <button
-              onClick={onNavigateToAdmin}
-              className="text-[11px] text-espresso-400 hover:text-terracotta-600 dark:hover:text-terracotta-400 transition underline underline-offset-2 cursor-pointer font-sans"
-            >
-              Platform Administrative Portal
-            </button>
-          )}
           <span>All data stored in your browser&apos;s localStorage</span>
         </div>
       </div>

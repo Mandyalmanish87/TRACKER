@@ -7,11 +7,11 @@ import { useApp } from '../../context/AppContext';
 import { Dumbbell, Check, CheckCircle2 } from 'lucide-react';
 
 export const GymSplitWidget: React.FC = () => {
-  const { state, toggleGymSet, toggleGymWorkoutComplete } = useApp();
+  const { state, toggleGymSet, toggleGymWorkoutComplete, startTodayWorkout } = useApp();
 
   const todayStr = new Date().toISOString().split('T')[0];
   const workout = state.gymWorkouts.find(
-    (w) => w.date === todayStr || (w.isSample && state.gymWorkouts.length > 0)
+    (w) => w.date === todayStr && !w.isSample
   );
 
   if (!workout) {
@@ -22,8 +22,10 @@ export const GymSplitWidget: React.FC = () => {
         subtitle="Workout logging, active sets, and strength progressions"
       >
         <EmptyState
-          title="Scheduled Rest & Recovery"
-          description="No workout planned for today. Prioritize active mobility, protein intake, and rest."
+          title="No gym sessions yet. Log your first workout."
+          description="Log your training routine, track working sets, and monitor progressive overload."
+          actionLabel="Log Workout"
+          onAction={() => startTodayWorkout()}
         />
       </Card>
     );

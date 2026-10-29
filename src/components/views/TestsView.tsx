@@ -490,13 +490,13 @@ export const TestsView: React.FC<TestsViewProps> = ({ onNavigateToPlanner }) => 
             {filteredTests.length === 0 ? (
               <div className="text-center py-10 border border-dashed border-ivory-300 dark:border-espresso-750 rounded-2xl p-6">
                 <Award className="w-10 h-10 mx-auto text-espresso-300 dark:text-espresso-600 mb-2" />
-                <p className="text-sm font-medium text-espresso-600 dark:text-espresso-400">No mock tests recorded yet.</p>
+                <p className="text-sm font-medium text-espresso-600 dark:text-espresso-400">No tests recorded yet. Add a mock test.</p>
                 <button
                   onClick={() => setIsAddTestOpen(true)}
                   className="mt-3 px-4 py-2 rounded-xl text-xs font-semibold text-white shadow-subtle"
                   style={{ backgroundColor: 'var(--accent)' }}
                 >
-                  Log Your First Mock Test
+                  Log Test
                 </button>
               </div>
             ) : (
@@ -744,14 +744,14 @@ export const TestsView: React.FC<TestsViewProps> = ({ onNavigateToPlanner }) => 
               <div className="text-center py-10 border border-dashed border-ivory-300 dark:border-espresso-750 rounded-2xl p-6">
                 <CheckCircle2 className="w-10 h-10 mx-auto text-emerald-500 mb-2" />
                 <p className="text-sm font-medium text-espresso-700 dark:text-ivory-200">
-                  {showResolved ? 'No error log entries found.' : 'All clear! No unresolved errors in this view.'}
+                  {showResolved ? 'No resolved errors recorded.' : 'No errors logged yet. Log an error.'}
                 </p>
                 <button
                   onClick={() => setIsAddErrorOpen(true)}
                   className="mt-3 px-4 py-2 rounded-xl text-xs font-semibold text-white shadow-subtle"
                   style={{ backgroundColor: 'var(--accent)' }}
                 >
-                  Log a Mistake
+                  Log Error
                 </button>
               </div>
             ) : (

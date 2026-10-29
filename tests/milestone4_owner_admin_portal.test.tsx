@@ -4,6 +4,10 @@ import { adminService } from '../src/services/adminService';
 import * as authServiceModule from '../src/services/authService';
 import { AdminRoute } from '../src/components/admin/AdminRoute';
 import { AdminConfirmationModal } from '../src/components/admin/AdminConfirmationModal';
+import { SettingsView } from '../src/components/views/SettingsView';
+import { AppProvider } from '../src/context/AppContext';
+import { ThemeProvider } from '../src/theme/ThemeContext';
+import { resolveNavTabFromLocation, VALID_NAV_TABS } from '../src/App';
 
 describe('Milestone 04 — Owner & Platform Administrative Portal', () => {
   beforeEach(() => {
@@ -582,6 +586,101 @@ describe('Milestone 04 — Owner & Platform Administrative Portal', () => {
         expect(onConfirmMock).toHaveBeenCalledWith('Spam cohort created by unauthorized bot');
         expect(onCloseMock).toHaveBeenCalled();
       });
+    });
+  });
+
+  // ============================================================================
+  // 7. Settings UI Admin Link Removal & Route Isolation
+  // ============================================================================
+  describe('7. Settings UI Admin Link Removal & Route Isolation', () => {
+    it('does NOT render "Platform Administrative Portal" or any admin link in the Settings UI', () => {
+      render(
+        <ThemeProvider>
+          <AppProvider>
+            <SettingsView />
+          </AppProvider>
+        </ThemeProvider>
+      );
+
+      // Verify "Platform Administrative Portal" is completely absent from the DOM
+      expect(screen.queryByText(/Platform Administrative Portal/i)).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /Platform Administrative Portal/i })).not.toBeInTheDocument();
+
+      // Verify normal user settings elements still render
+      expect(screen.getByText(/All data stored in your browser's localStorage/i)).toBeInTheDocument();
+      expect(screen.getByText(/Personalisation & Appearance/i)).toBeInTheDocument();
+      expect(screen.getByText(/Reset All Data/i)).toBeInTheDocument();
+    });
+
+    it('preserves /admin and #admin in valid navigation tabs and location resolver', () => {
+      expect(VALID_NAV_TABS).toHaveProperty('admin', 'admin');
+
+      // Test pathname resolution e.g. /admin
+      const originalLocation = window.location;
+      delete (window as any).location;
+
+      (window as any).location = {
+        pathname: '/admin',
+        hash: '',
+      };
+      expect(resolveNavTabFromLocation()).toBe('admin');
+
+      // Test hash resolution e.g. #admin
+      (window as any).location = {
+        pathname: '/',
+        hash: '#admin',
+      };
+      expect(resolveNavTabFromLocation()).toBe('admin');
+
+      // Restore location
+      (window as any).location = originalLocation;
+    });
+
+    it('denies access to non-admin users visiting the /admin route directly', async () => {
+      vi.spyOn(adminService, 'verifyPlatformAdmin').mockResolvedValue({
+        isAdmin: false,
+        userId: 'usr-student-intruder',
+        error: 'Forbidden: Current account is not an authorized platform administrator',
+      });
+
+      const onExitMock = vi.fn();
+      render(<AdminRoute onExit={onExitMock} />);
+
+      await waitFor(() => {
+        expect(screen.getByText(/Platform Administrator Access Required/i)).toBeInTheDocument();
+      });
+
+      expect(screen.getByText(/HTTP 403 · Access Denied/i)).toBeInTheDocument();
+      expect(screen.getByText('usr-student-intruder')).toBeInTheDocument();
+    });
+
+    it('grants full administrative access to authorized platform owner navigating to /admin', async () => {
+      vi.spyOn(adminService, 'verifyPlatformAdmin').mockResolvedValue({
+        isAdmin: true,
+        userId: 'usr-platform-owner-1',
+        role: 'owner',
+      });
+
+      vi.spyOn(adminService, 'fetchOverviewMetrics').mockResolvedValue({
+        data: {
+          total_users: 120,
+          total_workspaces: 8,
+          total_attendance_records: 1540,
+          active_users_7d: 45,
+          system_status: 'operational',
+          timestamp: new Date().toISOString(),
+        },
+      });
+
+      const onExitMock = vi.fn();
+      render(<AdminRoute onExit={onExitMock} />);
+
+      await waitFor(() => {
+        expect(screen.getByText(/Tracker Administrative Portal/i)).toBeInTheDocument();
+      });
+
+      expect(screen.getByText('owner')).toBeInTheDocument();
+      expect(screen.getByText(/System Overview/i)).toBeInTheDocument();
     });
   });
 });

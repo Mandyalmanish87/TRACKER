@@ -28,156 +28,217 @@ export const EduHubPlayer: React.FC<EduHubPlayerProps> = ({
   onMarkComplete,
 }) => {
   const containerId = 'eduhub-youtube-player-frame';
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<any>(null);
+  const isPlayerReadyRef = useRef<boolean>(false);
+  const currentVideoIdRef = useRef<string | null>(null);
+  const pendingVideoRef = useRef<{ videoId: string; startSeconds: number } | null>(null);
   const progressIntervalRef = useRef<any>(null);
+
+  // Keep fresh refs to props to eliminate stale closures in player callbacks
+  const lectureRef = useRef<EduHubLecture | null>(lecture);
+  lectureRef.current = lecture;
+  const onUpdateProgressRef = useRef(onUpdateProgress);
+  onUpdateProgressRef.current = onUpdateProgress;
+  const onMarkCompleteRef = useRef(onMarkComplete);
+  onMarkCompleteRef.current = onMarkComplete;
+
   const [errorInfo, setErrorInfo] = useState<PlayerErrorInfo | null>(null);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [currentTime, setCurrentTime] = useState<number>(0);
   const [duration, setDuration] = useState<number>(0);
-  const [initialSeekDone, setInitialSeekDone] = useState<boolean>(false);
   const [retryCount, setRetryCount] = useState<number>(0);
 
+  // Sync basic display time/duration when selected lecture changes
   useEffect(() => {
-    setCurrentTime(lecture?.lastPositionSeconds || 0);
-    setDuration(lecture?.durationSeconds || 0);
-    setInitialSeekDone(false);
+    if (!lecture) {
+      setCurrentTime(0);
+      setDuration(0);
+      setErrorInfo(null);
+      return;
+    }
+    setCurrentTime(lecture.lastPositionSeconds || 0);
+    setDuration(lecture.durationSeconds || 0);
     setErrorInfo(null);
   }, [lecture?.id]);
 
-  useEffect(() => {
-    if (!lecture || !lecture.videoId) return;
-
-    let unmounted = false;
-
-    function cleanupPlayer() {
-      if (progressIntervalRef.current) {
-        clearInterval(progressIntervalRef.current);
-        progressIntervalRef.current = null;
-      }
-      if (playerRef.current && typeof playerRef.current.destroy === 'function') {
-        try {
-          playerRef.current.destroy();
-        } catch {}
-        playerRef.current = null;
-      }
+  // Player cleanup function
+  const cleanupPlayer = () => {
+    if (progressIntervalRef.current) {
+      clearInterval(progressIntervalRef.current);
+      progressIntervalRef.current = null;
     }
-
-    function initPlayer() {
-      if (unmounted || !window.YT || !window.YT.Player || !lecture) return;
-      const currentLecture = lecture;
-      cleanupPlayer();
-
-      const el = document.getElementById(containerId);
-      if (!el) return;
-
+    isPlayerReadyRef.current = false;
+    currentVideoIdRef.current = null;
+    pendingVideoRef.current = null;
+    if (playerRef.current && typeof playerRef.current.destroy === 'function') {
       try {
-        playerRef.current = new window.YT.Player(containerId, {
-          height: '100%',
-          width: '100%',
-          videoId: currentLecture.videoId,
-          playerVars: {
-            autoplay: 0,
-            controls: 1,
-            modestbranding: 1,
-            rel: 0,
-            playsinline: 1,
-            start:
-              currentLecture.lastPositionSeconds > 5
-                ? Math.floor(currentLecture.lastPositionSeconds)
-                : 0,
+        playerRef.current.destroy();
+      } catch {}
+      playerRef.current = null;
+    }
+  };
+
+  // Helper to instantiate YouTube Player
+  const initPlayer = (targetLecture: EduHubLecture) => {
+    if (!window.YT || !window.YT.Player || !targetLecture.videoId) return;
+
+    cleanupPlayer();
+
+    // Ensure target DOM container exists inside wrapper
+    let el = document.getElementById(containerId);
+    if (!el && wrapperRef.current) {
+      el = document.createElement('div');
+      el.id = containerId;
+      el.className = 'w-full h-full';
+      wrapperRef.current.insertBefore(el, wrapperRef.current.firstChild);
+    }
+    if (!el) return;
+
+    currentVideoIdRef.current = targetLecture.videoId;
+    const startSeconds =
+      targetLecture.lastPositionSeconds > 5 ? Math.floor(targetLecture.lastPositionSeconds) : 0;
+
+    try {
+      playerRef.current = new window.YT.Player(containerId, {
+        height: '100%',
+        width: '100%',
+        videoId: targetLecture.videoId,
+        playerVars: {
+          autoplay: 0,
+          controls: 1,
+          modestbranding: 1,
+          rel: 0,
+          playsinline: 1,
+          start: startSeconds,
+        },
+        events: {
+          onReady: (event: any) => {
+            isPlayerReadyRef.current = true;
+            setErrorInfo(null);
+
+            // If a different video was selected while player was initializing
+            if (
+              pendingVideoRef.current &&
+              pendingVideoRef.current.videoId !== currentVideoIdRef.current
+            ) {
+              const pending = pendingVideoRef.current;
+              pendingVideoRef.current = null;
+              currentVideoIdRef.current = pending.videoId;
+              try {
+                event.target.loadVideoById({
+                  videoId: pending.videoId,
+                  startSeconds: pending.startSeconds,
+                });
+              } catch {
+                event.target.loadVideoById(pending.videoId, pending.startSeconds);
+              }
+              return;
+            }
+
+            const activeLecture = lectureRef.current;
+            if (!activeLecture) return;
+
+            try {
+              const dur = event.target.getDuration();
+              if (dur && dur > 0) {
+                setDuration(dur);
+                onUpdateProgressRef.current(activeLecture.lastPositionSeconds || 0, dur);
+              }
+              if (activeLecture.lastPositionSeconds > 5) {
+                event.target.seekTo(activeLecture.lastPositionSeconds, true);
+              }
+            } catch {}
           },
-          events: {
-            onReady: (event: any) => {
-              if (unmounted) return;
+          onStateChange: (event: any) => {
+            // 1 = playing, 2 = paused, 0 = ended
+            if (event.data === 1) {
+              setIsPlaying(true);
               setErrorInfo(null);
+
               try {
                 const dur = event.target.getDuration();
-                if (dur && dur > 0) {
-                  setDuration(dur);
-                  onUpdateProgress(currentLecture.lastPositionSeconds || 0, dur);
-                }
-                // Seek to saved position if starting above 5s
-                if (currentLecture.lastPositionSeconds > 5 && !initialSeekDone) {
-                  event.target.seekTo(currentLecture.lastPositionSeconds, true);
-                  setInitialSeekDone(true);
-                }
+                if (dur && dur > 0) setDuration(dur);
               } catch {}
-            },
-            onStateChange: (event: any) => {
-              if (unmounted) return;
-              // 1 = playing, 2 = paused, 0 = ended
-              if (event.data === 1) {
-                setIsPlaying(true);
-                setErrorInfo(null);
 
-                if (!progressIntervalRef.current) {
-                  progressIntervalRef.current = setInterval(() => {
-                    if (playerRef.current && typeof playerRef.current.getCurrentTime === 'function') {
-                      try {
-                        const cur = playerRef.current.getCurrentTime() || 0;
-                        const dur = playerRef.current.getDuration() || duration;
-                        setCurrentTime(cur);
-                        if (dur > 0) setDuration(dur);
+              if (!progressIntervalRef.current) {
+                progressIntervalRef.current = setInterval(() => {
+                  if (playerRef.current && typeof playerRef.current.getCurrentTime === 'function') {
+                    try {
+                      const cur = playerRef.current.getCurrentTime() || 0;
+                      const dur = playerRef.current.getDuration() || 0;
+                      setCurrentTime(cur);
+                      if (dur > 0) setDuration(dur);
 
-                        onUpdateProgress(cur, dur);
+                      const activeLecture = lectureRef.current;
+                      if (activeLecture) {
+                        onUpdateProgressRef.current(cur, dur);
 
-                        // If reached 90% completion threshold
-                        if (dur > 0 && cur >= dur * 0.9 && !currentLecture.completed && onMarkComplete) {
-                          onMarkComplete();
+                        if (
+                          dur > 0 &&
+                          cur >= dur * 0.9 &&
+                          !activeLecture.completed &&
+                          onMarkCompleteRef.current
+                        ) {
+                          onMarkCompleteRef.current();
                         }
-                      } catch {}
-                    }
-                  }, 1000);
-                }
-              } else if (event.data === 2 || event.data === 0) {
-                setIsPlaying(false);
-                if (progressIntervalRef.current) {
-                  clearInterval(progressIntervalRef.current);
-                  progressIntervalRef.current = null;
-                }
-                if (playerRef.current && typeof playerRef.current.getCurrentTime === 'function') {
-                  const cur = playerRef.current.getCurrentTime() || 0;
-                  const dur = playerRef.current.getDuration() || duration;
-                  onUpdateProgress(cur, dur);
-                }
+                      }
+                    } catch {}
+                  }
+                }, 1000);
               }
-            },
-            onError: (event: any) => {
-              if (unmounted) return;
+            } else if (event.data === 2 || event.data === 0) {
               setIsPlaying(false);
-              const code = Number(event?.data);
-              if (code === 101 || code === 150) {
-                setErrorInfo({
-                  type: 'restricted',
-                  title: 'Video Embedding Restricted by Creator',
-                  message:
-                    'The creator has disabled playing this video on external websites. Watch directly on YouTube, then return to record your notes and course progress.',
-                });
-              } else if (code === 100 || code === 2) {
-                setErrorInfo({
-                  type: 'unavailable',
-                  title: 'Lecture Video Unavailable',
-                  message:
-                    'This video cannot be found, has been removed, or was marked private on YouTube.',
-                });
-              } else {
-                setErrorInfo({
-                  type: 'error',
-                  title: 'Playback Issue Encountered',
-                  message:
-                    'YouTube encountered an issue loading this video stream. Please watch directly on YouTube or retry the player.',
-                });
+              if (progressIntervalRef.current) {
+                clearInterval(progressIntervalRef.current);
+                progressIntervalRef.current = null;
               }
-            },
+              if (playerRef.current && typeof playerRef.current.getCurrentTime === 'function') {
+                try {
+                  const cur = playerRef.current.getCurrentTime() || 0;
+                  const dur = playerRef.current.getDuration() || 0;
+                  onUpdateProgressRef.current(cur, dur);
+                } catch {}
+              }
+            }
           },
-        });
-      } catch (err) {
-        console.error('[EduHubPlayer] Failed to instantiate YouTube player:', err);
-      }
+          onError: (event: any) => {
+            setIsPlaying(false);
+            const code = Number(event?.data);
+            if (code === 101 || code === 150) {
+              setErrorInfo({
+                type: 'restricted',
+                title: 'Video Embedding Restricted by Creator',
+                message:
+                  'The creator has disabled playing this video on external websites. Watch directly on YouTube, then return to record your notes and course progress.',
+              });
+            } else if (code === 100 || code === 2) {
+              setErrorInfo({
+                type: 'unavailable',
+                title: 'Lecture Video Unavailable',
+                message:
+                  'This video cannot be found, has been removed, or was marked private on YouTube.',
+              });
+            } else {
+              setErrorInfo({
+                type: 'error',
+                title: 'Playback Issue Encountered',
+                message:
+                  'YouTube encountered an issue loading this video stream. Please watch directly on YouTube or retry the player.',
+              });
+            }
+          },
+        },
+      });
+    } catch (err) {
+      console.error('[EduHubPlayer] Failed to instantiate YouTube player:', err);
     }
+  };
 
+  // Helper to load or ensure YouTube iframe API script is loaded
+  const ensureYouTubeApi = (callback: () => void) => {
     if (window.YT && window.YT.Player) {
-      initPlayer();
+      callback();
     } else {
       const existingScript = document.getElementById('youtube-iframe-api-script');
       if (!existingScript) {
@@ -190,15 +251,78 @@ export const EduHubPlayer: React.FC<EduHubPlayerProps> = ({
       const prevCallback = window.onYouTubeIframeAPIReady;
       window.onYouTubeIframeAPIReady = () => {
         if (typeof prevCallback === 'function') prevCallback();
-        initPlayer();
+        callback();
       };
+    }
+  };
+
+  // Effect 1: Player Lifecycle (initial mount, retry button, full unmount)
+  useEffect(() => {
+    if (lecture && lecture.videoId) {
+      ensureYouTubeApi(() => {
+        if (lectureRef.current) {
+          initPlayer(lectureRef.current);
+        }
+      });
     }
 
     return () => {
-      unmounted = true;
       cleanupPlayer();
     };
-  }, [lecture?.id, lecture?.videoId, retryCount]);
+  }, [retryCount]);
+
+  // Effect 2: Playlist Video Switching (runs when lecture changes without destroying/recreating player)
+  useEffect(() => {
+    if (!lecture || !lecture.videoId) return;
+
+    // Reset any previous video error display when selecting another video
+    setErrorInfo(null);
+
+    // If player is already instantiated and ready, load new video smoothly without tearing down iframe
+    if (playerRef.current && isPlayerReadyRef.current) {
+      if (currentVideoIdRef.current !== lecture.videoId) {
+        currentVideoIdRef.current = lecture.videoId;
+        const startSeconds =
+          lecture.lastPositionSeconds > 5 ? Math.floor(lecture.lastPositionSeconds) : 0;
+        try {
+          if (typeof playerRef.current.loadVideoById === 'function') {
+            playerRef.current.loadVideoById({
+              videoId: lecture.videoId,
+              startSeconds,
+            });
+          }
+        } catch {
+          try {
+            playerRef.current.loadVideoById(lecture.videoId, startSeconds);
+          } catch (err) {
+            console.error('[EduHubPlayer] Error switching video via loadVideoById:', err);
+          }
+        }
+      }
+      return;
+    }
+
+    // If player is instantiated but still initializing, queue the pending video
+    if (playerRef.current && !isPlayerReadyRef.current) {
+      if (currentVideoIdRef.current !== lecture.videoId) {
+        pendingVideoRef.current = {
+          videoId: lecture.videoId,
+          startSeconds:
+            lecture.lastPositionSeconds > 5 ? Math.floor(lecture.lastPositionSeconds) : 0,
+        };
+      }
+      return;
+    }
+
+    // If player is not yet instantiated (e.g. mounted with lecture === null), initialize it
+    if (!playerRef.current) {
+      ensureYouTubeApi(() => {
+        if (lectureRef.current) {
+          initPlayer(lectureRef.current);
+        }
+      });
+    }
+  }, [lecture?.id, lecture?.videoId]);
 
   const handleRetry = () => {
     setErrorInfo(null);
@@ -226,10 +350,12 @@ export const EduHubPlayer: React.FC<EduHubPlayerProps> = ({
   return (
     <div className="w-full space-y-3">
       {/* Video Container */}
-      <div className="w-full aspect-video rounded-2xl overflow-hidden bg-espresso-950 border border-ivory-300 dark:border-espresso-750 shadow-2xl relative">
-        {/* Dynamic clean container for YouTube Iframe */}
+      <div
+        ref={wrapperRef}
+        className="w-full aspect-video rounded-2xl overflow-hidden bg-espresso-950 border border-ivory-300 dark:border-espresso-750 shadow-2xl relative"
+      >
+        {/* Persistent container for YouTube Iframe - no dynamic key so iframe survives video switching */}
         <div
-          key={`${lecture.id}-${retryCount}`}
           id={containerId}
           className={`w-full h-full ${errorInfo ? 'hidden' : 'block'}`}
         />

@@ -1,5 +1,7 @@
 import { EduHubCourse, EduHubLecture, YouTubePlaylistPreview } from '../types/eduhub';
 import { parseYouTubeVideoId } from '../components/focus-radio/youtubeUtils';
+import { storageService } from './storage';
+import { cloudSyncService } from './cloudSyncService';
 
 const STORAGE_KEY = 'tracker_eduhub_courses_v1';
 
@@ -122,21 +124,29 @@ export const SAMPLE_EDUHUB_COURSE: EduHubCourse = {
  * Loads all EduHub courses from localStorage.
  */
 export function loadEduHubCourses(): EduHubCourse[] {
-  if (typeof window === 'undefined') return [SAMPLE_EDUHUB_COURSE];
+  if (typeof window === 'undefined') return [];
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
+        return parsed.filter((c: any) => c && !c.isSample && c.id !== 'sample-cs50-intro');
+      }
+    }
+    // Fallback: check if active AppStateData has eduhubCourses
+    const v2Raw = localStorage.getItem('tracker_app_data_v2');
+    if (v2Raw) {
+      const v2Parsed = JSON.parse(v2Raw);
+      if (Array.isArray(v2Parsed?.eduhubCourses) && v2Parsed.eduhubCourses.length > 0) {
+        return v2Parsed.eduhubCourses.filter((c: any) => c && !c.isSample && c.id !== 'sample-cs50-intro');
       }
     }
   } catch (err) {
     console.error('[EduHubStorage] Failed to read courses from localStorage:', err);
   }
 
-  // Fallback to sample course for preview/onboarding
-  return [SAMPLE_EDUHUB_COURSE];
+  // Clean empty state for production
+  return [];
 }
 
 /**
@@ -146,6 +156,7 @@ export function saveEduHubCourses(courses: EduHubCourse[]): void {
   if (typeof window === 'undefined') return;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(courses));
+    window.dispatchEvent(new CustomEvent('tracker_eduhub_updated', { detail: courses }));
   } catch (err) {
     console.error('[EduHubStorage] Failed to save courses to localStorage:', err);
   }
@@ -315,6 +326,27 @@ export function deleteCourse(courseId: string): EduHubCourse[] {
   const courses = loadEduHubCourses();
   const updated = courses.filter((c) => c.id !== courseId);
   saveEduHubCourses(updated);
+
+  try {
+    const activeData = storageService.loadData();
+    const updatedTombstones = cloudSyncService.addTombstone(activeData.tombstones, courseId, 'eduhubCourses');
+    storageService.saveData({
+      ...activeData,
+      eduhubCourses: updated,
+      tombstones: updatedTombstones,
+    });
+  } catch {}
+
+  if (typeof window !== 'undefined') {
+    try {
+      window.dispatchEvent(
+        new CustomEvent('tracker_eduhub_deleted', {
+          detail: { courseId },
+        })
+      );
+    } catch {}
+  }
+
   return updated;
 }
 

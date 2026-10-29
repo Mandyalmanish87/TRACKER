@@ -14,16 +14,11 @@ describe('Milestone 3: Syllabus Tracker, Smart Calendar & GPT Timetable Importer
   });
 
   describe('Syllabus Data Persistence & Calculations', () => {
-    it('initializes with default starter subjects and preserves them', () => {
+    it('initializes with clean empty syllabus state for fresh users', () => {
       storageService.populateSampleData();
       const data = loadData();
       expect(data.syllabusSubjects).toBeDefined();
-      expect(data.syllabusSubjects!.length).toBe(4);
-      const names = data.syllabusSubjects!.map((s) => s.name);
-      expect(names).toContain('Physics');
-      expect(names).toContain('Chemistry');
-      expect(names).toContain('Mathematics');
-      expect(names).toContain('Biology');
+      expect(data.syllabusSubjects!.length).toBe(0);
     });
 
     it('handles zero-topic subjects safely without division-by-zero or NaN', () => {
