@@ -356,6 +356,8 @@ export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const createWorkspace = async (details: {
     name: string;
+    institution?: string;
+    college?: string;
     department?: string;
     section?: string;
     batch?: string;
@@ -365,6 +367,9 @@ export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     if (res.workspace) {
       setWorkspaces((prev) => [...prev, res.workspace!]);
       setActiveWorkspace(res.workspace);
+      if (res.member) {
+        setMembers([res.member]);
+      }
     }
     return res;
   };

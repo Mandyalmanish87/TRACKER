@@ -150,6 +150,21 @@ export function isLocalId(id?: string | null): boolean {
 }
 
 /**
+ * Formats Supabase PostgREST error objects with code, details, and hint.
+ */
+export function formatSupabaseError(err: any, fallback: string = 'An unknown cloud error occurred.'): string {
+  if (!err) return fallback;
+  if (typeof err === 'string') return err;
+  const parts: string[] = [];
+  if (err.message) parts.push(err.message);
+  else parts.push(fallback);
+  if (err.code) parts.push(`(code: ${err.code})`);
+  if (err.details) parts.push(`details: ${err.details}`);
+  if (err.hint) parts.push(`hint: ${err.hint}`);
+  return parts.join(' - ');
+}
+
+/**
  * Checks whether cloud Supabase is available and ready for operation.
  * In production, strictly requires genuine credentials.
  * In test mode, permits active mocked Supabase client instances.
@@ -279,9 +294,13 @@ export const classSpaceService = {
     const now = new Date().toISOString();
     const wsId = 'ws_' + Math.random().toString(36).substring(2, 11);
 
+    const instName = details.institution?.trim() || details.college?.trim();
+
     const newWorkspace: ClassSpaceWorkspace = {
       id: wsId,
       name: details.name.trim(),
+      institution: instName,
+      college: instName,
       department: details.department?.trim(),
       section: details.section?.trim(),
       batch: details.batch?.trim(),
@@ -292,11 +311,11 @@ export const classSpaceService = {
       updatedAt: now,
     };
 
-    const crMember: ClassSpaceMember = {
+    const ownerMember: ClassSpaceMember = {
       id: 'mem_' + Math.random().toString(36).substring(2, 11),
       workspaceId: wsId,
       userId: user.id,
-      role: 'cr',
+      role: 'owner',
       joinedAt: now,
       displayName: user.name || user.email.split('@')[0],
       email: user.email,
@@ -309,10 +328,60 @@ export const classSpaceService = {
         return { error: 'Authentication required: You must be signed in with a verified account to create cloud ClassSpace workspaces.' };
       }
       try {
+        // Strategy 1: Server-authoritative atomic creation via RPC
+        if (typeof supabase.rpc === 'function') {
+          try {
+            const { data: rpcData, error: rpcError } = await supabase.rpc('create_class_workspace', {
+              p_name: newWorkspace.name,
+              p_institution: instName || null,
+              p_department: newWorkspace.department || null,
+              p_section: newWorkspace.section || null,
+              p_batch: newWorkspace.batch || null,
+              p_description: newWorkspace.description || null,
+              p_display_name: ownerMember.displayName,
+              p_avatar_url: ownerMember.avatarUrl || null,
+            });
+
+            if (rpcError) {
+              const isMissingFunction =
+                rpcError.code === 'PGRST202' ||
+                rpcError.code === '42883' ||
+                /function .* does not exist|could not find the function/i.test(rpcError.message || '');
+
+              // For ANY unexpected server error that is NOT a missing function, fail fast and report real Supabase error.
+              // NEVER fall back to direct table insertion on permissions or database errors.
+              if (!isMissingFunction) {
+                console.error('[ClassSpaceService] create_class_workspace RPC error:', rpcError);
+                return { error: formatSupabaseError(rpcError, 'Cloud workspace creation RPC failed') };
+              }
+
+              console.warn('[ClassSpaceService] create_class_workspace RPC missing on server, attempting fallback direct insert:', rpcError);
+            } else if (rpcData && typeof rpcData === 'object') {
+              if ('error' in rpcData && rpcData.error) {
+                return { error: String(rpcData.error) };
+              }
+              if ('workspace' in rpcData && 'member' in rpcData) {
+                const cloudWs = mapWorkspaceFromDb(rpcData.workspace);
+                const cloudMem = mapMemberFromDb(rpcData.member);
+                if (user.email && !cloudMem.email) {
+                  cloudMem.email = user.email;
+                }
+                return { workspace: cloudWs, member: cloudMem };
+              }
+              return { error: 'Unexpected response format from create_class_workspace RPC.' };
+            }
+          } catch (rpcErr) {
+            console.warn('[ClassSpaceService] create_class_workspace RPC threw unexpectedly:', rpcErr);
+            return { error: rpcErr instanceof Error ? rpcErr.message : 'ClassSpace creation failed on cloud server.' };
+          }
+        }
+
+        // Strategy 2: Direct table insert fallback if RPC is unconfigured/pending migration
         const { data: wsData, error: wsError } = await supabase
           .from('class_workspaces')
           .insert({
             name: newWorkspace.name,
+            institution: instName,
             department: newWorkspace.department,
             section: newWorkspace.section,
             batch: newWorkspace.batch,
@@ -323,7 +392,9 @@ export const classSpaceService = {
           .select()
           .single();
 
-        if (wsError) return { error: wsError.message };
+        if (wsError) {
+          return { error: formatSupabaseError(wsError, 'Failed to create workspace in cloud') };
+        }
 
         const insertedWs = mapWorkspaceFromDb(wsData);
 
@@ -332,17 +403,27 @@ export const classSpaceService = {
           .insert({
             workspace_id: insertedWs.id,
             user_id: user.id,
-            role: 'cr',
-            display_name: crMember.displayName,
-            email: crMember.email,
-            avatar_url: crMember.avatarUrl,
+            role: 'owner',
+            display_name: ownerMember.displayName,
+            avatar_url: ownerMember.avatarUrl,
           })
           .select()
           .single();
 
-        if (mError) return { error: mError.message };
+        if (mError) {
+          // Clean up dangling workspace if initial member insert fails
+          try {
+            await supabase.from('class_workspaces').delete().eq('id', insertedWs.id);
+          } catch {}
+          return { error: formatSupabaseError(mError, 'Failed to create workspace owner membership in cloud') };
+        }
 
-        return { workspace: insertedWs, member: mapMemberFromDb(mData) };
+        const insertedMember = mapMemberFromDb(mData);
+        if (user.email && !insertedMember.email) {
+          insertedMember.email = user.email;
+        }
+
+        return { workspace: insertedWs, member: insertedMember };
       } catch (err) {
         console.warn('[ClassSpaceService] Supabase createWorkspace error:', err);
         return { error: err instanceof Error ? err.message : 'Failed to create workspace in cloud.' };
@@ -351,10 +432,10 @@ export const classSpaceService = {
 
     // Local fallback
     local.workspaces.push(newWorkspace);
-    local.members.push(crMember);
+    local.members.push(ownerMember);
     saveLocalData(local);
 
-    return { workspace: newWorkspace, member: crMember };
+    return { workspace: newWorkspace, member: ownerMember };
   },
 
   async joinWorkspaceByCode(
@@ -396,9 +477,13 @@ export const classSpaceService = {
             return { error: String(data.error) };
           }
           if ('workspace' in data && 'member' in data) {
+            const joinedMember = mapMemberFromDb(data.member);
+            if (user.email && !joinedMember.email) {
+              joinedMember.email = user.email;
+            }
             return {
               workspace: mapWorkspaceFromDb(data.workspace),
-              member: mapMemberFromDb(data.member),
+              member: joinedMember,
             };
           }
         }
@@ -473,12 +558,13 @@ export const classSpaceService = {
 
         if (Array.isArray(data) && data.length > 0) {
           const row = data[0];
+          const inst = row.institution || row.college || undefined;
           return {
             workspace: {
               id: row.id,
               name: row.name,
-              college: row.college,
-              institution: row.institution,
+              college: inst,
+              institution: inst,
               department: row.department,
               section: row.section,
               batch: row.batch,
@@ -1969,9 +2055,12 @@ export const classSpaceService = {
 // ==============================================================================
 
 function mapWorkspaceFromDb(row: any): ClassSpaceWorkspace {
+  const inst = row.institution || row.college || undefined;
   return {
     id: row.id,
     name: row.name,
+    college: inst,
+    institution: inst,
     department: row.department,
     section: row.section,
     batch: row.batch,

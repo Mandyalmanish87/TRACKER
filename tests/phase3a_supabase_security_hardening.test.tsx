@@ -621,6 +621,288 @@ describe('Phase 3A — Supabase Security Fix & Local-ID Hardening', () => {
       expect(stored.workspaces.length).toBe(0);
     });
 
+    it('creates a cloud workspace and initial owner membership using only valid database columns (no email in class_members insert)', async () => {
+      const cloudCR: authServiceModule.AuthUser = {
+        id: '92d1c68e-9407-4bf6-90c0-67c6999a46ea',
+        email: 'prof.cr@university.edu',
+        name: 'Professor Jane CR',
+        isSimulated: false,
+      };
+
+      const insertedWorkspaceRow = {
+        id: 'b819f71c-3b98-4c12-b91c-7fd4c2ef6571',
+        name: 'Cloud Distributed Systems',
+        institution: 'Tech Institute',
+        department: 'CS',
+        section: 'A',
+        batch: '2026',
+        description: 'Advanced distributed systems cohort',
+        join_code: '4B8XY',
+        created_by: cloudCR.id,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+
+      const insertedMemberRow = {
+        id: 'e2a3c4d5-6789-4abc-8def-0123456789ab',
+        workspace_id: 'b819f71c-3b98-4c12-b91c-7fd4c2ef6571',
+        user_id: cloudCR.id,
+        role: 'owner',
+        display_name: 'Professor Jane CR',
+        avatar_url: null,
+        is_muted: false,
+        joined_at: new Date().toISOString(),
+      };
+
+      let capturedMemberPayload: any = null;
+      let capturedWorkspacePayload: any = null;
+
+      const mockSupabase = {
+        from: vi.fn().mockImplementation((table: string) => {
+          if (table === 'class_workspaces') {
+            return {
+              insert: vi.fn().mockImplementation((payload: any) => {
+                capturedWorkspacePayload = payload;
+                return {
+                  select: vi.fn().mockReturnValue({
+                    single: vi.fn().mockResolvedValue({ data: insertedWorkspaceRow, error: null }),
+                  }),
+                };
+              }),
+            };
+          }
+          if (table === 'class_members') {
+            return {
+              insert: vi.fn().mockImplementation((payload: any) => {
+                capturedMemberPayload = payload;
+                return {
+                  select: vi.fn().mockReturnValue({
+                    single: vi.fn().mockResolvedValue({ data: insertedMemberRow, error: null }),
+                  }),
+                };
+              }),
+            };
+          }
+          throw new Error(`Unexpected table: ${table}`);
+        }),
+      } as any;
+
+      vi.spyOn(authServiceModule, 'getSupabaseClient').mockReturnValue(mockSupabase);
+
+      const createRes = await classSpaceService.createWorkspace(cloudCR, {
+        name: 'Cloud Distributed Systems',
+        institution: 'Tech Institute',
+        department: 'CS',
+        section: 'A',
+        batch: '2026',
+        description: 'Advanced distributed systems cohort',
+      });
+
+      // 1. Success assertions
+      expect(createRes.error).toBeUndefined();
+      expect(createRes.workspace).toBeDefined();
+      expect(createRes.workspace?.id).toBe('b819f71c-3b98-4c12-b91c-7fd4c2ef6571');
+      expect(createRes.member).toBeDefined();
+      expect(createRes.member?.role).toBe('owner');
+
+      // 2. Strict database schema payload assertions
+      expect(capturedWorkspacePayload).toBeDefined();
+      expect(capturedWorkspacePayload.name).toBe('Cloud Distributed Systems');
+      expect(capturedWorkspacePayload.institution).toBe('Tech Institute');
+      expect(capturedWorkspacePayload.created_by).toBe(cloudCR.id);
+
+      expect(capturedMemberPayload).toBeDefined();
+      expect(capturedMemberPayload.workspace_id).toBe('b819f71c-3b98-4c12-b91c-7fd4c2ef6571');
+      expect(capturedMemberPayload.user_id).toBe(cloudCR.id);
+      expect(capturedMemberPayload.role).toBe('owner');
+      expect(capturedMemberPayload.display_name).toBe('Professor Jane CR');
+
+      // CRITICAL: Ensure 'email' column is NOT sent in the database insert payload
+      expect(capturedMemberPayload).not.toHaveProperty('email');
+      expect(Object.keys(capturedMemberPayload)).not.toContain('email');
+
+      // 3. Current user session preserves email locally for client UI
+      expect(createRes.member?.email).toBe('prof.cr@university.edu');
+    });
+
+    it('creates a cloud workspace atomically via create_class_workspace RPC when available', async () => {
+      const cloudCR: authServiceModule.AuthUser = {
+        id: '92d1c68e-9407-4bf6-90c0-67c6999a46ea',
+        email: 'prof.atomic@university.edu',
+        name: 'Professor Atomic CR',
+        isSimulated: false,
+      };
+
+      let capturedRpcParams: any = null;
+      const mockSupabase = {
+        rpc: vi.fn().mockImplementation((fnName: string, params: any) => {
+          if (fnName === 'create_class_workspace') {
+            capturedRpcParams = params;
+            return Promise.resolve({
+              data: {
+                workspace: {
+                  id: 'a1b2c3d4-e5f6-4a1b-8c2d-3e4f5a6b7c8d',
+                  name: params.p_name,
+                  institution: params.p_institution,
+                  department: params.p_department,
+                  section: params.p_section,
+                  batch: params.p_batch,
+                  description: params.p_description,
+                  join_code: 'AT001',
+                  created_by: cloudCR.id,
+                  created_at: new Date().toISOString(),
+                  updated_at: new Date().toISOString(),
+                },
+                member: {
+                  id: 'm1b2c3d4-e5f6-4a1b-8c2d-3e4f5a6b7c8d',
+                  workspace_id: 'a1b2c3d4-e5f6-4a1b-8c2d-3e4f5a6b7c8d',
+                  user_id: cloudCR.id,
+                  role: 'owner',
+                  display_name: params.p_display_name,
+                  avatar_url: params.p_avatar_url,
+                  is_muted: false,
+                  joined_at: new Date().toISOString(),
+                },
+              },
+              error: null,
+            });
+          }
+          throw new Error(`Unexpected RPC: ${fnName}`);
+        }),
+      } as any;
+
+      vi.spyOn(authServiceModule, 'getSupabaseClient').mockReturnValue(mockSupabase);
+
+      const res = await classSpaceService.createWorkspace(cloudCR, {
+        name: 'Atomic Cloud Workspace',
+        institution: 'MIT',
+        department: 'EECS',
+        section: '6-3',
+        batch: '2026',
+        description: 'Atomic creation test',
+      });
+
+      expect(res.error).toBeUndefined();
+      expect(res.workspace).toBeDefined();
+      expect(res.workspace?.id).toBe('a1b2c3d4-e5f6-4a1b-8c2d-3e4f5a6b7c8d');
+      expect(res.workspace?.institution).toBe('MIT');
+      expect(res.workspace?.college).toBe('MIT');
+      expect(res.member?.role).toBe('owner');
+      expect(res.member?.email).toBe('prof.atomic@university.edu');
+
+      expect(capturedRpcParams).toEqual({
+        p_name: 'Atomic Cloud Workspace',
+        p_institution: 'MIT',
+        p_department: 'EECS',
+        p_section: '6-3',
+        p_batch: '2026',
+        p_description: 'Atomic creation test',
+        p_display_name: 'Professor Atomic CR',
+        p_avatar_url: null,
+      });
+    });
+
+    it('cleans up dangling workspace when direct member insert fails in fallback mode', async () => {
+      const cloudCR: authServiceModule.AuthUser = {
+        id: '92d1c68e-9407-4bf6-90c0-67c6999a46ea',
+        email: 'prof.cleanup@university.edu',
+        name: 'Professor Cleanup',
+        isSimulated: false,
+      };
+
+      let deletedWorkspaceId: string | null = null;
+
+      const mockSupabase = {
+        from: vi.fn().mockImplementation((table: string) => {
+          if (table === 'class_workspaces') {
+            return {
+              insert: vi.fn().mockReturnValue({
+                select: vi.fn().mockReturnValue({
+                  single: vi.fn().mockResolvedValue({
+                    data: {
+                      id: 'orphan-workspace-uuid-1234',
+                      name: 'Orphan Space',
+                      created_by: cloudCR.id,
+                      created_at: new Date().toISOString(),
+                      updated_at: new Date().toISOString(),
+                    },
+                    error: null,
+                  }),
+                }),
+              }),
+              delete: vi.fn().mockReturnValue({
+                eq: vi.fn().mockImplementation((col: string, val: string) => {
+                  if (col === 'id') deletedWorkspaceId = val;
+                  return Promise.resolve({ error: null });
+                }),
+              }),
+            };
+          }
+          if (table === 'class_members') {
+            return {
+              insert: vi.fn().mockReturnValue({
+                select: vi.fn().mockReturnValue({
+                  single: vi.fn().mockResolvedValue({
+                    data: null,
+                    error: { message: 'RLS policy violation for class_members' },
+                  }),
+                }),
+              }),
+            };
+          }
+          throw new Error(`Unexpected table: ${table}`);
+        }),
+      } as any;
+
+      vi.spyOn(authServiceModule, 'getSupabaseClient').mockReturnValue(mockSupabase);
+
+      const res = await classSpaceService.createWorkspace(cloudCR, {
+        name: 'Orphan Space',
+      });
+
+      expect(res.error).toMatch(/RLS policy violation for class_members/);
+      expect(res.workspace).toBeUndefined();
+      expect(deletedWorkspaceId).toBe('orphan-workspace-uuid-1234');
+    });
+
+    it('fails fast with formatted error and does NOT fall back to direct table insert when RPC returns unexpected server error', async () => {
+      const cloudCR: authServiceModule.AuthUser = {
+        id: '92d1c68e-9407-4bf6-90c0-67c6999a46ea',
+        email: 'prof.error@university.edu',
+        name: 'Professor Error',
+        isSimulated: false,
+      };
+
+      const fromSpy = vi.fn();
+      const mockSupabase = {
+        rpc: vi.fn().mockResolvedValue({
+          data: null,
+          error: {
+            code: '42501',
+            message: 'permission denied for schema public',
+            details: 'Role authenticated does not have USAGE on schema public',
+            hint: 'Grant usage on schema public to authenticated',
+          },
+        }),
+        from: fromSpy,
+      } as any;
+
+      vi.spyOn(authServiceModule, 'getSupabaseClient').mockReturnValue(mockSupabase);
+
+      const res = await classSpaceService.createWorkspace(cloudCR, {
+        name: 'Perm Denied Space',
+      });
+
+      expect(res.workspace).toBeUndefined();
+      expect(res.error).toContain('permission denied for schema public');
+      expect(res.error).toContain('(code: 42501)');
+      expect(res.error).toContain('details: Role authenticated does not have USAGE on schema public');
+      expect(res.error).toContain('hint: Grant usage on schema public to authenticated');
+
+      // CRITICAL: Ensure fallback direct table insert was NEVER executed
+      expect(fromSpy).not.toHaveBeenCalled();
+    });
+
     it('rejects join-code rotation when database RLS denies update (0 rows returned)', async () => {
       const workspaceUuid = 'b819f71c-3b98-4c12-b91c-7fd4c2ef6571';
       const userUuid = '92d1c68e-9407-4bf6-90c0-67c6999a46ea';
@@ -723,7 +1005,7 @@ describe('Phase 3A — Supabase Security Fix & Local-ID Hardening', () => {
       expect(created.error).toBeUndefined();
       expect(created.workspace).toBeDefined();
       expect(created.workspace?.id).toMatch(/^ws_/);
-      expect(created.member?.role).toBe('cr');
+      expect(created.member?.role).toBe('owner');
 
       const wsId = created.workspace!.id;
 

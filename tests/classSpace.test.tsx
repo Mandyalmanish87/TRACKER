@@ -278,7 +278,7 @@ describe('ClassSpace Service — No Mock Data & Multi-Student Attendance Isolati
     const members = await classSpaceService.getMembers(res.workspace!.id);
     const crMember = members.find((m) => m.userId === user.id);
     expect(crMember).toBeDefined();
-    expect(crMember?.role).toBe('cr');
+    expect(crMember?.role).toBe('owner');
   });
 
   it('allows student to join real workspace with code and prevents duplicate membership', async () => {
