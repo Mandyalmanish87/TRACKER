@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   Send,
   Reply,
@@ -21,6 +21,9 @@ import {
   FileText,
   BookOpen,
   Video,
+  Hash,
+  Zap,
+  Plus,
 } from 'lucide-react';
 import { useClassSpace } from '../../context/ClassSpaceContext';
 import { getAvatarInitials, getAvatarColor } from '../../utils/classSpaceUtils';
@@ -38,6 +41,11 @@ export const ClassCommunityTab: React.FC = () => {
     messages,
     savedMessages,
     pinnedMessages,
+    channels,
+    activeChannel,
+    activeChannelId,
+    setActiveChannelId,
+    createChannel,
     sendMessage,
     createPoll,
     votePoll,
@@ -50,6 +58,8 @@ export const ClassCommunityTab: React.FC = () => {
     togglePinMessage,
     toggleSaveMessage,
     canModerateChat,
+    canPublishNotices,
+    isCR,
     currentMember,
   } = useClassSpace();
 
@@ -60,6 +70,12 @@ export const ClassCommunityTab: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState<CommunityFilter>('all');
   const [isAnnouncementMode, setIsAnnouncementMode] = useState(false);
+
+  // New Channel Modal State
+  const [showCreateChannelModal, setShowCreateChannelModal] = useState(false);
+  const [newChannelName, setNewChannelName] = useState('');
+  const [newChannelDesc, setNewChannelDesc] = useState('');
+  const [channelError, setChannelError] = useState<string | null>(null);
 
   // Modals state
   const [showCreatePollModal, setShowCreatePollModal] = useState(false);
@@ -80,16 +96,18 @@ export const ClassCommunityTab: React.FC = () => {
     e.preventDefault();
     if (!inputContent.trim()) return;
 
-    await sendMessage(
-      inputContent.trim(),
-      replyingTo
+    await sendMessage(inputContent.trim(), {
+      replyTo: replyingTo
         ? {
             id: replyingTo.id,
             content: replyingTo.content,
             senderName: replyingTo.senderName,
           }
-        : undefined
-    );
+        : undefined,
+      isAnnouncement: isAnnouncementMode,
+      isPinned: isAnnouncementMode,
+      channelId: activeChannel?.id,
+    });
 
     setInputContent('');
     setReplyingTo(null);
@@ -102,14 +120,38 @@ export const ClassCommunityTab: React.FC = () => {
     setEditingMsg(null);
   };
 
+  const handleCreateChannelSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newChannelName.trim()) return;
+    setChannelError(null);
+    const res = await createChannel(newChannelName.trim(), newChannelDesc.trim() || undefined);
+    if (res.error) {
+      setChannelError(res.error);
+    } else {
+      setNewChannelName('');
+      setNewChannelDesc('');
+      setShowCreateChannelModal(false);
+    }
+  };
+
   const savedMsgIdSet = new Set(savedMessages.map((s) => s.messageId));
 
-  // Category counts
-  const pollCount = messages.filter((m) => m.poll || m.messageType === 'poll').length;
-  const noticeCount = messages.filter((m) => m.isPinned || m.messageType === 'announcement').length;
-  const resourceCount = messages.filter((m) => m.resource || m.messageType === 'resource').length;
+  // Filter messages by active channel
+  const channelMessages = useMemo(() => {
+    if (!activeChannel) return messages;
+    return messages.filter(
+      (m) =>
+        m.channelId === activeChannel.id ||
+        (!m.channelId && activeChannel.slug === 'the-commons')
+    );
+  }, [messages, activeChannel]);
 
-  const filteredMessages = messages.filter((m) => {
+  // Category counts
+  const pollCount = channelMessages.filter((m) => m.poll || m.messageType === 'poll').length;
+  const noticeCount = channelMessages.filter((m) => m.isPinned || m.messageType === 'announcement').length;
+  const resourceCount = channelMessages.filter((m) => m.resource || m.messageType === 'resource').length;
+
+  const filteredMessages = channelMessages.filter((m) => {
     if (activeFilter === 'starred' && !savedMsgIdSet.has(m.id)) return false;
     if (activeFilter === 'polls' && !m.poll && m.messageType !== 'poll') return false;
     if (activeFilter === 'notices' && !m.isPinned && m.messageType !== 'announcement') return false;
@@ -132,6 +174,60 @@ export const ClassCommunityTab: React.FC = () => {
 
   return (
     <div className="flex flex-col h-[750px] space-y-3">
+      {/* ── Channel Navigation Bar ── */}
+      <div className="p-2.5 rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 shadow-subtle flex items-center justify-between gap-2 overflow-x-auto shrink-0">
+        <div className="flex items-center gap-1.5 overflow-x-auto py-0.5">
+          {channels.map((chan) => {
+            const isChanActive = (activeChannel?.id === chan.id) || (chan.slug === 'the-commons' && !activeChannelId);
+            return (
+              <button
+                key={chan.id}
+                onClick={() => setActiveChannelId(chan.id)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition cursor-pointer ${
+                  isChanActive
+                    ? 'bg-terracotta-600 text-white shadow-2xs'
+                    : 'text-espresso-700 dark:text-ivory-200 hover:bg-ivory-100 dark:hover:bg-espresso-800'
+                }`}
+              >
+                {chan.slug === 'class-pulse' ? (
+                  <Zap className="w-3.5 h-3.5 text-amber-400" />
+                ) : chan.slug === 'study-vault' ? (
+                  <BookOpen className="w-3.5 h-3.5 text-blue-400" />
+                ) : (
+                  <Hash className="w-3.5 h-3.5 text-terracotta-400" />
+                )}
+                <span>{chan.name}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {isCR && (
+          <button
+            onClick={() => setShowCreateChannelModal(true)}
+            className="px-2.5 py-1.5 rounded-xl text-xs font-semibold text-terracotta-600 hover:bg-terracotta-50 dark:hover:bg-terracotta-950/40 border border-terracotta-300 dark:border-terracotta-800 transition cursor-pointer flex items-center gap-1 shrink-0"
+            title="Create a new class channel"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Channel</span>
+          </button>
+        )}
+      </div>
+
+      {/* Active Channel Topic & Description */}
+      {activeChannel && (
+        <div className="px-4 py-2 rounded-xl bg-ivory-100/70 dark:bg-espresso-800/50 border border-ivory-300/80 dark:border-espresso-750 flex items-center justify-between text-xs text-espresso-600 dark:text-espresso-300 shrink-0">
+          <div className="flex items-center gap-2 truncate">
+            <span className="font-bold text-espresso-900 dark:text-ivory-100 flex items-center gap-1">
+              <Hash className="w-3.5 h-3.5 text-terracotta-500" />
+              {activeChannel.name}
+            </span>
+            <span>&bull;</span>
+            <span className="truncate text-espresso-500 dark:text-espresso-400">{activeChannel.description || 'Channel discussion'}</span>
+          </div>
+        </div>
+      )}
+
       {/* Top Bar: Search, Category Filters, Pinned announcements indicator */}
       <div className="p-3.5 rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 shadow-subtle space-y-3 shrink-0">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -389,6 +485,24 @@ export const ClassCommunityTab: React.FC = () => {
                       <span className="text-[9px] italic text-espresso-400">(edited)</span>
                     )}
                   </div>
+
+                  {/* Official Notice Indicator Header */}
+                  {(msg.isPinned || msg.messageType === 'announcement') && (
+                    <div className="my-2 px-3 py-1.5 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-between text-xs text-amber-700 dark:text-amber-300 font-semibold shadow-2xs">
+                      <div className="flex items-center gap-1.5">
+                        <Pin className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+                        <span>📢 OFFICIAL CLASS NOTICE</span>
+                      </div>
+                      {canPublishNotices && (
+                        <button
+                          onClick={() => togglePinMessage(msg.id)}
+                          className="hover:underline text-[10px] text-amber-600 dark:text-amber-400 cursor-pointer font-medium"
+                        >
+                          {msg.isPinned ? 'Unpin' : 'Pin'}
+                        </button>
+                      )}
+                    </div>
+                  )}
 
                   {/* Quoted Reply if any */}
                   {msg.replyToContent && (
@@ -711,8 +825,8 @@ export const ClassCommunityTab: React.FC = () => {
                         )}
                       </button>
 
-                      {/* Pin (CR/Admin only) */}
-                      {canModerateChat && (
+                      {/* Pin (CR / Authorized Co-Admin only) */}
+                      {canPublishNotices && (
                         <button
                           onClick={() => togglePinMessage(msg.id)}
                           className={`p-1 rounded text-[11px] hover:bg-ivory-100 dark:hover:bg-espresso-800 ${
@@ -720,7 +834,7 @@ export const ClassCommunityTab: React.FC = () => {
                               ? 'text-terracotta-600'
                               : 'text-espresso-400 hover:text-espresso-700'
                           }`}
-                          title="Pin as announcement"
+                          title="Pin as official notice"
                         >
                           <Pin className="w-3 h-3" />
                         </button>
@@ -835,14 +949,14 @@ export const ClassCommunityTab: React.FC = () => {
               <span>Share Resource</span>
             </button>
 
-            {/* Announcement Mode Toggle for CR/Admin */}
-            {canModerateChat && (
+            {/* Announcement Mode Toggle for CR / Permitted Co-Admin */}
+            {canPublishNotices && (
               <button
                 type="button"
                 onClick={() => setIsAnnouncementMode(!isAnnouncementMode)}
                 className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 shadow-2xs ${
                   isAnnouncementMode
-                    ? 'bg-amber-500 text-white border border-amber-600 ring-1 ring-amber-400'
+                    ? 'bg-amber-500 text-white border border-amber-600 ring-2 ring-amber-400'
                     : 'border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 text-espresso-800 dark:text-ivory-200 hover:bg-ivory-100 dark:hover:bg-espresso-800'
                 }`}
                 title="Post as official announcement pinned to the top"
@@ -863,7 +977,7 @@ export const ClassCommunityTab: React.FC = () => {
             placeholder={
               isAnnouncementMode
                 ? '📢 Write official class notice (pinned announcement)...'
-                : `Message #${activeWorkspace?.name || 'ClassSpace'}...`
+                : `Message #${activeChannel?.name || activeWorkspace?.name || 'chat'}...`
             }
             className={`flex-1 px-4 py-3 text-xs sm:text-sm rounded-2xl border bg-white dark:bg-espresso-850 text-espresso-950 dark:text-ivory-50 placeholder-espresso-400 focus:outline-none focus:ring-2 focus:ring-terracotta-400 shadow-subtle ${
               isAnnouncementMode
@@ -898,6 +1012,77 @@ export const ClassCommunityTab: React.FC = () => {
           return shareResource(title, url, category, description);
         }}
       />
+
+      {/* Create Channel Modal (CR Only) */}
+      {showCreateChannelModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div
+            className="w-full max-w-sm rounded-2xl border border-border bg-card p-6 shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-bold text-foreground flex items-center gap-2">
+                <Hash className="w-4 h-4 text-primary" />
+                <span>Create Class Channel</span>
+              </h3>
+              <button
+                onClick={() => setShowCreateChannelModal(false)}
+                className="p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {channelError && (
+              <div className="p-2.5 rounded-xl text-xs bg-destructive/10 text-destructive border border-destructive/20">
+                {channelError}
+              </div>
+            )}
+
+            <form onSubmit={handleCreateChannelSubmit} className="space-y-3">
+              <div>
+                <label className="text-xs font-semibold text-foreground">Channel Name</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Project Teams, Lab Q&A"
+                  value={newChannelName}
+                  onChange={(e) => setNewChannelName(e.target.value)}
+                  className="mt-1 w-full px-3 py-2 text-xs rounded-xl border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-foreground">Description (Optional)</label>
+                <input
+                  type="text"
+                  placeholder="What is this channel for?"
+                  value={newChannelDesc}
+                  onChange={(e) => setNewChannelDesc(e.target.value)}
+                  className="mt-1 w-full px-3 py-2 text-xs rounded-xl border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateChannelModal(false)}
+                  className="px-4 py-2 text-xs font-semibold rounded-xl text-muted-foreground hover:bg-secondary transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!newChannelName.trim()}
+                  className="px-4 py-2 text-xs font-semibold rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition shadow-xs disabled:opacity-50"
+                >
+                  Create Channel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

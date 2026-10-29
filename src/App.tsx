@@ -16,7 +16,7 @@ import { PlannerView } from './components/views/PlannerView';
 import { TestsView } from './components/views/TestsView';
 import { SettingsView } from './components/views/SettingsView';
 import { ClassSpaceView } from './components/classspace/ClassSpaceView';
-import { ClassSpaceProvider } from './context/ClassSpaceContext';
+import { ClassSpaceProvider, useOptionalClassSpace } from './context/ClassSpaceContext';
 import { AdminRoute } from './components/admin/AdminRoute';
 import { EduHubView } from './components/eduhub/EduHubView';
 
@@ -44,28 +44,49 @@ export const VALID_NAV_TABS: Record<string, NavTab> = {
 
 export const ACTIVE_TAB_STORAGE_KEY = 'tracker_active_nav_tab';
 
+export const getActiveTabStorageKey = (userId?: string | null): string =>
+  userId && userId !== 'usr_local_student'
+    ? `tracker_active_nav_tab_${userId}`
+    : ACTIVE_TAB_STORAGE_KEY;
+
+export function parseRouteFromHash(hash: string): { tab: NavTab | null; subRoute?: string } {
+  if (!hash) return { tab: null };
+  const clean = hash.replace(/^#\/?/, '').trim();
+  if (!clean || clean.includes('=') || clean.includes('&')) {
+    // Ensure we ignore OAuth query-like hash fragments (e.g. #access_token=... or #error=...)
+    return { tab: null };
+  }
+  const [tabPart, ...rest] = clean.split(/[/?]/);
+  const normalized = tabPart.toLowerCase();
+  if (normalized in VALID_NAV_TABS) {
+    return {
+      tab: VALID_NAV_TABS[normalized],
+      subRoute: rest.join('/'),
+    };
+  }
+  return { tab: null };
+}
+
 export function resolveNavTabFromLocation(): NavTab | null {
   if (typeof window === 'undefined') return null;
 
-  // 1. Pathname check (e.g. /admin, /eduhub)
+  // 1. Pathname check (e.g. /admin, /eduhub, /attendance)
   const pathClean = window.location.pathname.replace(/^\/+|\/+$/g, '').toLowerCase();
-  if (pathClean && pathClean in VALID_NAV_TABS) {
-    return VALID_NAV_TABS[pathClean];
+  const [firstSegment] = pathClean.split(/[/?]/);
+  if (firstSegment && firstSegment in VALID_NAV_TABS) {
+    return VALID_NAV_TABS[firstSegment];
   }
 
-  // 2. Hash check (e.g. #eduhub, #timetable, #admin)
-  // Ensure we ignore OAuth query-like hash fragments (e.g. #access_token=... or #error=...)
-  const rawHash = window.location.hash.replace(/^#/, '').toLowerCase();
-  if (rawHash && !rawHash.includes('=') && !rawHash.includes('&')) {
-    if (rawHash in VALID_NAV_TABS) {
-      return VALID_NAV_TABS[rawHash];
-    }
+  // 2. Hash check (e.g. #eduhub, #classspace/the-commons, #attendance)
+  const { tab } = parseRouteFromHash(window.location.hash);
+  if (tab) {
+    return tab;
   }
 
   return null;
 }
 
-export function getInitialNavTab(): NavTab {
+export function getInitialNavTab(userId?: string | null): NavTab {
   // Check location first (URL takes precedence)
   const fromLocation = resolveNavTabFromLocation();
   if (fromLocation) return fromLocation;
@@ -73,6 +94,12 @@ export function getInitialNavTab(): NavTab {
   // Check persisted storage
   try {
     if (typeof window !== 'undefined') {
+      if (userId && userId !== 'usr_local_student') {
+        const userSaved = localStorage.getItem(getActiveTabStorageKey(userId));
+        if (userSaved && userSaved in VALID_NAV_TABS) {
+          return VALID_NAV_TABS[userSaved];
+        }
+      }
       const saved = localStorage.getItem(ACTIVE_TAB_STORAGE_KEY);
       if (saved && saved in VALID_NAV_TABS) {
         return VALID_NAV_TABS[saved];
@@ -84,8 +111,33 @@ export function getInitialNavTab(): NavTab {
 }
 
 export const MainApp: React.FC = () => {
-  const { state } = useApp();
-  const [currentTab, setCurrentTab] = useState<NavTab>(() => getInitialNavTab());
+  const { authUser } = useApp();
+  const classSpace = useOptionalClassSpace();
+  const [currentTab, setCurrentTab] = useState<NavTab>(() => getInitialNavTab(authUser?.id));
+
+  // Sync URL hash with currentTab on mount if no hash exists yet
+  useEffect(() => {
+    if (typeof window !== 'undefined' && !window.location.hash && currentTab !== 'dashboard') {
+      try {
+        if (currentTab === 'classspace' && classSpace?.activeChannel) {
+          const slug = classSpace.activeChannel.slug || classSpace.activeChannel.id;
+          window.history.replaceState(null, '', `#classspace/${slug}`);
+        } else {
+          window.history.replaceState(null, '', `#${currentTab}`);
+        }
+      } catch {}
+    }
+  }, [currentTab, classSpace?.activeChannel]);
+
+  // When auth resolves or switches, restore user-scoped tab if present and no explicit URL route
+  useEffect(() => {
+    if (authUser?.id && authUser.id !== 'usr_local_student') {
+      const userTab = localStorage.getItem(getActiveTabStorageKey(authUser.id));
+      if (userTab && userTab in VALID_NAV_TABS && !resolveNavTabFromLocation()) {
+        setCurrentTab(VALID_NAV_TABS[userTab]);
+      }
+    }
+  }, [authUser?.id]);
 
   const handleSelectTab = (tab: NavTab) => {
     setCurrentTab(tab);
@@ -93,6 +145,9 @@ export const MainApp: React.FC = () => {
     try {
       if (typeof window !== 'undefined') {
         localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, tab);
+        if (authUser?.id && authUser.id !== 'usr_local_student') {
+          localStorage.setItem(getActiveTabStorageKey(authUser.id), tab);
+        }
 
         // Keep URL hash in sync with active tab (leaving clean URL for dashboard)
         if (tab === 'dashboard') {
@@ -104,7 +159,12 @@ export const MainApp: React.FC = () => {
         } else {
           // Avoid overwriting OAuth hashes
           if (!window.location.hash.includes('=')) {
-            window.history.replaceState(null, '', `#${tab}`);
+            if (tab === 'classspace' && classSpace?.activeChannel) {
+              const slug = classSpace.activeChannel.slug || classSpace.activeChannel.id;
+              window.history.replaceState(null, '', `#classspace/${slug}`);
+            } else {
+              window.history.replaceState(null, '', `#${tab}`);
+            }
           }
         }
       }
@@ -118,6 +178,9 @@ export const MainApp: React.FC = () => {
         setCurrentTab(tabFromLoc);
         try {
           localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, tabFromLoc);
+          if (authUser?.id && authUser.id !== 'usr_local_student') {
+            localStorage.setItem(getActiveTabStorageKey(authUser.id), tabFromLoc);
+          }
         } catch {}
       }
     };
@@ -128,12 +191,10 @@ export const MainApp: React.FC = () => {
       window.removeEventListener('popstate', handleLocationChange);
       window.removeEventListener('hashchange', handleLocationChange);
     };
-  }, []);
+  }, [authUser?.id]);
 
-  // Guard: if user is in Individual mode, redirect 'classspace' requests to dashboard
-  const effectiveTab: NavTab = currentTab === 'classspace' && state.settings?.userMode !== 'class_based'
-    ? 'dashboard'
-    : currentTab;
+  // Tab rendering: respect currentTab. Do not override or force redirect to dashboard.
+  const effectiveTab: NavTab = currentTab;
 
   return (
     <>

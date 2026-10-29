@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, LogIn, KeyRound, Sparkles, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { X, LogIn, KeyRound, AlertCircle, CheckCircle2, Clock, ShieldCheck } from 'lucide-react';
 import { useOptionalClassSpace } from '../../context/ClassSpaceContext';
 import { useApp } from '../../context/AppContext';
 import { normalizeJoinCode, isValidJoinCode } from '../../utils/classSpaceUtils';
@@ -18,6 +18,7 @@ export const JoinWorkspaceModal: React.FC<JoinWorkspaceModalProps> = ({
   onJoined,
 }) => {
   const classSpace = useOptionalClassSpace();
+  const requestToJoinWorkspace = classSpace?.requestToJoinWorkspace;
   const joinWorkspaceByCode = classSpace?.joinWorkspaceByCode;
   const { updateSettings } = useApp();
 
@@ -26,12 +27,16 @@ export const JoinWorkspaceModal: React.FC<JoinWorkspaceModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [previewWs, setPreviewWs] = useState<ClassSpaceWorkspace | null>(null);
   const [isLookingUp, setIsLookingUp] = useState(false);
+  const [isSubmitted, setIsSubmitted] = useState(false);
+  const [submittedWorkspace, setSubmittedWorkspace] = useState<ClassSpaceWorkspace | null>(null);
 
   useEffect(() => {
     if (!isOpen) {
       setCode('');
       setError(null);
       setPreviewWs(null);
+      setIsSubmitted(false);
+      setSubmittedWorkspace(null);
     }
   }, [isOpen]);
 
@@ -89,7 +94,7 @@ export const JoinWorkspaceModal: React.FC<JoinWorkspaceModalProps> = ({
       return;
     }
 
-    if (!joinWorkspaceByCode) {
+    if (!requestToJoinWorkspace && !joinWorkspaceByCode) {
       setError('ClassSpace context is unavailable.');
       return;
     }
@@ -97,20 +102,70 @@ export const JoinWorkspaceModal: React.FC<JoinWorkspaceModalProps> = ({
     setIsSubmitting(true);
     setError(null);
     try {
-      const res = await joinWorkspaceByCode(normalized);
-      if (res.error) {
-        setError(res.error);
-      } else if (res.workspace) {
-        updateSettings({ userMode: 'class_based' });
-        onJoined?.(res.workspace.id);
-        onClose();
+      if (requestToJoinWorkspace) {
+        const res = await requestToJoinWorkspace(normalized);
+        if (res.error) {
+          setError(res.error);
+        } else {
+          setSubmittedWorkspace(res.workspace || previewWs || null);
+          setIsSubmitted(true);
+        }
+      } else if (joinWorkspaceByCode) {
+        const res = await joinWorkspaceByCode(normalized);
+        if (res.error) {
+          setError(res.error);
+        } else if (res.workspace) {
+          updateSettings({ userMode: 'class_based' });
+          onJoined?.(res.workspace.id);
+          onClose();
+        }
       }
     } catch (err: any) {
-      setError(err?.message || 'Failed to join ClassSpace.');
+      setError(err?.message || 'Failed to submit join request.');
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  if (isSubmitted) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+        <div
+          className="w-full max-w-md rounded-2xl border border-border bg-card shadow-2xl p-6 text-center space-y-4 overflow-hidden"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="w-14 h-14 mx-auto rounded-2xl bg-primary/10 text-primary flex items-center justify-center shadow-inner">
+            <CheckCircle2 className="w-7 h-7" />
+          </div>
+          <div>
+            <h3 className="text-lg font-bold text-foreground">Join Request Submitted</h3>
+            <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
+              Your request to join <span className="font-semibold text-foreground">{submittedWorkspace?.name || 'this ClassSpace'}</span> has been sent to the Class Representative (CR).
+            </p>
+          </div>
+          <div className="p-3.5 rounded-xl bg-secondary/40 border border-border text-xs text-muted-foreground text-left space-y-1.5">
+            <p className="font-semibold text-foreground flex items-center gap-1.5 text-xs">
+              <Clock className="w-4 h-4 text-primary" />
+              What happens next?
+            </p>
+            <p className="text-[11px] leading-relaxed">
+              To keep your classroom community secure and authentic, join requests are approved by the CR. You will automatically receive full access once approved.
+            </p>
+          </div>
+          <button
+            onClick={() => {
+              setIsSubmitted(false);
+              setCode('');
+              onClose();
+            }}
+            className="w-full py-2.5 px-4 rounded-xl bg-primary text-primary-foreground font-semibold text-xs shadow-md hover:bg-primary/90 transition-all cursor-pointer"
+          >
+            Understood
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
@@ -190,17 +245,14 @@ export const JoinWorkspaceModal: React.FC<JoinWorkspaceModalProps> = ({
             )}
           </div>
 
-          <div className="p-3 rounded-xl bg-secondary/30 border border-border text-xs text-muted-foreground space-y-1">
-            <div className="font-medium text-foreground flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-primary" />
-              What you get upon joining:
+          <div className="p-3.5 rounded-xl bg-secondary/30 border border-border text-xs text-muted-foreground space-y-1.5">
+            <div className="font-semibold text-foreground flex items-center gap-1.5">
+              <ShieldCheck className="w-3.5 h-3.5 text-primary" />
+              CR Approval Security:
             </div>
-            <ul className="list-disc list-inside space-y-0.5 pl-1 text-[11px]">
-              <li>Live class timetables maintained by your CR</li>
-              <li>Instant alerts when classes are rescheduled or cancelled</li>
-              <li>Collaborative class community chat and pinned notices</li>
-              <li>Isolated personal attendance tracking against official lectures</li>
-            </ul>
+            <p className="text-[11px] leading-relaxed">
+              Submitting your join code places a request directly on your Class Representative&apos;s roster. Once approved, the class timetable, community chat, and official notices are unlocked.
+            </p>
           </div>
 
           {/* Footer buttons */}
@@ -219,7 +271,7 @@ export const JoinWorkspaceModal: React.FC<JoinWorkspaceModalProps> = ({
               className="px-5 py-2 text-xs font-semibold rounded-lg bg-primary text-primary-foreground shadow-md hover:bg-primary/90 transition-all flex items-center gap-1.5 disabled:opacity-50"
             >
               <LogIn className="w-3.5 h-3.5" />
-              <span>{isSubmitting ? 'Joining...' : 'Join ClassSpace'}</span>
+              <span>{isSubmitting ? 'Submitting Request...' : 'Request to Join'}</span>
             </button>
           </div>
         </form>

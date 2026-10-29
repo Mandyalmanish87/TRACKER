@@ -102,6 +102,12 @@ export function canManageWorkspace(role?: ClassSpaceRole): boolean {
   return role === 'owner' || role === 'cr';
 }
 
+export function canPublishNotice(role?: ClassSpaceRole, canPublishNoticesFlag?: boolean): boolean {
+  if (role === 'owner' || role === 'cr') return true;
+  if (role === 'co_admin' && Boolean(canPublishNoticesFlag)) return true;
+  return false;
+}
+
 /**
  * Combines recurring rules and occurrence-level overrides into resolved class occurrences.
  * Preserves strict separation between recurring rule and one-off overrides/extras.

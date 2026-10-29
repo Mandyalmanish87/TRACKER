@@ -2,6 +2,7 @@ import React from 'react';
 import { LayoutDashboard, Calendar, GraduationCap, BookOpen, Flame, Dumbbell, Salad, Settings, ListTodo, Award, Building, Tv } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useApp } from '../../context/AppContext';
+import { useOptionalClassSpace, getSavedWorkspaceId } from '../../context/ClassSpaceContext';
 import { isTaskOverdue } from '../../utils/plannerUtils';
 import { detectRecurringWeaknesses } from '../../utils/testAnalytics';
 
@@ -14,6 +15,13 @@ interface NavigationProps {
 
 export const Navigation: React.FC<NavigationProps> = ({ currentTab, onSelectTab }) => {
   const { state } = useApp();
+  const classSpace = useOptionalClassSpace();
+
+  const hasClassSpace =
+    state.settings?.userMode === 'class_based' ||
+    Boolean(classSpace?.activeWorkspace) ||
+    (classSpace?.workspaces && classSpace.workspaces.length > 0) ||
+    Boolean(getSavedWorkspaceId());
 
   // Compute live contextual badges
   const pendingRemindersCount = state.reminders.filter((r) => !r.isCompleted).length;
@@ -92,7 +100,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentTab, onSelectTab 
       label: 'EduHub',
       icon: <Tv className="w-4 h-4" />,
     },
-    ...(state.settings?.userMode === 'class_based'
+    ...(hasClassSpace
       ? [
           {
             id: 'classspace' as NavTab,

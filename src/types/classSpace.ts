@@ -27,6 +27,36 @@ export interface ClassSpaceMember {
   email?: string;
   avatarUrl?: string;
   isMuted?: boolean;
+  canPublishNotices?: boolean;
+}
+
+export interface ClassSpaceChannel {
+  id: string;
+  workspaceId: string;
+  name: string;
+  slug: string;
+  description?: string;
+  isDefault?: boolean;
+  isSystem?: boolean;
+  position: number;
+  createdBy?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ClassJoinRequestStatus = 'pending' | 'approved' | 'rejected';
+
+export interface ClassJoinRequest {
+  id: string;
+  workspaceId: string;
+  userId: string;
+  displayName: string;
+  avatarUrl?: string;
+  status: ClassJoinRequestStatus;
+  reviewedBy?: string;
+  reviewedAt?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface ClassTimetableRule {
@@ -129,6 +159,7 @@ export interface ClassResourceAttachment {
 export interface ClassMessage {
   id: string;
   workspaceId: string;
+  channelId?: string;
   senderId: string;
   senderName: string;
   senderRole?: ClassSpaceRole;

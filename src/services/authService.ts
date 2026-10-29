@@ -67,7 +67,10 @@ export const authService = {
    * Test-only helper: strictly isolated to test runs and ignored in production builds.
    */
   _setTestUser(user: AuthUser | null): void {
-    if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'test') {
+    if (
+      (typeof process !== 'undefined' && (process.env?.NODE_ENV === 'test' || Boolean(process.env?.VITEST))) ||
+      (typeof import.meta !== 'undefined' && (import.meta as any).env?.MODE === 'test')
+    ) {
       testUserFixture = user;
     }
   },
@@ -77,7 +80,11 @@ export const authService = {
    */
   async getCurrentUser(): Promise<AuthUser | null> {
     // In test environment, return test fixture if set
-    if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'test' && testUserFixture) {
+    if (
+      ((typeof process !== 'undefined' && (process.env?.NODE_ENV === 'test' || Boolean(process.env?.VITEST))) ||
+       (typeof import.meta !== 'undefined' && (import.meta as any).env?.MODE === 'test')) &&
+      testUserFixture
+    ) {
       return testUserFixture;
     }
 
@@ -156,7 +163,7 @@ export const authService = {
               isSimulated: false,
             });
           } else {
-            callback(null);
+            callback(testUserFixture || null);
           }
         }
       );

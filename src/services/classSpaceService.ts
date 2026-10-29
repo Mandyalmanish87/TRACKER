@@ -3,6 +3,9 @@ import {
   ClassSpaceWorkspace,
   ClassSpaceMember,
   ClassSpaceRole,
+  ClassSpaceChannel,
+  ClassJoinRequest,
+  ClassJoinRequestStatus,
   ClassTimetableRule,
   ClassTimetableOverride,
   ClassAttendanceRecord,
@@ -22,13 +25,67 @@ import {
   isValidJoinCode,
   canManageSchedule,
   canManageWorkspace,
+  canPublishNotice,
 } from '../utils/classSpaceUtils';
 
 const LOCAL_STORE_KEY = 'tracker_classspace_data_v1';
 
+export const DEFAULT_CHANNELS_TEMPLATE = [
+  {
+    name: 'The Commons',
+    slug: 'the-commons',
+    description: 'General class discussion, questions, and coordination',
+    position: 1,
+    isDefault: true,
+  },
+  {
+    name: 'Study Vault',
+    slug: 'study-vault',
+    description: 'Notes, PDFs, study material, resources, and academic discussions',
+    position: 2,
+    isDefault: true,
+  },
+  {
+    name: 'Class Pulse',
+    slug: 'class-pulse',
+    description: 'Official class updates, timetable changes, and alerts',
+    position: 3,
+    isDefault: true,
+  },
+];
+
+export function ensureDefaultChannelsForWorkspace(
+  workspaceId: string,
+  existingChannels: ClassSpaceChannel[],
+  createdBy?: string
+): ClassSpaceChannel[] {
+  const channels = [...existingChannels];
+  const now = new Date().toISOString();
+  for (const template of DEFAULT_CHANNELS_TEMPLATE) {
+    const exists = channels.some((c) => c.workspaceId === workspaceId && c.slug === template.slug);
+    if (!exists) {
+      channels.push({
+        id: `chan_${template.slug}_${workspaceId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 8)}`,
+        workspaceId,
+        name: template.name,
+        slug: template.slug,
+        description: template.description,
+        isDefault: true,
+        position: template.position,
+        createdBy,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+  }
+  return channels;
+}
+
 interface LocalClassSpaceData {
   workspaces: ClassSpaceWorkspace[];
   members: ClassSpaceMember[];
+  channels: ClassSpaceChannel[];
+  joinRequests: ClassJoinRequest[];
   rules: ClassTimetableRule[];
   overrides: ClassTimetableOverride[];
   attendanceRecords: ClassAttendanceRecord[];
@@ -43,6 +100,8 @@ function createEmptyLocalData(): LocalClassSpaceData {
   return {
     workspaces: [],
     members: [],
+    channels: [],
+    joinRequests: [],
     rules: [],
     overrides: [],
     attendanceRecords: [],
@@ -68,6 +127,8 @@ function getLocalData(): LocalClassSpaceData {
     // Migrate away any previous demo workspace 'ws_demo_cs2026' so production is never seeded with fake data
     const workspaces = (parsed.workspaces || []).filter((w) => w.id !== 'ws_demo_cs2026');
     const members = (parsed.members || []).filter((m) => m.workspaceId !== 'ws_demo_cs2026');
+    const channels = parsed.channels || [];
+    const joinRequests = parsed.joinRequests || [];
     const rules = (parsed.rules || []).filter((r) => r.workspaceId !== 'ws_demo_cs2026');
     const overrides = (parsed.overrides || []).filter((o) => o.workspaceId !== 'ws_demo_cs2026');
     const attendanceRecords = (parsed.attendanceRecords || []).filter((a) => a.workspaceId !== 'ws_demo_cs2026');
@@ -79,6 +140,8 @@ function getLocalData(): LocalClassSpaceData {
     return {
       workspaces,
       members,
+      channels,
+      joinRequests,
       rules,
       overrides,
       attendanceRecords,
@@ -195,6 +258,8 @@ export const classSpaceService = {
     }
     try {
       localStorage.removeItem(LOCAL_STORE_KEY);
+      localStorage.removeItem('tracker_active_workspace_id');
+      localStorage.removeItem('tracker_active_nav_tab');
       window.dispatchEvent(new Event('tracker_classspace_updated'));
     } catch (err) {
       console.warn('[ClassSpaceService] Failed to clear local classspace data on signout:', err);
@@ -208,6 +273,14 @@ export const classSpaceService = {
       if (archived) {
         localStorage.setItem(LOCAL_STORE_KEY, archived);
         window.dispatchEvent(new Event('tracker_classspace_updated'));
+      }
+      const userSavedWs = localStorage.getItem(`tracker_active_workspace_id_${userId}`);
+      if (userSavedWs) {
+        localStorage.setItem('tracker_active_workspace_id', userSavedWs);
+      }
+      const userSavedTab = localStorage.getItem(`tracker_active_nav_tab_${userId}`);
+      if (userSavedTab) {
+        localStorage.setItem('tracker_active_nav_tab', userSavedTab);
       }
     } catch (err) {
       console.warn('[ClassSpaceService] Failed to restore archived user classspace data:', err);
@@ -433,6 +506,7 @@ export const classSpaceService = {
     // Local fallback
     local.workspaces.push(newWorkspace);
     local.members.push(ownerMember);
+    local.channels = ensureDefaultChannelsForWorkspace(newWorkspace.id, local.channels, user.id);
     saveLocalData(local);
 
     return { workspace: newWorkspace, member: ownerMember };
@@ -717,6 +791,374 @@ export const classSpaceService = {
   },
 
   // ==========================================================================
+  // CHANNELS (THE COMMONS, STUDY VAULT, CLASS PULSE, & CUSTOM)
+  // ==========================================================================
+
+  async getChannels(workspaceId: string): Promise<ClassSpaceChannel[]> {
+    const supabase = getSupabaseClient();
+    if (supabase && isCloudAvailable() && !isLocalId(workspaceId)) {
+      try {
+        const { data, error } = await supabase
+          .from('class_channels')
+          .select('*')
+          .eq('workspace_id', workspaceId)
+          .order('position', { ascending: true });
+
+        if (!error && data && data.length > 0) {
+          return data.map(mapChannelFromDb);
+        }
+      } catch (err) {
+        console.warn('[ClassSpaceService] getChannels cloud error:', err);
+      }
+    }
+
+    const local = getLocalData();
+    local.channels = ensureDefaultChannelsForWorkspace(workspaceId, local.channels || []);
+    saveLocalData(local);
+    return (local.channels || [])
+      .filter((c) => c.workspaceId === workspaceId)
+      .sort((a, b) => a.position - b.position);
+  },
+
+  async createChannel(
+    workspaceId: string,
+    actingUserId: string,
+    name: string,
+    description?: string
+  ): Promise<{ channel?: ClassSpaceChannel; error?: string }> {
+    if (!name || !name.trim()) return { error: 'Channel name is required.' };
+    const trimmedName = name.trim();
+    const slug = trimmedName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+    if (!slug) return { error: 'Invalid channel name.' };
+
+    const now = new Date().toISOString();
+    const newChan: ClassSpaceChannel = {
+      id: 'chan_' + Math.random().toString(36).substring(2, 11),
+      workspaceId,
+      name: trimmedName,
+      slug,
+      description: description?.trim(),
+      isDefault: false,
+      position: 10,
+      createdBy: actingUserId,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    const supabase = getSupabaseClient();
+    if (supabase && isCloudAvailable() && !isLocalId(workspaceId)) {
+      try {
+        const { data, error } = await supabase
+          .from('class_channels')
+          .insert({
+            workspace_id: workspaceId,
+            name: newChan.name,
+            slug: newChan.slug,
+            description: newChan.description,
+            is_default: false,
+            position: newChan.position,
+            created_by: actingUserId,
+          })
+          .select()
+          .single();
+
+        if (error) return { error: error.message };
+        return { channel: mapChannelFromDb(data) };
+      } catch (err) {
+        return { error: (err as Error).message };
+      }
+    }
+
+    const local = getLocalData();
+    if (!local.channels) local.channels = [];
+    const exists = local.channels.some((c) => c.workspaceId === workspaceId && c.slug === slug);
+    if (exists) return { error: 'A channel with this name already exists in this ClassSpace.' };
+
+    local.channels.push(newChan);
+    saveLocalData(local);
+    return { channel: newChan };
+  },
+
+  async deleteChannel(
+    workspaceId: string,
+    _actingUserId: string,
+    channelId: string
+  ): Promise<{ success: boolean; error?: string }> {
+    const supabase = getSupabaseClient();
+    if (supabase && isCloudAvailable() && !isLocalId(workspaceId) && !isLocalId(channelId)) {
+      try {
+        const { error } = await supabase
+          .from('class_channels')
+          .delete()
+          .eq('id', channelId)
+          .eq('workspace_id', workspaceId)
+          .eq('is_default', false);
+
+        if (error) return { success: false, error: error.message };
+        return { success: true };
+      } catch (err) {
+        return { success: false, error: (err as Error).message };
+      }
+    }
+
+    const local = getLocalData();
+    if (!local.channels) local.channels = [];
+    const chan = local.channels.find((c) => c.id === channelId && c.workspaceId === workspaceId);
+    if (!chan) return { success: false, error: 'Channel not found.' };
+    if (chan.isDefault) return { success: false, error: 'Cannot delete default channels.' };
+
+    local.channels = local.channels.filter((c) => c.id !== channelId);
+    saveLocalData(local);
+    return { success: true };
+  },
+
+  // ==========================================================================
+  // JOIN REQUESTS (CODE-BASED APPROVALS)
+  // ==========================================================================
+
+  async requestToJoinWorkspace(
+    user: AuthUser,
+    rawCode: string
+  ): Promise<{
+    status?: ClassJoinRequestStatus;
+    workspace?: ClassSpaceWorkspace;
+    request?: ClassJoinRequest;
+    message?: string;
+    error?: string;
+  }> {
+    if (!user || !user.id) {
+      return { error: 'You must be signed in to submit a join request.' };
+    }
+
+    const normalized = normalizeJoinCode(rawCode);
+    if (!isValidJoinCode(normalized)) {
+      recordFailedLookup();
+      return { error: 'Invalid ClassSpace code format. Must be 5 alphanumeric characters.' };
+    }
+
+    if (isLookupRateLimited()) {
+      return { error: 'Too many invalid attempts. Please wait 60 seconds before trying again.' };
+    }
+
+    const supabase = getSupabaseClient();
+    if (supabase && isCloudAvailable() && !isLocalId(user.id) && !user.isSimulated) {
+      try {
+        const { data, error } = await supabase.rpc('request_to_join_workspace', {
+          p_join_code: normalized,
+          p_display_name: user.name || user.email.split('@')[0],
+          p_avatar_url: user.avatarUrl || null,
+        });
+
+        if (!error && data && typeof data === 'object') {
+          if ('error' in data && data.error) {
+            recordFailedLookup();
+            return { error: String(data.error) };
+          }
+          return {
+            status: data.status || 'pending',
+            message: data.message || 'Join request submitted! Awaiting CR approval.',
+            workspace: data.workspace ? mapWorkspaceFromDb(data.workspace) : undefined,
+            request: data.request ? mapJoinRequestFromDb(data.request) : undefined,
+          };
+        }
+      } catch (err) {
+        console.warn('[ClassSpaceService] Supabase requestToJoinWorkspace RPC error:', err);
+      }
+    }
+
+    // Local / Offline fallback
+    const local = getLocalData();
+    const workspace = local.workspaces.find((w) => w.joinCode === normalized);
+    if (!workspace) {
+      recordFailedLookup();
+      return { error: 'No ClassSpace found with this Join Code. Please verify with your CR.' };
+    }
+
+    const isMember = local.members.some((m) => m.workspaceId === workspace.id && m.userId === user.id);
+    if (isMember) {
+      return { error: 'You are already an enrolled member of this ClassSpace.' };
+    }
+
+    if (!local.joinRequests) local.joinRequests = [];
+    let req = local.joinRequests.find((r) => r.workspaceId === workspace.id && r.userId === user.id);
+    const now = new Date().toISOString();
+    const reqName = user.name || user.email.split('@')[0] || 'Student';
+
+    if (req) {
+      if (req.status === 'pending') {
+        return {
+          status: 'pending',
+          message: 'Your join request is already pending approval by the Class Representative.',
+          workspace,
+          request: req,
+        };
+      }
+      req.status = 'pending';
+      req.displayName = reqName;
+      req.avatarUrl = user.avatarUrl;
+      req.updatedAt = now;
+    } else {
+      req = {
+        id: 'req_' + Math.random().toString(36).substring(2, 11),
+        workspaceId: workspace.id,
+        userId: user.id,
+        displayName: reqName,
+        avatarUrl: user.avatarUrl,
+        status: 'pending',
+        createdAt: now,
+        updatedAt: now,
+      };
+      local.joinRequests.push(req);
+    }
+
+    // Notify CR
+    const crMember = local.members.find(
+      (m) => m.workspaceId === workspace.id && (m.role === 'owner' || m.role === 'cr')
+    );
+    if (crMember && crMember.userId !== user.id) {
+      local.notifications.push({
+        id: 'notif_' + Math.random().toString(36).substring(2, 11),
+        workspaceId: workspace.id,
+        userId: crMember.userId,
+        title: 'New Join Request',
+        body: `${reqName} requested to join ${workspace.name}.`,
+        type: 'membership',
+        isRead: false,
+        createdAt: now,
+      });
+    }
+
+    saveLocalData(local);
+    return {
+      status: 'pending',
+      message: 'Join request submitted! Awaiting approval from the Class Representative.',
+      workspace,
+      request: req,
+    };
+  },
+
+  async getJoinRequests(workspaceId: string): Promise<ClassJoinRequest[]> {
+    const supabase = getSupabaseClient();
+    if (supabase && isCloudAvailable() && !isLocalId(workspaceId)) {
+      try {
+        const { data, error } = await supabase
+          .from('class_join_requests')
+          .select('*')
+          .eq('workspace_id', workspaceId)
+          .eq('status', 'pending')
+          .order('created_at', { ascending: false });
+
+        if (!error && data) {
+          return data.map(mapJoinRequestFromDb);
+        }
+      } catch (err) {
+        console.warn('[ClassSpaceService] getJoinRequests cloud error:', err);
+      }
+    }
+
+    const local = getLocalData();
+    return (local.joinRequests || []).filter((r) => r.workspaceId === workspaceId && r.status === 'pending');
+  },
+
+  async reviewJoinRequest(
+    workspaceId: string,
+    actingUserId: string,
+    requestId: string,
+    action: 'approve' | 'reject'
+  ): Promise<{ success: boolean; member?: ClassSpaceMember; error?: string }> {
+    const supabase = getSupabaseClient();
+    if (supabase && isCloudAvailable() && !isLocalId(workspaceId) && !isLocalId(requestId)) {
+      try {
+        const { data, error } = await supabase.rpc('review_join_request', {
+          p_request_id: requestId,
+          p_action: action,
+        });
+
+        if (error) return { success: false, error: error.message };
+        if (data && typeof data === 'object') {
+          if ('error' in data && data.error) return { success: false, error: String(data.error) };
+          return {
+            success: true,
+            member: data.member ? mapMemberFromDb(data.member) : undefined,
+          };
+        }
+      } catch (err) {
+        console.warn('[ClassSpaceService] reviewJoinRequest RPC error:', err);
+      }
+    }
+
+    // Local fallback
+    const local = getLocalData();
+    const ws = local.workspaces.find((w) => w.id === workspaceId);
+    if (!ws) return { success: false, error: 'ClassSpace not found.' };
+
+    const actingMember = local.members.find((m) => m.workspaceId === workspaceId && m.userId === actingUserId);
+    if (!actingMember || (actingMember.role !== 'cr' && actingMember.role !== 'owner' && ws.createdBy !== actingUserId)) {
+      return { success: false, error: 'Unauthorized: Only the Class Representative (CR) or Owner can review join requests.' };
+    }
+
+    if (!local.joinRequests) local.joinRequests = [];
+    const req = local.joinRequests.find((r) => r.id === requestId && r.workspaceId === workspaceId);
+    if (!req) return { success: false, error: 'Join request not found.' };
+
+    const now = new Date().toISOString();
+
+    if (action === 'approve') {
+      req.status = 'approved';
+      req.reviewedBy = actingUserId;
+      req.reviewedAt = now;
+      req.updatedAt = now;
+
+      let newMem = local.members.find((m) => m.workspaceId === workspaceId && m.userId === req.userId);
+      if (!newMem) {
+        newMem = {
+          id: 'mem_' + Math.random().toString(36).substring(2, 11),
+          workspaceId,
+          userId: req.userId,
+          role: 'member',
+          displayName: req.displayName,
+          avatarUrl: req.avatarUrl,
+          joinedAt: now,
+        };
+        local.members.push(newMem);
+      }
+
+      local.notifications.push({
+        id: 'notif_' + Math.random().toString(36).substring(2, 11),
+        workspaceId,
+        userId: req.userId,
+        title: 'Join Request Approved',
+        body: `You are now a student in ${ws?.name || 'the class'}. Welcome!`,
+        type: 'membership',
+        isRead: false,
+        createdAt: now,
+      });
+
+      saveLocalData(local);
+      return { success: true, member: newMem };
+    } else {
+      req.status = 'rejected';
+      req.reviewedBy = actingUserId;
+      req.reviewedAt = now;
+      req.updatedAt = now;
+
+      local.notifications.push({
+        id: 'notif_' + Math.random().toString(36).substring(2, 11),
+        workspaceId,
+        userId: req.userId,
+        title: 'Join Request Declined',
+        body: `Your request to join ${ws?.name || 'the class'} was declined by the Class Representative.`,
+        type: 'membership',
+        isRead: false,
+        createdAt: now,
+      });
+
+      saveLocalData(local);
+      return { success: true };
+    }
+  },
+
+  // ==========================================================================
   // MEMBERS & ROLES
   // ==========================================================================
 
@@ -730,14 +1172,163 @@ export const classSpaceService = {
           .eq('workspace_id', workspaceId);
 
         if (error || !data) return [];
-        return data.map(mapMemberFromDb);
+        const members = data.map(mapMemberFromDb);
+        // Enrich with latest public profiles
+        try {
+          const userIds = members.map((m) => m.userId).filter((id) => !isLocalId(id));
+          if (userIds.length > 0) {
+            const { data: profiles } = await supabase
+              .from('class_profiles')
+              .select('user_id, display_name, avatar_url')
+              .in('user_id', userIds);
+
+            if (profiles && profiles.length > 0) {
+              const profileMap = new Map(profiles.map((p) => [p.user_id, p]));
+              for (const m of members) {
+                const p = profileMap.get(m.userId);
+                if (p) {
+                  if (p.display_name) m.displayName = p.display_name;
+                  if (p.avatar_url) m.avatarUrl = p.avatar_url;
+                }
+              }
+            }
+          }
+        } catch {
+          // Non-blocking enrichment
+        }
+        return members;
       } catch {
         return [];
       }
     }
 
     const local = getLocalData();
-    return local.members.filter((m) => m.workspaceId === workspaceId);
+    const members = (local.members || []).filter((m) => m.workspaceId === workspaceId);
+    for (const m of members) {
+      const p = local.profiles[m.userId];
+      if (p) {
+        if (p.displayName) m.displayName = p.displayName;
+        if (p.avatarUrl) m.avatarUrl = p.avatarUrl;
+      }
+    }
+    return members;
+  },
+
+  async transferCRRole(
+    workspaceId: string,
+    currentCRUserId: string,
+    targetUserId: string,
+    previousCRNewRole: 'co_admin' | 'member' = 'co_admin'
+  ): Promise<{ success: boolean; error?: string }> {
+    if (currentCRUserId === targetUserId) {
+      return { success: false, error: 'Cannot transfer the CR role to yourself.' };
+    }
+
+    const supabase = getSupabaseClient();
+    if (supabase && isCloudAvailable() && !isLocalId(workspaceId)) {
+      try {
+        const { data, error } = await supabase.rpc('transfer_cr_role', {
+          p_workspace_id: workspaceId,
+          p_target_user_id: targetUserId,
+          p_previous_cr_new_role: previousCRNewRole,
+        });
+
+        if (error) return { success: false, error: error.message };
+        if (data && typeof data === 'object' && 'error' in data && data.error) {
+          return { success: false, error: String(data.error) };
+        }
+        return { success: true };
+      } catch (err) {
+        console.warn('[ClassSpaceService] transferCRRole RPC error:', err);
+      }
+    }
+
+    // Local fallback
+    const local = getLocalData();
+    const targetMember = local.members.find((m) => m.workspaceId === workspaceId && m.userId === targetUserId);
+    if (!targetMember) return { success: false, error: 'Target student not found in this ClassSpace.' };
+
+    if (currentCRUserId === targetUserId) {
+      return { success: false, error: 'Cannot transfer the CR role to yourself.' };
+    }
+
+    const currentCR = local.members.find((m) => m.workspaceId === workspaceId && m.userId === currentCRUserId);
+    if (!currentCR || (currentCR.role !== 'owner' && currentCR.role !== 'cr')) {
+      return { success: false, error: 'Only the current Class Representative can transfer this role.' };
+    }
+
+    targetMember.role = 'cr';
+    targetMember.canPublishNotices = true;
+
+    currentCR.role = previousCRNewRole;
+    currentCR.canPublishNotices = previousCRNewRole === 'co_admin';
+
+    const ws = local.workspaces.find((w) => w.id === workspaceId);
+    if (ws) {
+      ws.createdBy = targetUserId;
+    }
+
+    // Notify all members
+    const now = new Date().toISOString();
+    for (const m of local.members.filter((mem) => mem.workspaceId === workspaceId)) {
+      local.notifications.push({
+        id: 'notif_' + Math.random().toString(36).substring(2, 11),
+        workspaceId,
+        userId: m.userId,
+        title: 'Class Representative Updated',
+        body: `${targetMember.displayName} is now the official Class Representative.`,
+        type: 'membership',
+        isRead: false,
+        createdAt: now,
+      });
+    }
+
+    saveLocalData(local);
+    return { success: true };
+  },
+
+  async updateCoAdminNoticePermission(
+    workspaceId: string,
+    _actingCRUserId: string,
+    targetUserId: string,
+    canPublish: boolean
+  ): Promise<{ success: boolean; error?: string }> {
+    const supabase = getSupabaseClient();
+    if (supabase && isCloudAvailable() && !isLocalId(workspaceId)) {
+      try {
+        const { data, error } = await supabase.rpc('update_co_admin_notice_permission', {
+          p_workspace_id: workspaceId,
+          p_target_user_id: targetUserId,
+          p_can_publish: canPublish,
+        });
+
+        if (error) return { success: false, error: error.message };
+        if (data && typeof data === 'object' && 'error' in data && data.error) {
+          return { success: false, error: String(data.error) };
+        }
+        return { success: true };
+      } catch (err) {
+        console.warn('[ClassSpaceService] updateCoAdminNoticePermission error:', err);
+      }
+    }
+
+    // Local fallback
+    const local = getLocalData();
+    const actingMember = local.members.find((m) => m.workspaceId === workspaceId && m.userId === _actingCRUserId);
+    const ws = local.workspaces.find((w) => w.id === workspaceId);
+    if (!actingMember || (actingMember.role !== 'cr' && actingMember.role !== 'owner' && ws?.createdBy !== _actingCRUserId)) {
+      return { success: false, error: 'Only the Class Representative can configure Co-Admin permissions.' };
+    }
+
+    const target = local.members.find((m) => m.workspaceId === workspaceId && m.userId === targetUserId);
+    if (!target) return { success: false, error: 'Member not found.' };
+    if (target.role !== 'co_admin') {
+      return { success: false, error: 'Notice publishing permissions can only be granted to Co-Admins.' };
+    }
+
+    target.canPublishNotices = canPublish;
+    saveLocalData(local);
+    return { success: true };
   },
 
   async updateMemberRole(
@@ -1236,6 +1827,7 @@ export const classSpaceService = {
     content: string,
     replyTo?: { id: string; content: string; senderName: string },
     extra?: {
+      channelId?: string;
       messageType?: ClassMessageType;
       poll?: ClassPoll;
       resource?: ClassResourceAttachment;
@@ -1246,10 +1838,19 @@ export const classSpaceService = {
       return { error: 'Message cannot be empty.' };
     }
 
+    if (extra?.isPinned || extra?.messageType === 'announcement') {
+      const local = getLocalData();
+      const senderMem = local.members.find((m) => m.workspaceId === workspaceId && m.userId === sender.id);
+      if (!canPublishNotice(sender.role || senderMem?.role, senderMem?.canPublishNotices)) {
+        return { error: 'Unauthorized: Only the Class Representative or permitted Co-Admins can publish official notices or pin messages.' };
+      }
+    }
+
     const now = new Date().toISOString();
     const newMsg: ClassMessage = {
       id: 'msg_' + Math.random().toString(36).substring(2, 11),
       workspaceId,
+      channelId: extra?.channelId,
       senderId: sender.id,
       senderName: sender.name,
       senderRole: sender.role,
@@ -1282,6 +1883,7 @@ export const classSpaceService = {
           .from('class_messages')
           .insert({
             workspace_id: workspaceId,
+            channel_id: extra?.channelId || null,
             sender_id: sender.id,
             sender_name: sender.name,
             sender_role: sender.role,
@@ -1299,6 +1901,19 @@ export const classSpaceService = {
           .single();
 
         if (error) return { error: error.message };
+
+        if (extra?.isPinned || extra?.messageType === 'announcement') {
+          try {
+            await this.dispatchNotificationToMembers(workspaceId, sender.id, {
+              title: `📢 Official Notice: ${sender.name}`,
+              body: newMsg.content.slice(0, 100),
+              type: 'announcement',
+            });
+          } catch {
+            // Non-blocking notification dispatch
+          }
+        }
+
         return { message: { ...mapMessageFromDb(data), reactions: {} } };
       } catch (err) {
         return { error: (err as Error).message };
@@ -1307,8 +1922,24 @@ export const classSpaceService = {
 
     const local = getLocalData();
     local.messages.push(newMsg);
-    saveLocalData(local);
 
+    if (extra?.isPinned || extra?.messageType === 'announcement') {
+      const nowTs = new Date().toISOString();
+      for (const m of local.members.filter((mem) => mem.workspaceId === workspaceId && mem.userId !== sender.id)) {
+        local.notifications.push({
+          id: 'notif_' + Math.random().toString(36).substring(2, 11),
+          workspaceId,
+          userId: m.userId,
+          title: `📢 Official Notice: ${sender.name}`,
+          body: newMsg.content.slice(0, 100),
+          type: 'announcement',
+          isRead: false,
+          createdAt: nowTs,
+        });
+      }
+    }
+
+    saveLocalData(local);
     return { message: newMsg };
   },
 
@@ -1653,10 +2284,12 @@ export const classSpaceService = {
   async togglePinMessage(
     workspaceId: string,
     messageId: string,
-    actorRole?: ClassSpaceRole
+    actorRole?: ClassSpaceRole,
+    actingUserId?: string,
+    canPublishNoticesFlag?: boolean
   ): Promise<{ success: boolean; error?: string }> {
-    if (!canManageSchedule(actorRole)) {
-      return { success: false, error: 'Only Owner, CR or Co-Admin can pin announcements.' };
+    if (!canPublishNotice(actorRole, canPublishNoticesFlag)) {
+      return { success: false, error: 'Only the CR or authorized Co-Admins can pin official notices.' };
     }
 
     const local = getLocalData();
@@ -1674,6 +2307,19 @@ export const classSpaceService = {
           .eq('id', messageId);
 
         if (error) return { success: false, error: error.message };
+
+        if (newPinned && actingUserId) {
+          try {
+            await this.dispatchNotificationToMembers(workspaceId, actingUserId, {
+              title: '📌 Announcement Pinned',
+              body: msg.content.slice(0, 100),
+              type: 'announcement',
+            });
+          } catch {
+            // Non-blocking notification dispatch
+          }
+        }
+
         return { success: true };
       } catch (err) {
         return { success: false, error: (err as Error).message };
@@ -1681,6 +2327,23 @@ export const classSpaceService = {
     }
 
     msg.isPinned = newPinned;
+
+    if (newPinned && actingUserId) {
+      const nowTs = new Date().toISOString();
+      for (const m of local.members.filter((mem) => mem.workspaceId === workspaceId && mem.userId !== actingUserId)) {
+        local.notifications.push({
+          id: 'notif_' + Math.random().toString(36).substring(2, 11),
+          workspaceId,
+          userId: m.userId,
+          title: '📌 Announcement Pinned',
+          body: msg.content.slice(0, 100),
+          type: 'announcement',
+          isRead: false,
+          createdAt: nowTs,
+        });
+      }
+    }
+
     saveLocalData(local);
     return { success: true };
   },
@@ -1958,6 +2621,19 @@ export const classSpaceService = {
           });
 
         if (error) return { error: error.message };
+
+        // Synchronize display_name and avatar_url to class_members to trigger live Realtime updates
+        try {
+          await supabase
+            .from('class_members')
+            .update({
+              display_name: updated.displayName,
+              avatar_url: updated.avatarUrl,
+            })
+            .eq('user_id', userId);
+        } catch {
+          // Non-blocking sync
+        }
       } catch (err) {
         return { error: (err as Error).message };
       }
@@ -1971,6 +2647,15 @@ export const classSpaceService = {
         m.displayName = updated.displayName;
         m.avatarUrl = updated.avatarUrl;
         if (updated.email) m.email = updated.email;
+      }
+    }
+    // Update matching join requests
+    if (local.joinRequests) {
+      for (const req of local.joinRequests) {
+        if (req.userId === userId) {
+          req.displayName = updated.displayName;
+          req.avatarUrl = updated.avatarUrl;
+        }
       }
     }
     saveLocalData(local);
@@ -2019,33 +2704,95 @@ export const classSpaceService = {
 
   subscribeToWorkspace(workspaceId: string, onUpdate: () => void): () => void {
     const supabase = getSupabaseClient();
+    let supabaseChannel: any = null;
+
     if (supabase && isCloudAvailable() && !isLocalId(workspaceId)) {
       try {
-        const channel = supabase
+        supabaseChannel = supabase
           .channel(`classspace:${workspaceId}`)
           .on(
             'postgres_changes',
-            { event: '*', schema: 'public', filter: `workspace_id=eq.${workspaceId}` },
+            { event: '*', schema: 'public', table: 'class_messages', filter: `workspace_id=eq.${workspaceId}` },
+            () => onUpdate()
+          )
+          .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'class_members', filter: `workspace_id=eq.${workspaceId}` },
+            () => onUpdate()
+          )
+          .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'class_channels', filter: `workspace_id=eq.${workspaceId}` },
+            () => onUpdate()
+          )
+          .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'class_join_requests', filter: `workspace_id=eq.${workspaceId}` },
+            () => onUpdate()
+          )
+          .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'class_timetable_overrides', filter: `workspace_id=eq.${workspaceId}` },
+            () => onUpdate()
+          )
+          .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'class_notifications', filter: `workspace_id=eq.${workspaceId}` },
+            () => onUpdate()
+          )
+          .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'class_profiles' },
             () => onUpdate()
           )
           .subscribe();
-
-        return () => {
-          supabase.removeChannel(channel);
-        };
-      } catch {
-        // Fallback to storage listener below
+      } catch (err) {
+        console.warn('[ClassSpaceService] Realtime subscription error:', err);
       }
     }
 
     // Cross-tab local storage update listener
-    const handler = () => onUpdate();
-    window.addEventListener('tracker_classspace_updated', handler);
-    window.addEventListener('storage', handler);
+    const storageHandler = () => onUpdate();
+    if (typeof window !== 'undefined') {
+      window.addEventListener('tracker_classspace_updated', storageHandler);
+      window.addEventListener('storage', storageHandler);
+    }
+
+    // Gentle fallback heartbeat polling (every 10 seconds, only when tab is visible)
+    let pollInterval: any = null;
+    let visibilityHandler: any = null;
+
+    if (typeof document !== 'undefined' && typeof window !== 'undefined') {
+      pollInterval = setInterval(() => {
+        if (document.visibilityState === 'visible') {
+          onUpdate();
+        }
+      }, 10000);
+
+      visibilityHandler = () => {
+        if (document.visibilityState === 'visible') {
+          onUpdate();
+        }
+      };
+      document.addEventListener('visibilitychange', visibilityHandler);
+    }
 
     return () => {
-      window.removeEventListener('tracker_classspace_updated', handler);
-      window.removeEventListener('storage', handler);
+      if (supabase && supabaseChannel) {
+        try {
+          supabase.removeChannel(supabaseChannel);
+        } catch {
+          // Ignore cleanup error
+        }
+      }
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('tracker_classspace_updated', storageHandler);
+        window.removeEventListener('storage', storageHandler);
+      }
+      if (pollInterval) clearInterval(pollInterval);
+      if (visibilityHandler && typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', visibilityHandler);
+      }
     };
   },
 };
@@ -2082,7 +2829,39 @@ function mapMemberFromDb(row: any): ClassSpaceMember {
     email: row.email,
     avatarUrl: row.avatar_url,
     isMuted: row.is_muted,
+    canPublishNotices: row.can_publish_notices ?? (row.role === 'cr' || row.role === 'owner'),
     joinedAt: row.joined_at,
+  };
+}
+
+function mapChannelFromDb(row: any): ClassSpaceChannel {
+  return {
+    id: row.id,
+    workspaceId: row.workspace_id,
+    name: row.name,
+    slug: row.slug,
+    description: row.description,
+    isDefault: row.is_default,
+    isSystem: row.is_system,
+    position: row.position ?? 0,
+    createdBy: row.created_by,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function mapJoinRequestFromDb(row: any): ClassJoinRequest {
+  return {
+    id: row.id,
+    workspaceId: row.workspace_id,
+    userId: row.user_id,
+    displayName: row.display_name,
+    avatarUrl: row.avatar_url,
+    status: row.status,
+    reviewedBy: row.reviewed_by,
+    reviewedAt: row.reviewed_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
 }
 
@@ -2143,6 +2922,7 @@ function mapMessageFromDb(row: any): ClassMessage {
   return {
     id: row.id,
     workspaceId: row.workspace_id,
+    channelId: row.channel_id,
     senderId: row.sender_id,
     senderName: row.sender_name,
     senderRole: row.sender_role,

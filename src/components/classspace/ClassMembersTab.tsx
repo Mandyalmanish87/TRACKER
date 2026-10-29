@@ -8,6 +8,10 @@ import {
   Calendar,
   UserX,
   Mail,
+  Check,
+  X,
+  ArrowRightLeft,
+  Megaphone,
 } from 'lucide-react';
 import { useClassSpace } from '../../context/ClassSpaceContext';
 import { ClassSpaceMember, ClassSpaceRole } from '../../types/classSpace';
@@ -21,12 +25,20 @@ export const ClassMembersTab: React.FC = () => {
     currentMember,
     isCR,
     removeMember,
+    joinRequests,
+    reviewJoinRequest,
+    updateMemberRole,
+    transferCRRole,
+    updateCoAdminNoticePermission,
   } = useClassSpace();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<'all' | 'cr' | 'co_admin' | 'member'>('all');
   const [memberToRemove, setMemberToRemove] = useState<ClassSpaceMember | null>(null);
-  const [removeError, setRemoveError] = useState<string | null>(null);
+  const [memberForCRTransfer, setMemberForCRTransfer] = useState<ClassSpaceMember | null>(null);
+  const [previousCRRoleChoice, setPreviousCRRoleChoice] = useState<'co_admin' | 'member'>('co_admin');
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [reviewingReqId, setReviewingReqId] = useState<string | null>(null);
 
   // Filter members based on query and role filter
   const filteredMembers = useMemo(() => {
@@ -94,6 +106,76 @@ export const ClassMembersTab: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {/* ── Pending Join Requests Review Panel for CR ── */}
+      {isCR && joinRequests.length > 0 && (
+        <div className="p-4 rounded-xl border border-amber-500/30 bg-amber-500/10 shadow-xs space-y-3 animate-in fade-in duration-200">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
+              <h4 className="text-sm font-bold text-foreground flex items-center gap-1.5">
+                <span>Pending Join Requests</span>
+                <span className="px-2 py-0.2 rounded-full text-xs bg-amber-500 text-white font-mono font-bold">
+                  {joinRequests.length}
+                </span>
+              </h4>
+            </div>
+            <span className="text-xs text-muted-foreground hidden sm:inline">CR approval required before students can join</span>
+          </div>
+
+          <div className="divide-y divide-border/60 rounded-lg border border-border/60 bg-card overflow-hidden">
+            {joinRequests.map((req) => (
+              <div key={req.id} className="p-3 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div
+                    className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-white text-xs shadow-2xs shrink-0"
+                    style={{ backgroundColor: getAvatarBgColor(req.displayName) }}
+                  >
+                    {getAvatarInitials(req.displayName)}
+                  </div>
+                  <div className="min-w-0">
+                    <span className="text-xs font-semibold text-foreground block truncate">
+                      {req.displayName}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground">
+                      Requested {formatDate(req.createdAt)}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    disabled={reviewingReqId === req.id}
+                    onClick={async () => {
+                      setReviewingReqId(req.id);
+                      const res = await reviewJoinRequest(req.id, 'approve');
+                      if (!res.success) setActionError(res.error || 'Failed to approve request.');
+                      setReviewingReqId(null);
+                    }}
+                    className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Approve</span>
+                  </button>
+                  <button
+                    disabled={reviewingReqId === req.id}
+                    onClick={async () => {
+                      setReviewingReqId(req.id);
+                      const res = await reviewJoinRequest(req.id, 'reject');
+                      if (!res.success) setActionError(res.error || 'Failed to decline request.');
+                      setReviewingReqId(null);
+                    }}
+                    className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-secondary hover:bg-secondary/80 text-muted-foreground hover:text-foreground border border-border transition flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                    <span>Decline</span>
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Header Summary & Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="p-4 rounded-xl border border-border bg-card shadow-sm flex items-center justify-between">
@@ -279,19 +361,88 @@ export const ClassMembersTab: React.FC = () => {
                   </div>
 
                   {/* Actions / Info */}
-                  <div className="flex items-center gap-2 self-end sm:self-center">
+                  <div className="flex flex-wrap items-center gap-2 self-end sm:self-center">
+                    {/* Notice publishing badge for Co-Admins */}
+                    {member.role === 'co_admin' && member.canPublishNotices && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                        <Megaphone className="w-3 h-3" />
+                        Can Post Notices
+                      </span>
+                    )}
+
                     <span className="text-xs text-muted-foreground md:hidden">
                       Joined {formatDate(member.joinedAt)}
                     </span>
+
                     {isCR && !isCurrentUser && member.role !== 'cr' && (
-                      <button
-                        onClick={() => setMemberToRemove(member)}
-                        className="px-2.5 py-1 text-xs font-medium text-destructive hover:bg-destructive/10 rounded-lg transition-colors flex items-center gap-1 border border-destructive/20"
-                        title="Remove member from workspace"
-                      >
-                        <UserX className="w-3.5 h-3.5" />
-                        <span className="hidden sm:inline">Remove</span>
-                      </button>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {/* Co-Admin notice permission toggle */}
+                        {member.role === 'co_admin' && (
+                          <button
+                            onClick={async () => {
+                              setActionError(null);
+                              const res = await updateCoAdminNoticePermission(member.userId, !member.canPublishNotices);
+                              if (!res.success) setActionError(res.error || 'Failed to update notice permission.');
+                            }}
+                            className={`px-2 py-1 text-xs font-medium rounded-lg transition border flex items-center gap-1 cursor-pointer ${
+                              member.canPublishNotices
+                                ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30'
+                                : 'text-muted-foreground hover:bg-secondary border-border'
+                            }`}
+                            title={member.canPublishNotices ? 'Revoke notice publishing' : 'Allow posting official notices'}
+                          >
+                            <Megaphone className="w-3 h-3" />
+                            <span>{member.canPublishNotices ? 'Notice Rights' : '+ Notice Rights'}</span>
+                          </button>
+                        )}
+
+                        {/* Promote to Co-Admin / Demote to Student */}
+                        {member.role === 'member' ? (
+                          <button
+                            onClick={async () => {
+                              setActionError(null);
+                              const res = await updateMemberRole(member.userId, 'co_admin');
+                              if (!res.success) setActionError(res.error || 'Failed to promote member.');
+                            }}
+                            className="px-2 py-1 text-xs font-medium text-blue-600 hover:bg-blue-500/10 rounded-lg transition border border-blue-500/20 cursor-pointer"
+                            title="Promote to Co-Admin"
+                          >
+                            Promote Co-Admin
+                          </button>
+                        ) : (
+                          <button
+                            onClick={async () => {
+                              setActionError(null);
+                              const res = await updateMemberRole(member.userId, 'member');
+                              if (!res.success) setActionError(res.error || 'Failed to demote member.');
+                            }}
+                            className="px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-secondary rounded-lg transition border border-border cursor-pointer"
+                            title="Demote to Student"
+                          >
+                            Demote Student
+                          </button>
+                        )}
+
+                        {/* Transfer CR Role */}
+                        <button
+                          onClick={() => setMemberForCRTransfer(member)}
+                          className="px-2 py-1 text-xs font-medium text-amber-600 hover:bg-amber-500/10 rounded-lg transition border border-amber-500/20 flex items-center gap-1 cursor-pointer"
+                          title="Transfer Class Representative Role"
+                        >
+                          <ArrowRightLeft className="w-3 h-3" />
+                          <span>Transfer CR</span>
+                        </button>
+
+                        {/* Remove Member */}
+                        <button
+                          onClick={() => setMemberToRemove(member)}
+                          className="px-2 py-1 text-xs font-medium text-destructive hover:bg-destructive/10 rounded-lg transition-colors flex items-center gap-1 border border-destructive/20 cursor-pointer"
+                          title="Remove member from workspace"
+                        >
+                          <UserX className="w-3.5 h-3.5" />
+                          <span className="hidden sm:inline">Remove</span>
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -301,12 +452,12 @@ export const ClassMembersTab: React.FC = () => {
         )}
       </div>
 
-      {/* Error notification if removal fails */}
-      {removeError && (
+      {/* Action Error notification */}
+      {actionError && (
         <div className="p-3 text-xs rounded-xl bg-destructive/15 text-destructive border border-destructive/30 flex items-center justify-between">
-          <span>{removeError}</span>
+          <span>{actionError}</span>
           <button
-            onClick={() => setRemoveError(null)}
+            onClick={() => setActionError(null)}
             className="text-destructive font-bold hover:opacity-80"
           >
             &times;
@@ -324,16 +475,94 @@ export const ClassMembersTab: React.FC = () => {
         variant="danger"
         onConfirm={async () => {
           if (memberToRemove) {
-            setRemoveError(null);
+            setActionError(null);
             const res = await removeMember(memberToRemove.userId);
             if (!res.success) {
-              setRemoveError(res.error || 'Failed to remove member.');
+              setActionError(res.error || 'Failed to remove member.');
             }
             setMemberToRemove(null);
           }
         }}
         onCancel={() => setMemberToRemove(null)}
       />
+
+      {/* CR Role Transfer Modal */}
+      {Boolean(memberForCRTransfer) && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div
+            className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-2 text-amber-500">
+              <ArrowRightLeft className="w-5 h-5" />
+              <h3 className="text-base font-bold text-foreground">Transfer Class Representative Role</h3>
+            </div>
+
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              You are about to transfer the primary <strong>Class Representative (CR)</strong> role for{' '}
+              <span className="font-semibold text-foreground">{activeWorkspace?.name}</span> to{' '}
+              <span className="font-semibold text-foreground">{memberForCRTransfer?.displayName}</span>.
+              There can only be one CR at a time.
+            </p>
+
+            <div className="space-y-2 pt-1">
+              <label className="text-xs font-semibold text-foreground">Select your new role after transfer:</label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPreviousCRRoleChoice('co_admin')}
+                  className={`p-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer ${
+                    previousCRRoleChoice === 'co_admin'
+                      ? 'border-blue-500 bg-blue-500/10 text-blue-600 dark:text-blue-400 ring-2 ring-blue-500/20'
+                      : 'border-border text-muted-foreground hover:bg-secondary'
+                  }`}
+                >
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>Co-Admin</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreviousCRRoleChoice('member')}
+                  className={`p-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer ${
+                    previousCRRoleChoice === 'member'
+                      ? 'border-primary bg-primary/10 text-primary ring-2 ring-primary/20'
+                      : 'border-border text-muted-foreground hover:bg-secondary'
+                  }`}
+                >
+                  <GraduationCap className="w-4 h-4" />
+                  <span>Student</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3">
+              <button
+                type="button"
+                onClick={() => setMemberForCRTransfer(null)}
+                className="px-4 py-2 text-xs font-semibold rounded-xl text-muted-foreground hover:bg-secondary transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (memberForCRTransfer) {
+                    setActionError(null);
+                    const res = await transferCRRole(memberForCRTransfer.userId, previousCRRoleChoice);
+                    if (!res.success) {
+                      setActionError(res.error || 'Failed to transfer CR role.');
+                    }
+                    setMemberForCRTransfer(null);
+                  }
+                }}
+                className="px-4 py-2 text-xs font-semibold rounded-xl bg-amber-600 hover:bg-amber-700 text-white transition shadow-xs cursor-pointer"
+              >
+                Confirm Transfer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

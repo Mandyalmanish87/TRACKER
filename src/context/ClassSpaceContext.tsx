@@ -3,6 +3,9 @@ import {
   ClassSpaceWorkspace,
   ClassSpaceMember,
   ClassSpaceRole,
+  ClassSpaceChannel,
+  ClassJoinRequest,
+  ClassJoinRequestStatus,
   ClassTimetableRule,
   ClassTimetableOverride,
   ResolvedClassOccurrence,
@@ -14,9 +17,71 @@ import {
   ClassUserProfile,
 } from '../types/classSpace';
 import { classSpaceService } from '../services/classSpaceService';
-import { resolveClassSchedule, canManageSchedule, canModerate, canManageWorkspace } from '../utils/classSpaceUtils';
+import { resolveClassSchedule, canManageSchedule, canModerate, canManageWorkspace, canPublishNotice } from '../utils/classSpaceUtils';
 import { useApp } from './AppContext';
 import { AuthUser } from '../services/authService';
+
+// ─── Workspace and Channel Persistence Keys & Helpers ────────────────────────
+export const ACTIVE_WORKSPACE_STORAGE_KEY = 'tracker_active_workspace_id';
+
+export const getActiveWorkspaceStorageKey = (userId?: string | null): string =>
+  userId && userId !== 'usr_local_student'
+    ? `tracker_active_workspace_id_${userId}`
+    : ACTIVE_WORKSPACE_STORAGE_KEY;
+
+export const getActiveChannelStorageKey = (workspaceId: string): string =>
+  `tracker_active_channel_${workspaceId}`;
+
+export function getSavedWorkspaceId(userId?: string | null): string | null {
+  try {
+    if (typeof window === 'undefined') return null;
+    if (userId && userId !== 'usr_local_student') {
+      const userKey = getActiveWorkspaceStorageKey(userId);
+      const userVal = localStorage.getItem(userKey);
+      if (userVal) return userVal;
+    }
+    return localStorage.getItem(ACTIVE_WORKSPACE_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function saveActiveWorkspaceId(workspaceId: string | null, userId?: string | null): void {
+  try {
+    if (typeof window === 'undefined') return;
+    if (workspaceId) {
+      localStorage.setItem(ACTIVE_WORKSPACE_STORAGE_KEY, workspaceId);
+      if (userId && userId !== 'usr_local_student') {
+        localStorage.setItem(getActiveWorkspaceStorageKey(userId), workspaceId);
+      }
+    } else {
+      localStorage.removeItem(ACTIVE_WORKSPACE_STORAGE_KEY);
+      if (userId && userId !== 'usr_local_student') {
+        localStorage.removeItem(getActiveWorkspaceStorageKey(userId));
+      }
+    }
+  } catch {}
+}
+
+export function getSavedChannelId(workspaceId: string): string | null {
+  try {
+    if (typeof window === 'undefined' || !workspaceId) return null;
+    return localStorage.getItem(getActiveChannelStorageKey(workspaceId));
+  } catch {
+    return null;
+  }
+}
+
+export function saveActiveChannelId(workspaceId: string, channelId: string | null): void {
+  try {
+    if (typeof window === 'undefined' || !workspaceId) return;
+    if (channelId) {
+      localStorage.setItem(getActiveChannelStorageKey(workspaceId), channelId);
+    } else {
+      localStorage.removeItem(getActiveChannelStorageKey(workspaceId));
+    }
+  } catch {}
+}
 
 interface ClassSpaceContextType {
   // Workspaces
@@ -27,13 +92,35 @@ interface ClassSpaceContextType {
   isLoading: boolean;
   isCloudConfigured: boolean;
 
+  // Channels
+  channels: ClassSpaceChannel[];
+  activeChannel: ClassSpaceChannel | null;
+  activeChannelId: string;
+  setActiveChannelId: (channelId: string) => void;
+  createChannel: (name: string, description?: string) => Promise<{ channel?: ClassSpaceChannel; error?: string }>;
+  deleteChannel: (channelId: string) => Promise<{ success: boolean; error?: string }>;
+
+  // Join Requests
+  joinRequests: ClassJoinRequest[];
+  requestToJoinWorkspace: (code: string) => Promise<{
+    status?: ClassJoinRequestStatus;
+    workspace?: ClassSpaceWorkspace;
+    request?: ClassJoinRequest;
+    message?: string;
+    error?: string;
+  }>;
+  reviewJoinRequest: (requestId: string, action: 'approve' | 'reject') => Promise<{ success: boolean; error?: string }>;
+
   // Roles & Permissions
   isOwner: boolean;
   isCR: boolean;
   isCoAdmin: boolean;
+  canPublishNotices: boolean;
   canEditSchedule: boolean;
   canModerateChat: boolean;
   canManageWorkspace: boolean;
+  transferCRRole: (targetUserId: string, previousCRNewRole?: 'co_admin' | 'member') => Promise<{ success: boolean; error?: string }>;
+  updateCoAdminNoticePermission: (targetUserId: string, canPublish: boolean) => Promise<{ success: boolean; error?: string }>;
 
   // Official Timetable & Occurrences
   rules: ClassTimetableRule[];
@@ -120,7 +207,21 @@ interface ClassSpaceContextType {
   markAttendance: (occurrenceKey: string, date: string, status: 'present' | 'absent' | 'cancelled') => Promise<void>;
 
   // Community Chat Actions
-  sendMessage: (content: string, replyTo?: { id: string; content: string; senderName: string }) => Promise<{ error?: string }>;
+  sendMessage: (
+    content: string,
+    optionsOrReply?:
+      | {
+          id: string;
+          content: string;
+          senderName: string;
+        }
+      | {
+          replyTo?: { id: string; content: string; senderName: string };
+          isAnnouncement?: boolean;
+          isPinned?: boolean;
+          channelId?: string;
+        }
+  ) => Promise<{ error?: string }>;
   createPoll: (
     question: string,
     options: string[],
@@ -156,7 +257,7 @@ export const ClassSpaceContext = createContext<ClassSpaceContextType | undefined
 export const useOptionalClassSpace = () => useContext(ClassSpaceContext);
 
 export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { authUser, state: appState, addSubject, markAttendanceForEvent } = useApp();
+  const { authUser, state: appState, addSubject, markAttendanceForEvent, updateSettings } = useApp();
 
   // Active student identity (syncs with user profile email, display name, and avatar)
   const effectiveUser: AuthUser = useMemo(() => {
@@ -185,6 +286,9 @@ export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [workspaces, setWorkspaces] = useState<ClassSpaceWorkspace[]>([]);
   const [activeWorkspace, setActiveWorkspace] = useState<ClassSpaceWorkspace | null>(null);
   const [members, setMembers] = useState<ClassSpaceMember[]>([]);
+  const [channels, setChannels] = useState<ClassSpaceChannel[]>([]);
+  const [activeChannelId, setActiveChannelId] = useState<string>('');
+  const [joinRequests, setJoinRequests] = useState<ClassJoinRequest[]>([]);
   const [rules, setRules] = useState<ClassTimetableRule[]>([]);
   const [overrides, setOverrides] = useState<ClassTimetableOverride[]>([]);
   const [attendanceRecords, setAttendanceRecords] = useState<ClassAttendanceRecord[]>([]);
@@ -193,6 +297,12 @@ export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [notifications, setNotifications] = useState<ClassNotification[]>([]);
   const [profile, setProfile] = useState<ClassUserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Active channel derived state
+  const activeChannel = useMemo(() => {
+    if (!channels || channels.length === 0) return null;
+    return channels.find((c) => c.id === activeChannelId) || channels[0] || null;
+  }, [channels, activeChannelId]);
 
   // Default calendar viewing range: current month +/- 1 week
   const [scheduleRange, setScheduleRange] = useState<{ start: Date; end: Date }>(() => {
@@ -220,6 +330,7 @@ export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const isOwner = currentMember?.role === 'owner' || (Boolean(activeWorkspace && activeWorkspace.createdBy === effectiveUser.id));
   const isCR = currentMember?.role === 'cr' || isOwner;
   const isCoAdmin = currentMember?.role === 'co_admin';
+  const canPublishNotices = canPublishNotice(currentMember?.role, currentMember?.canPublishNotices) || isOwner;
   const canEditSchedule = canManageSchedule(currentMember?.role) || isOwner;
   const canModerateChat = canModerate(currentMember?.role) || isOwner;
   const canManageWs = canManageWorkspace(currentMember?.role) || isOwner;
@@ -232,15 +343,37 @@ export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setWorkspaces(userWorkspaces);
 
       if (userWorkspaces.length > 0) {
-        // Retain active workspace if still valid, otherwise pick first
+        // Priority for restoring active workspace:
+        // 1. Memory state if already pointing to a valid workspace
+        // 2. Persisted active workspace ID from storage for this user
+        // 3. Fallback to userWorkspaces[0]
+        const savedWsId = getSavedWorkspaceId(effectiveUser.id);
+
         setActiveWorkspace((prev) => {
           if (prev && userWorkspaces.some((w) => w.id === prev.id)) {
-            return userWorkspaces.find((w) => w.id === prev.id)!;
+            const current = userWorkspaces.find((w) => w.id === prev.id)!;
+            saveActiveWorkspaceId(current.id, effectiveUser.id);
+            return current;
           }
-          return userWorkspaces[0];
+          if (savedWsId && userWorkspaces.some((w) => w.id === savedWsId)) {
+            const found = userWorkspaces.find((w) => w.id === savedWsId)!;
+            saveActiveWorkspaceId(found.id, effectiveUser.id);
+            return found;
+          }
+          const fallback = userWorkspaces[0];
+          saveActiveWorkspaceId(fallback.id, effectiveUser.id);
+          return fallback;
         });
+
+        // Ensure userMode is class_based when user belongs to one or more workspaces
+        if (appState.settings?.userMode !== 'class_based') {
+          updateSettings({ userMode: 'class_based' });
+        }
       } else {
         setActiveWorkspace(null);
+        if (authUser && !effectiveUser.isSimulated) {
+          saveActiveWorkspaceId(null, effectiveUser.id);
+        }
       }
 
       const p = await classSpaceService.getUserProfile(effectiveUser.id);
@@ -250,7 +383,7 @@ export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     } finally {
       setIsLoading(false);
     }
-  }, [effectiveUser.id]);
+  }, [effectiveUser.id, effectiveUser.isSimulated, authUser, appState.settings?.userMode, updateSettings]);
 
   useEffect(() => {
     refreshWorkspaces();
@@ -260,6 +393,8 @@ export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const refreshWorkspaceData = useCallback(async () => {
     if (!activeWorkspace) {
       setMembers([]);
+      setChannels([]);
+      setJoinRequests([]);
       setRules([]);
       setOverrides([]);
       setAttendanceRecords([]);
@@ -277,6 +412,8 @@ export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         msgList,
         savedList,
         notifList,
+        channelList,
+        reqList,
       ] = await Promise.all([
         classSpaceService.getMembers(activeWorkspace.id),
         classSpaceService.getScheduleData(activeWorkspace.id),
@@ -284,6 +421,8 @@ export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         classSpaceService.getMessages(activeWorkspace.id),
         classSpaceService.getSavedMessages(activeWorkspace.id, effectiveUser.id),
         classSpaceService.getNotifications(activeWorkspace.id, effectiveUser.id),
+        classSpaceService.getChannels(activeWorkspace.id),
+        classSpaceService.getJoinRequests(activeWorkspace.id),
       ]);
 
       setMembers(memberList);
@@ -293,10 +432,63 @@ export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setMessages(msgList);
       setSavedMessages(savedList);
       setNotifications(notifList);
+      setChannels(channelList);
+      setJoinRequests(reqList);
+
+      // Channel resolution order:
+      // 1. URL hash channel slug if present (e.g. #classspace/study-vault)
+      // 2. Active channel currently in state if valid in this workspace
+      // 3. Persisted channel ID for this workspace from localStorage
+      // 4. Default 'the-commons' channel or channelList[0]
+      const hashChannelSlug = typeof window !== 'undefined'
+        ? window.location.hash.replace(/^#\/?/, '').split('/')[1]?.toLowerCase()
+        : null;
+
+      const fromHash = hashChannelSlug
+        ? channelList.find((c) => c.slug === hashChannelSlug || c.id === hashChannelSlug)
+        : null;
+
+      const savedChanId = getSavedChannelId(activeWorkspace.id);
+      const fromStorage = savedChanId
+        ? channelList.find((c) => c.id === savedChanId || c.slug === savedChanId)
+        : null;
+
+      setActiveChannelId((prev) => {
+        if (fromHash) {
+          saveActiveChannelId(activeWorkspace.id, fromHash.id);
+          return fromHash.id;
+        }
+        if (prev && channelList.some((c) => c.id === prev)) {
+          saveActiveChannelId(activeWorkspace.id, prev);
+          return prev;
+        }
+        if (fromStorage) {
+          saveActiveChannelId(activeWorkspace.id, fromStorage.id);
+          return fromStorage.id;
+        }
+        const fallbackId = channelList[0]?.id || '';
+        if (fallbackId) {
+          saveActiveChannelId(activeWorkspace.id, fallbackId);
+        }
+        return fallbackId;
+      });
     } catch (err) {
       console.warn('[ClassSpaceContext] Error refreshing active workspace data:', err);
     }
   }, [activeWorkspace, effectiveUser.id]);
+
+  const handleSetActiveChannelId = useCallback((channelId: string) => {
+    setActiveChannelId(channelId);
+    if (activeWorkspace) {
+      saveActiveChannelId(activeWorkspace.id, channelId);
+      // Synchronize URL hash with the selected channel slug if currently on classspace route
+      if (typeof window !== 'undefined' && !window.location.hash.includes('=')) {
+        const targetChan = channels.find((c) => c.id === channelId);
+        const slug = targetChan?.slug || channelId;
+        window.history.replaceState(null, '', `#classspace/${slug}`);
+      }
+    }
+  }, [activeWorkspace, channels]);
 
   useEffect(() => {
     refreshWorkspaceData();
@@ -351,7 +543,13 @@ export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const selectWorkspace = (wsId: string) => {
     const target = workspaces.find((w) => w.id === wsId);
-    if (target) setActiveWorkspace(target);
+    if (target) {
+      setActiveWorkspace(target);
+      saveActiveWorkspaceId(target.id, effectiveUser.id);
+      if (appState.settings?.userMode !== 'class_based') {
+        updateSettings({ userMode: 'class_based' });
+      }
+    }
   };
 
   const createWorkspace = async (details: {
@@ -367,6 +565,10 @@ export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     if (res.workspace) {
       setWorkspaces((prev) => [...prev, res.workspace!]);
       setActiveWorkspace(res.workspace);
+      saveActiveWorkspaceId(res.workspace.id, effectiveUser.id);
+      if (appState.settings?.userMode !== 'class_based') {
+        updateSettings({ userMode: 'class_based' });
+      }
       if (res.member) {
         setMembers([res.member]);
       }
@@ -382,6 +584,10 @@ export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         return [...prev, res.workspace!];
       });
       setActiveWorkspace(res.workspace);
+      saveActiveWorkspaceId(res.workspace.id, effectiveUser.id);
+      if (appState.settings?.userMode !== 'class_based') {
+        updateSettings({ userMode: 'class_based' });
+      }
     }
     return res;
   };
@@ -428,20 +634,38 @@ export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       }
     }
 
-    const res = await classSpaceService.leaveWorkspace(activeWorkspace.id, effectiveUser.id);
+    const leavingWsId = activeWorkspace.id;
+    const res = await classSpaceService.leaveWorkspace(leavingWsId, effectiveUser.id);
     if (res.success) {
-      setWorkspaces((prev) => prev.filter((w) => w.id !== activeWorkspace.id));
-      setActiveWorkspace(null);
+      saveActiveChannelId(leavingWsId, null);
+      const remaining = workspaces.filter((w) => w.id !== leavingWsId);
+      setWorkspaces(remaining);
+      if (remaining.length > 0) {
+        setActiveWorkspace(remaining[0]);
+        saveActiveWorkspaceId(remaining[0].id, effectiveUser.id);
+      } else {
+        setActiveWorkspace(null);
+        saveActiveWorkspaceId(null, effectiveUser.id);
+      }
     }
     return res;
   };
 
   const deleteWorkspace = async () => {
     if (!activeWorkspace) return { success: false, error: 'No active ClassSpace selected.' };
-    const res = await classSpaceService.deleteWorkspace(activeWorkspace.id, effectiveUser.id);
+    const deletingWsId = activeWorkspace.id;
+    const res = await classSpaceService.deleteWorkspace(deletingWsId, effectiveUser.id);
     if (res.success) {
-      setWorkspaces((prev) => prev.filter((w) => w.id !== activeWorkspace.id));
-      setActiveWorkspace(null);
+      saveActiveChannelId(deletingWsId, null);
+      const remaining = workspaces.filter((w) => w.id !== deletingWsId);
+      setWorkspaces(remaining);
+      if (remaining.length > 0) {
+        setActiveWorkspace(remaining[0]);
+        saveActiveWorkspaceId(remaining[0].id, effectiveUser.id);
+      } else {
+        setActiveWorkspace(null);
+        saveActiveWorkspaceId(null, effectiveUser.id);
+      }
     }
     return res;
   };
@@ -562,6 +786,28 @@ export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         type: 'schedule_change',
         linkOccurrenceId: res.override.id,
       });
+
+      // Automatically post official announcement in Class Pulse channel
+      const pulseChannel = channels.find((c) => c.slug === 'class-pulse') || activeChannel;
+      const crName = currentMember?.displayName || effectiveUser.name || 'CR';
+      const msgText = `📅 CLASS RESCHEDULED\n\n${rule?.subjectName || 'Class'} has been moved from ${params.originalDate}${rule?.startTime ? ' (' + rule.startTime + ')' : ''} to ${params.newDate}${params.newStartTime ? ' (' + params.newStartTime + ')' : ''}.${params.newRoom ? `\nRoom: ${params.newRoom}` : ''}${params.changeNote ? `\nReason: ${params.changeNote}` : ''}\n\nUpdated by: ${crName}`;
+
+      await classSpaceService.sendMessage(
+        activeWorkspace.id,
+        {
+          id: effectiveUser.id,
+          name: crName,
+          role: currentMember?.role || 'cr',
+          avatarUrl: currentMember?.avatarUrl || effectiveUser.avatarUrl,
+        },
+        msgText,
+        undefined,
+        {
+          channelId: pulseChannel?.id,
+          messageType: 'announcement',
+          isPinned: true,
+        }
+      );
     }
     return { error: res.error };
   };
@@ -594,6 +840,27 @@ export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         type: 'cancelled_class',
         linkOccurrenceId: res.override.id,
       });
+
+      const pulseChannel = channels.find((c) => c.slug === 'class-pulse') || activeChannel;
+      const crName = currentMember?.displayName || effectiveUser.name || 'CR';
+      const msgText = `🚫 CLASS CANCELLED\n\n${rule?.subjectName || 'Class'} scheduled for ${params.originalDate}${rule?.startTime ? ' (' + rule.startTime + ')' : ''} has been cancelled.${params.changeNote ? `\nReason: ${params.changeNote}` : ''}\n\nUpdated by: ${crName}`;
+
+      await classSpaceService.sendMessage(
+        activeWorkspace.id,
+        {
+          id: effectiveUser.id,
+          name: crName,
+          role: currentMember?.role || 'cr',
+          avatarUrl: currentMember?.avatarUrl || effectiveUser.avatarUrl,
+        },
+        msgText,
+        undefined,
+        {
+          channelId: pulseChannel?.id,
+          messageType: 'announcement',
+          isPinned: true,
+        }
+      );
     }
     return { error: res.error };
   };
@@ -649,6 +916,27 @@ export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         type: 'extra_class',
         linkOccurrenceId: res.override.id,
       });
+
+      const pulseChannel = channels.find((c) => c.slug === 'class-pulse') || activeChannel;
+      const crName = currentMember?.displayName || effectiveUser.name || 'CR';
+      const msgText = `📢 EXTRA CLASS ADDED\n\n${params.subjectName} will be held on ${params.date} at ${params.startTime}${params.room ? ' in ' + params.room : ''}.${params.changeNote ? `\nNote: ${params.changeNote}` : ''}\n\nUpdated by: ${crName}`;
+
+      await classSpaceService.sendMessage(
+        activeWorkspace.id,
+        {
+          id: effectiveUser.id,
+          name: crName,
+          role: currentMember?.role || 'cr',
+          avatarUrl: currentMember?.avatarUrl || effectiveUser.avatarUrl,
+        },
+        msgText,
+        undefined,
+        {
+          channelId: pulseChannel?.id,
+          messageType: 'announcement',
+          isPinned: true,
+        }
+      );
     }
     return { error: res.error };
   };
@@ -661,7 +949,6 @@ export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       const codeUpper = r.subjectCode.toUpperCase();
       if (!existingCodes.has(codeUpper)) {
         existingCodes.add(codeUpper);
-        // We can add a subject record through appState if desired
       }
     }
   };
@@ -691,9 +978,43 @@ export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   // Community Chat Actions
   const sendMessage = async (
     content: string,
-    replyTo?: { id: string; content: string; senderName: string }
+    optionsOrReply?:
+      | {
+          id: string;
+          content: string;
+          senderName: string;
+        }
+      | {
+          replyTo?: { id: string; content: string; senderName: string };
+          isAnnouncement?: boolean;
+          isPinned?: boolean;
+          channelId?: string;
+        }
   ) => {
     if (!activeWorkspace) return { error: 'No active workspace.' };
+
+    let replyTo: { id: string; content: string; senderName: string } | undefined;
+    let isAnnouncement = false;
+    let isPinned = false;
+    let targetChannelId = activeChannel?.id;
+
+    if (optionsOrReply) {
+      if ('id' in optionsOrReply && 'senderName' in optionsOrReply) {
+        replyTo = optionsOrReply;
+      } else {
+        replyTo = (optionsOrReply as any).replyTo;
+        isAnnouncement = Boolean((optionsOrReply as any).isAnnouncement);
+        isPinned = Boolean((optionsOrReply as any).isPinned);
+        if ((optionsOrReply as any).channelId) {
+          targetChannelId = (optionsOrReply as any).channelId;
+        }
+      }
+    }
+
+    if (isAnnouncement) {
+      isPinned = true;
+    }
+
     const res = await classSpaceService.sendMessage(
       activeWorkspace.id,
       {
@@ -703,14 +1024,19 @@ export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         avatarUrl: currentMember?.avatarUrl || effectiveUser.avatarUrl,
       },
       content,
-      replyTo
+      replyTo,
+      {
+        channelId: targetChannelId,
+        messageType: isAnnouncement ? 'announcement' : 'text',
+        isPinned,
+      }
     );
 
     if (res.message) {
       setMessages((prev) => [...prev, res.message!]);
       // If this is a reply, notify the original sender
       if (replyTo) {
-        const originalMsg = messages.find((m) => m.id === replyTo.id);
+        const originalMsg = messages.find((m) => m.id === replyTo!.id);
         if (originalMsg && originalMsg.senderId !== effectiveUser.id) {
           await classSpaceService.dispatchNotificationToMembers(activeWorkspace.id, effectiveUser.id, {
             title: `${currentMember?.displayName || 'A classmate'} replied to your message`,
@@ -876,7 +1202,9 @@ export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const res = await classSpaceService.togglePinMessage(
       activeWorkspace.id,
       messageId,
-      currentMember?.role
+      currentMember?.role,
+      effectiveUser.id,
+      currentMember?.canPublishNotices
     );
     if (res.success) {
       setMessages((prev) =>
@@ -884,6 +1212,69 @@ export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       );
     }
     return { error: res.error };
+  };
+
+  const createChannel = async (name: string, description?: string) => {
+    if (!activeWorkspace) return { error: 'No active workspace.' };
+    const res = await classSpaceService.createChannel(activeWorkspace.id, effectiveUser.id, name, description);
+    if (res.channel) {
+      setChannels((prev) => [...prev, res.channel!]);
+      handleSetActiveChannelId(res.channel.id);
+    }
+    return res;
+  };
+
+  const deleteChannel = async (channelId: string) => {
+    if (!activeWorkspace) return { success: false, error: 'No active workspace.' };
+    const res = await classSpaceService.deleteChannel(activeWorkspace.id, effectiveUser.id, channelId);
+    if (res.success) {
+      setChannels((prev) => prev.filter((c) => c.id !== channelId));
+      if (activeChannelId === channelId) {
+        const remaining = channels.filter((c) => c.id !== channelId);
+        if (remaining.length > 0) handleSetActiveChannelId(remaining[0].id);
+      }
+    }
+    return res;
+  };
+
+  const requestToJoinWorkspace = async (code: string) => {
+    const res = await classSpaceService.requestToJoinWorkspace(effectiveUser, code);
+    return res;
+  };
+
+  const reviewJoinRequest = async (requestId: string, action: 'approve' | 'reject') => {
+    if (!activeWorkspace) return { success: false, error: 'No active workspace.' };
+    const res = await classSpaceService.reviewJoinRequest(activeWorkspace.id, effectiveUser.id, requestId, action);
+    if (res.success) {
+      setJoinRequests((prev) => prev.filter((r) => r.id !== requestId));
+      if (res.member) {
+        setMembers((prev) => {
+          if (prev.some((m) => m.userId === res.member!.userId)) return prev;
+          return [...prev, res.member!];
+        });
+      }
+    }
+    return res;
+  };
+
+  const transferCRRole = async (targetUserId: string, previousCRNewRole: 'co_admin' | 'member' = 'co_admin') => {
+    if (!activeWorkspace) return { success: false, error: 'No active workspace.' };
+    const res = await classSpaceService.transferCRRole(activeWorkspace.id, effectiveUser.id, targetUserId, previousCRNewRole);
+    if (res.success) {
+      await refreshWorkspaceData();
+    }
+    return res;
+  };
+
+  const updateCoAdminNoticePermission = async (targetUserId: string, canPublish: boolean) => {
+    if (!activeWorkspace) return { success: false, error: 'No active workspace.' };
+    const res = await classSpaceService.updateCoAdminNoticePermission(activeWorkspace.id, effectiveUser.id, targetUserId, canPublish);
+    if (res.success) {
+      setMembers((prev) =>
+        prev.map((m) => (m.userId === targetUserId ? { ...m, canPublishNotices: canPublish } : m))
+      );
+    }
+    return res;
   };
 
   const toggleSaveMessage = async (messageId: string) => {
@@ -960,14 +1351,26 @@ export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         activeWorkspace,
         currentMember,
         members,
+        channels,
+        activeChannel,
+        activeChannelId,
+        setActiveChannelId: handleSetActiveChannelId,
+        createChannel,
+        deleteChannel,
+        joinRequests,
+        requestToJoinWorkspace,
+        reviewJoinRequest,
         isLoading,
         isCloudConfigured: classSpaceService.isCloudConfigured,
         isOwner,
         isCR,
         isCoAdmin,
+        canPublishNotices,
         canEditSchedule,
         canModerateChat,
         canManageWorkspace: canManageWs,
+        transferCRRole,
+        updateCoAdminNoticePermission,
         rules,
         overrides,
         occurrences,

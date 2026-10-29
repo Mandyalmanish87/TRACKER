@@ -18,12 +18,14 @@ interface ClassSpaceHeaderProps {
   onCreateClick: () => void;
   onJoinClick: () => void;
   onToggleNotifications: () => void;
+  onPendingRequestsClick?: () => void;
 }
 
 export const ClassSpaceHeader: React.FC<ClassSpaceHeaderProps> = ({
   onCreateClick,
   onJoinClick,
   onToggleNotifications,
+  onPendingRequestsClick,
 }) => {
   const {
     workspaces,
@@ -32,6 +34,8 @@ export const ClassSpaceHeader: React.FC<ClassSpaceHeaderProps> = ({
     currentMember,
     unreadNotificationCount,
     isCloudConfigured,
+    isCR,
+    joinRequests,
   } = useClassSpace();
 
   const [copiedCode, setCopiedCode] = useState(false);
@@ -175,6 +179,18 @@ export const ClassSpaceHeader: React.FC<ClassSpaceHeaderProps> = ({
                 )}
               </button>
             </div>
+          )}
+
+          {/* Pending Join Requests (for CR) */}
+          {isCR && joinRequests.length > 0 && (
+            <button
+              onClick={onPendingRequestsClick}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-500/10 dark:bg-amber-950/40 border border-amber-500/30 text-amber-800 dark:text-amber-300 text-xs font-semibold hover:bg-amber-500/20 transition cursor-pointer"
+              title="Review pending student join requests"
+            >
+              <Users className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+              <span>{joinRequests.length} Pending</span>
+            </button>
           )}
 
           {/* Notifications Button */}

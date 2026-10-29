@@ -15,6 +15,7 @@ import {
   canModerate,
   canManageWorkspace,
   isWorkspaceOwner,
+  canPublishNotice,
   resolveClassSchedule,
   JOIN_CODE_CHARACTERS,
   JOIN_CODE_LENGTH,
@@ -750,6 +751,266 @@ describe('ClassSpace UI Component Integration & User Mode', () => {
     // 4. Verify the exact email from Main Settings profile is displayed in Community Classmates directory
     await waitFor(() => {
       expect(screen.getByText('aanya.sharma@iitd.ac.in')).toBeInTheDocument();
+    });
+  });
+
+  describe('ClassSpace 2.0 — Roles, Approvals, Channels, & Pulse Feed', () => {
+    it('verifies notice publishing permissions: CR/Owner always allowed, Co-Admin requires flag, Member denied', () => {
+      expect(canPublishNotice('owner')).toBe(true);
+      expect(canPublishNotice('cr')).toBe(true);
+      expect(canPublishNotice('co_admin', true)).toBe(true);
+      expect(canPublishNotice('co_admin', false)).toBe(false);
+      expect(canPublishNotice('co_admin', undefined)).toBe(false);
+      expect(canPublishNotice('member', true)).toBe(false);
+      expect(canPublishNotice('member', false)).toBe(false);
+      expect(canPublishNotice(undefined)).toBe(false);
+    });
+
+    it('initializes default channels: The Commons, Study Vault, and Class Pulse', async () => {
+      localStorage.clear();
+      const creator = { id: 'usr_cr_chan', email: 'cr@tracker.local', name: 'CR Leader' };
+      const res = await classSpaceService.createWorkspace(creator, { name: 'Batch 2026' });
+      expect(res.workspace).toBeDefined();
+
+      const channels = await classSpaceService.getChannels(res.workspace!.id);
+      expect(channels).toHaveLength(3);
+      expect(channels.map((c) => c.slug)).toEqual(
+        expect.arrayContaining(['the-commons', 'study-vault', 'class-pulse'])
+      );
+      expect(channels.every((c) => c.isDefault)).toBe(true);
+
+      // Default channels cannot be deleted
+      const commons = channels.find((c) => c.slug === 'the-commons')!;
+      const delRes = await classSpaceService.deleteChannel(res.workspace!.id, creator.id, commons.id);
+      expect(delRes.success).toBe(false);
+      expect(delRes.error).toMatch(/Cannot delete default channels/i);
+    });
+
+    it('allows CR to create and delete custom channels', async () => {
+      localStorage.clear();
+      const creator = { id: 'usr_cr_custom', email: 'cr@tracker.local', name: 'CR Leader' };
+      const res = await classSpaceService.createWorkspace(creator, { name: 'Custom Channels Class' });
+      const wsId = res.workspace!.id;
+
+      const createRes = await classSpaceService.createChannel(wsId, creator.id, 'Exam Prep & PYQs', 'Past year papers');
+      expect(createRes.channel).toBeDefined();
+      expect(createRes.channel!.name).toBe('Exam Prep & PYQs');
+      expect(createRes.channel!.slug).toBe('exam-prep-pyqs');
+      expect(createRes.channel!.isDefault).toBe(false);
+
+      const allChannels = await classSpaceService.getChannels(wsId);
+      expect(allChannels.some((c) => c.slug === 'exam-prep-pyqs')).toBe(true);
+
+      const delRes = await classSpaceService.deleteChannel(wsId, creator.id, createRes.channel!.id);
+      expect(delRes.success).toBe(true);
+
+      const afterChannels = await classSpaceService.getChannels(wsId);
+      expect(afterChannels.some((c) => c.slug === 'exam-prep-pyqs')).toBe(false);
+    });
+
+    it('handles student join requests and CR approval workflow', async () => {
+      localStorage.clear();
+      const crUser = { id: 'usr_cr_flow', email: 'cr@tracker.local', name: 'CR Person' };
+      const studentUser = { id: 'usr_student_join', email: 'student@tracker.local', name: 'Rohan Sharma' };
+
+      const wsRes = await classSpaceService.createWorkspace(crUser, { name: 'ECE Section A' });
+      const wsId = wsRes.workspace!.id;
+      const joinCode = wsRes.workspace!.joinCode;
+
+      // 1. Student requests to join via 5-character code
+      const reqRes = await classSpaceService.requestToJoinWorkspace(studentUser, joinCode);
+      expect(reqRes.status).toBe('pending');
+      expect(reqRes.error).toBeUndefined();
+      expect(reqRes.request).toBeDefined();
+
+      // 2. CR queries pending requests
+      const pendingRequests = await classSpaceService.getJoinRequests(wsId);
+      expect(pendingRequests.length).toBeGreaterThanOrEqual(1);
+      const studentReq = pendingRequests.find((r) => r.userId === studentUser.id);
+      expect(studentReq).toBeDefined();
+      expect(studentReq!.displayName).toBe('Rohan Sharma');
+
+      // 3. Non-CR cannot approve join request
+      const fakeUser = { id: 'usr_imposter', email: 'imposter@tracker.local', name: 'Imposter' };
+      const unauthorizedRes = await classSpaceService.reviewJoinRequest(wsId, fakeUser.id, studentReq!.id, 'approve');
+      expect(unauthorizedRes.success).toBe(false);
+      expect(unauthorizedRes.error).toMatch(/unauthorized|only the class representative/i);
+
+      // 4. CR approves join request
+      const approveRes = await classSpaceService.reviewJoinRequest(wsId, crUser.id, studentReq!.id, 'approve');
+      expect(approveRes.success).toBe(true);
+      expect(approveRes.member).toBeDefined();
+      expect(approveRes.member!.userId).toBe(studentUser.id);
+      expect(approveRes.member!.role).toBe('member');
+
+      // 5. Student is now in workspace members roster
+      const members = await classSpaceService.getMembers(wsId);
+      expect(members.some((m) => m.userId === studentUser.id && m.role === 'member')).toBe(true);
+
+      // 6. Request is no longer in pending list
+      const remaining = await classSpaceService.getJoinRequests(wsId);
+      expect(remaining.some((r) => r.id === studentReq!.id)).toBe(false);
+    });
+
+    it('transfers CR role atomically without leaving duplicate or missing CRs', async () => {
+      localStorage.clear();
+      const initialCR = { id: 'usr_cr_orig', email: 'cr1@tracker.local', name: 'Initial CR' };
+      const nextCR = { id: 'usr_cr_next', email: 'cr2@tracker.local', name: 'Next CR' };
+
+      const wsRes = await classSpaceService.createWorkspace(initialCR, { name: 'Batch Transfers' });
+      const wsId = wsRes.workspace!.id;
+
+      // Add nextCR as a Co-Admin first
+      await classSpaceService.joinWorkspaceByCode(nextCR, wsRes.workspace!.joinCode);
+      await classSpaceService.updateMemberRole(wsId, initialCR.id, nextCR.id, 'co_admin');
+
+      // Initial CR transfers CR role to nextCR
+      const transferRes = await classSpaceService.transferCRRole(wsId, initialCR.id, nextCR.id, 'co_admin');
+      expect(transferRes.success).toBe(true);
+
+      const members = await classSpaceService.getMembers(wsId);
+      const crCount = members.filter((m) => m.role === 'cr' || m.role === 'owner').length;
+      expect(crCount).toBe(1);
+
+      const newCRMember = members.find((m) => m.userId === nextCR.id);
+      const oldCRMember = members.find((m) => m.userId === initialCR.id);
+      expect(newCRMember?.role).toBe('cr');
+      expect(oldCRMember?.role).toBe('co_admin');
+    });
+
+    it('allows CR to manage Co-Admin notice publishing permission', async () => {
+      localStorage.clear();
+      const crUser = { id: 'usr_cr_perm', email: 'cr@tracker.local', name: 'CR Boss' };
+      const coAdminUser = { id: 'usr_co_perm', email: 'co@tracker.local', name: 'CoAdmin Member' };
+
+      const wsRes = await classSpaceService.createWorkspace(crUser, { name: 'Permissions Class' });
+      const wsId = wsRes.workspace!.id;
+
+      await classSpaceService.joinWorkspaceByCode(coAdminUser, wsRes.workspace!.joinCode);
+      await classSpaceService.updateMemberRole(wsId, crUser.id, coAdminUser.id, 'co_admin');
+
+      // CR grants notice publishing
+      const grantRes = await classSpaceService.updateCoAdminNoticePermission(wsId, crUser.id, coAdminUser.id, true);
+      expect(grantRes.success).toBe(true);
+
+      let members = await classSpaceService.getMembers(wsId);
+      let coMember = members.find((m) => m.userId === coAdminUser.id);
+      expect(coMember?.canPublishNotices).toBe(true);
+
+      // CR revokes notice publishing
+      const revokeRes = await classSpaceService.updateCoAdminNoticePermission(wsId, crUser.id, coAdminUser.id, false);
+      expect(revokeRes.success).toBe(true);
+
+      members = await classSpaceService.getMembers(wsId);
+      coMember = members.find((m) => m.userId === coAdminUser.id);
+      expect(coMember?.canPublishNotices).toBe(false);
+    });
+
+    it('supports pinned announcements and durable notifications in ClassSpace channels', async () => {
+      localStorage.clear();
+      const crUser = { id: 'usr_cr_notice', email: 'cr@tracker.local', name: 'CR Notice Writer' };
+      const studentUser = { id: 'usr_stu_notice', email: 'stu@tracker.local', name: 'Student Listener' };
+
+      const wsRes = await classSpaceService.createWorkspace(crUser, { name: 'Notice Feed Class' });
+      const wsId = wsRes.workspace!.id;
+      await classSpaceService.joinWorkspaceByCode(studentUser, wsRes.workspace!.joinCode);
+
+      const channels = await classSpaceService.getChannels(wsId);
+      const pulseChan = channels.find((c) => c.slug === 'class-pulse')!;
+
+      // CR sends pinned announcement into Class Pulse
+      const sendRes = await classSpaceService.sendMessage(
+        wsId,
+        { id: crUser.id, name: 'CR Notice Writer', role: 'cr' },
+        '🚨 Official Notice: Midterm exam schedule is released!',
+        undefined,
+        {
+          channelId: pulseChan.id,
+          messageType: 'announcement',
+          isPinned: true,
+        }
+      );
+      expect(sendRes.message).toBeDefined();
+      expect(sendRes.message!.isPinned).toBe(true);
+      expect(sendRes.message!.channelId).toBe(pulseChan.id);
+      expect(sendRes.message!.messageType).toBe('announcement');
+
+      // Notifications dispatched to members
+      const notifs = await classSpaceService.getNotifications(wsId, studentUser.id);
+      expect(notifs.some((n) => n.title.includes('Official Notice') || n.body.includes('Midterm'))).toBe(true);
+    });
+
+    it('strictly denies students and unpermitted Co-Admins from pinning or publishing announcements', async () => {
+      localStorage.clear();
+      const crUser = { id: 'usr_cr_sec', email: 'cr@tracker.local', name: 'CR Leader' };
+      const coAdminUser = { id: 'usr_co_sec', email: 'co@tracker.local', name: 'CoAdmin Member' };
+      const studentUser = { id: 'usr_stu_sec', email: 'stu@tracker.local', name: 'Student Member' };
+
+      const wsRes = await classSpaceService.createWorkspace(crUser, { name: 'Security Audit Class' });
+      const wsId = wsRes.workspace!.id;
+      await classSpaceService.joinWorkspaceByCode(coAdminUser, wsRes.workspace!.joinCode);
+      await classSpaceService.updateMemberRole(wsId, crUser.id, coAdminUser.id, 'co_admin');
+      await classSpaceService.joinWorkspaceByCode(studentUser, wsRes.workspace!.joinCode);
+
+      // 1. Student attempts to send pinned announcement
+      const studentSendRes = await classSpaceService.sendMessage(
+        wsId,
+        { id: studentUser.id, name: 'Student Member', role: 'member' },
+        'Fake announcement',
+        undefined,
+        { messageType: 'announcement', isPinned: true }
+      );
+      expect(studentSendRes.message).toBeUndefined();
+      expect(studentSendRes.error).toMatch(/unauthorized|only the class representative/i);
+
+      // 2. Co-Admin without permission attempts to send pinned announcement
+      const unpermittedSendRes = await classSpaceService.sendMessage(
+        wsId,
+        { id: coAdminUser.id, name: 'CoAdmin Member', role: 'co_admin' },
+        'CoAdmin notice attempt',
+        undefined,
+        { messageType: 'announcement', isPinned: true }
+      );
+      expect(unpermittedSendRes.message).toBeUndefined();
+      expect(unpermittedSendRes.error).toMatch(/unauthorized|only the class representative/i);
+
+      // 3. Student attempts to toggle pin on an existing regular message
+      const regularMsgRes = await classSpaceService.sendMessage(
+        wsId,
+        { id: studentUser.id, name: 'Student Member', role: 'member' },
+        'Regular student question'
+      );
+      expect(regularMsgRes.message).toBeDefined();
+
+      const studentPinRes = await classSpaceService.togglePinMessage(
+        wsId,
+        regularMsgRes.message!.id,
+        'member',
+        studentUser.id,
+        false
+      );
+      expect(studentPinRes.success).toBe(false);
+      expect(studentPinRes.error).toMatch(/only the cr or authorized co-admins/i);
+
+      // 4. Cannot assign notice permissions to a normal student
+      const assignStudentNoticeRes = await classSpaceService.updateCoAdminNoticePermission(
+        wsId,
+        crUser.id,
+        studentUser.id,
+        true
+      );
+      expect(assignStudentNoticeRes.success).toBe(false);
+      expect(assignStudentNoticeRes.error).toMatch(/can only be granted to co-admins/i);
+
+      // 5. CR cannot transfer role to self
+      const selfTransferRes = await classSpaceService.transferCRRole(wsId, crUser.id, crUser.id);
+      expect(selfTransferRes.success).toBe(false);
+      expect(selfTransferRes.error).toMatch(/cannot transfer the cr role to yourself/i);
+
+      // 6. Student cannot transfer CR role
+      const studentTransferRes = await classSpaceService.transferCRRole(wsId, studentUser.id, coAdminUser.id);
+      expect(studentTransferRes.success).toBe(false);
+      expect(studentTransferRes.error).toMatch(/only the current class representative/i);
     });
   });
 });

@@ -33,6 +33,8 @@ export const ClassSpaceView: React.FC<ClassSpaceViewProps> = ({ onNavigateToSett
     activeWorkspace,
     isLoading,
     members,
+    joinRequests,
+    isCR,
   } = useClassSpace();
 
   const [activeTab, setActiveTab] = useState<ClassSpaceSubTab>('community');
@@ -40,11 +42,23 @@ export const ClassSpaceView: React.FC<ClassSpaceViewProps> = ({ onNavigateToSett
   const [showJoinModal, setShowJoinModal] = useState(false);
   const [showNotificationDrawer, setShowNotificationDrawer] = useState(false);
 
+  const pendingCount = isCR ? joinRequests.length : 0;
+
   // Tab configuration: only Community and Classmates live inside ClassSpace
   // Timetable and Attendance live directly in the main navigation
   const tabs: SubTabItem[] = [
     { id: 'community', label: 'Community & Notices', icon: MessageSquare },
-    { id: 'members', label: 'Classmates', icon: Users, badge: members.length > 0 ? `${members.length}` : undefined },
+    {
+      id: 'members',
+      label: 'Classmates',
+      icon: Users,
+      badge:
+        pendingCount > 0
+          ? `${members.length} (${pendingCount} pending)`
+          : members.length > 0
+          ? `${members.length}`
+          : undefined,
+    },
   ];
 
   if (isLoading) {
@@ -140,6 +154,7 @@ export const ClassSpaceView: React.FC<ClassSpaceViewProps> = ({ onNavigateToSett
         onCreateClick={() => setShowCreateModal(true)}
         onJoinClick={() => setShowJoinModal(true)}
         onToggleNotifications={() => setShowNotificationDrawer(true)}
+        onPendingRequestsClick={() => setActiveTab('members')}
       />
 
       {/* 2. Sub-tab Navigation */}
