@@ -1,4 +1,5 @@
 import { getSupabaseClient, isSupabaseConfigured, AuthUser } from './authService';
+import { AcademicCalendarSettings } from '../types';
 import {
   ClassSpaceWorkspace,
   ClassSpaceMember,
@@ -762,6 +763,20 @@ export const classSpaceService = {
     local.notifications = local.notifications.filter((n) => n.workspaceId !== workspaceId);
     saveLocalData(local);
 
+    return { success: true };
+  },
+
+  async updateWorkspaceAcademicCalendar(
+    workspaceId: string,
+    academicCalendar: AcademicCalendarSettings
+  ): Promise<{ success: boolean; error?: string }> {
+    const local = getLocalData();
+    const ws = local.workspaces.find((w) => w.id === workspaceId);
+    if (ws) {
+      ws.academicCalendar = academicCalendar;
+      ws.updatedAt = new Date().toISOString();
+      saveLocalData(local);
+    }
     return { success: true };
   },
 

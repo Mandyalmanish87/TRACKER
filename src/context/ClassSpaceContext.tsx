@@ -20,6 +20,7 @@ import { classSpaceService } from '../services/classSpaceService';
 import { resolveClassSchedule, canManageSchedule, canModerate, canManageWorkspace, canPublishNotice } from '../utils/classSpaceUtils';
 import { useApp } from './AppContext';
 import { AuthUser } from '../services/authService';
+import { AcademicCalendarSettings } from '../types';
 
 // ─── Workspace and Channel Persistence Keys & Helpers ────────────────────────
 export const ACTIVE_WORKSPACE_STORAGE_KEY = 'tracker_active_workspace_id';
@@ -110,6 +111,7 @@ interface ClassSpaceContextType {
     error?: string;
   }>;
   reviewJoinRequest: (requestId: string, action: 'approve' | 'reject') => Promise<{ success: boolean; error?: string }>;
+  updateWorkspaceAcademicCalendar: (calendar: AcademicCalendarSettings) => Promise<{ success: boolean; error?: string }>;
 
   // Roles & Permissions
   isOwner: boolean;
@@ -648,6 +650,18 @@ export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setActiveWorkspace((prev) => (prev ? { ...prev, joinCode: res.newCode! } : null));
       setWorkspaces((prev) =>
         prev.map((w) => (w.id === activeWorkspace.id ? { ...w, joinCode: res.newCode! } : w))
+      );
+    }
+    return res;
+  };
+
+  const updateWorkspaceAcademicCalendar = async (calendar: AcademicCalendarSettings) => {
+    if (!activeWorkspace) return { success: false, error: 'No active ClassSpace selected.' };
+    const res = await classSpaceService.updateWorkspaceAcademicCalendar(activeWorkspace.id, calendar);
+    if (res.success) {
+      setActiveWorkspace((prev) => (prev ? { ...prev, academicCalendar: calendar } : null));
+      setWorkspaces((prev) =>
+        prev.map((w) => (w.id === activeWorkspace.id ? { ...w, academicCalendar: calendar } : w))
       );
     }
     return res;
@@ -1436,6 +1450,7 @@ export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       createWorkspace,
       joinWorkspaceByCode,
       rotateJoinCode,
+      updateWorkspaceAcademicCalendar,
       leaveWorkspace,
       deleteWorkspace,
       updateMemberRole,
@@ -1505,6 +1520,7 @@ export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       createWorkspace,
       joinWorkspaceByCode,
       rotateJoinCode,
+      updateWorkspaceAcademicCalendar,
       leaveWorkspace,
       deleteWorkspace,
       updateMemberRole,

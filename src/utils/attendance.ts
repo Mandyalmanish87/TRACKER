@@ -158,3 +158,7 @@ export function meetsAttendanceRequirement(
 ): boolean {
   return percentage >= requirement;
 }
+
+// Re-export academic calendar & scope resolver utilities
+export * from './academicCalendarEngine';
+export * from './attendanceScopeResolver';

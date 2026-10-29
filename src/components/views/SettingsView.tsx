@@ -35,6 +35,7 @@ import {
   Mail,
   School,
   Hash,
+  CalendarDays,
 } from 'lucide-react';
 import { useOptionalClassSpace } from '../../context/ClassSpaceContext';
 import { getAvatarBgColor, getAvatarInitials } from '../../utils/classSpaceUtils';
@@ -42,6 +43,11 @@ import { CreateWorkspaceModal } from '../classspace/CreateWorkspaceModal';
 import { JoinWorkspaceModal } from '../classspace/JoinWorkspaceModal';
 import { ConfirmModal } from '../common/ConfirmModal';
 import { BillingSettingsSection } from '../subscription/BillingSettingsSection';
+import { AcademicCalendarModal } from '../attendance/AcademicCalendarModal';
+import {
+  createDefaultAcademicSettings,
+  AcademicCalendarSettings,
+} from '../../utils/academicCalendarEngine';
 
 // ─── Accent Color Catalogue ────────────────────────────────────────────────
 const ACCENT_OPTIONS: { id: AccentColor; label: string; hex: string }[] = [
@@ -209,6 +215,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToClassSpa
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [confirmRotateOpen, setConfirmRotateOpen] = useState(false);
   const [classActionError, setClassActionError] = useState<string | null>(null);
+  const [isAcademicModalOpen, setIsAcademicModalOpen] = useState(false);
 
   const settings = state.settings ?? {
     themeMode: 'system' as ThemeMode,
@@ -1368,6 +1375,52 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToClassSpa
           </div>
         </Card>
 
+        {/* ── Academic Calendar & Period Setting ── */}
+        <Card>
+          <SectionHeading
+            icon={<CalendarDays className="w-4 h-4" />}
+            title="Academic Calendar & Period"
+            sub="Academic period duration, weekly off days, and national holidays used for attendance calculations"
+          />
+
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-4 p-4 rounded-xl bg-ivory-50 dark:bg-espresso-800/60 border border-ivory-200 dark:border-espresso-700">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-espresso-900 dark:text-ivory-100">
+                    {settings.userMode === 'class_based' && activeWorkspace
+                      ? `ClassSpace: ${activeWorkspace.name}`
+                      : 'Personal Tracker Calendar'}
+                  </span>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-mono uppercase font-bold bg-terracotta-100 dark:bg-terracotta-950/60 text-terracotta-700 dark:text-terracotta-300">
+                    {(settings.userMode === 'class_based' && activeWorkspace?.academicCalendar
+                      ? activeWorkspace.academicCalendar.periodType
+                      : settings.academicCalendar?.periodType || 'semester') === 'semester'
+                      ? 'Semester (6 Months)'
+                      : 'Academic Year (1 Year)'}
+                  </span>
+                </div>
+                <p className="text-xs font-mono text-espresso-500 dark:text-espresso-400">
+                  Span: {settings.userMode === 'class_based' && activeWorkspace?.academicCalendar
+                    ? `${activeWorkspace.academicCalendar.startDate} → ${activeWorkspace.academicCalendar.endDate}`
+                    : `${settings.academicCalendar?.startDate || 'Default'} → ${settings.academicCalendar?.endDate || 'Default'}`}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsAcademicModalOpen(true)}
+                className="px-4 py-2 rounded-xl bg-espresso-900 hover:bg-espresso-800 dark:bg-ivory-100 dark:hover:bg-ivory-200 text-white dark:text-espresso-950 text-xs font-semibold transition"
+              >
+                Configure Academic Calendar
+              </button>
+            </div>
+            <p className="text-xs text-espresso-400 dark:text-espresso-500">
+              Configure Semester vs Academic Year, start/end dates, weekly off days (Sunday/Saturday), and institutional holidays.
+            </p>
+          </div>
+        </Card>
+
         {/* ── Daily Question Target ── */}
         <Card>
           <SectionHeading
@@ -1536,6 +1589,29 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToClassSpa
           }
         }}
         onCancel={() => setConfirmDeleteOpen(false)}
+      />
+
+      {/* Academic Calendar Settings Modal */}
+      <AcademicCalendarModal
+        isOpen={isAcademicModalOpen}
+        onClose={() => setIsAcademicModalOpen(false)}
+        initialSettings={
+          settings.userMode === 'class_based' && activeWorkspace?.academicCalendar
+            ? activeWorkspace.academicCalendar
+            : settings.academicCalendar || createDefaultAcademicSettings('semester')
+        }
+        onSave={async (newCalendar: AcademicCalendarSettings) => {
+          if (settings.userMode === 'class_based' && activeWorkspace && classSpace) {
+            await classSpace.updateWorkspaceAcademicCalendar(newCalendar);
+          } else {
+            updateSettings({ academicCalendar: newCalendar });
+          }
+        }}
+        isClassSpaceScope={settings.userMode === 'class_based'}
+        canEdit={
+          settings.userMode !== 'class_based' ||
+          Boolean(classSpace?.isOwner || classSpace?.isCR || classSpace?.isCoAdmin)
+        }
       />
     </div>
   );

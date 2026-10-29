@@ -11,6 +11,11 @@ import { useApp } from '../../context/AppContext';
 import { DayOfWeek, ResolvedCalendarEvent } from '../../types';
 import { resolveSchedule } from '../../utils/scheduleResolver';
 import { useOptionalClassSpace } from '../../context/ClassSpaceContext';
+import {
+  isWeeklyOffDay,
+  findNationalHoliday,
+  createDefaultAcademicSettings,
+} from '../../utils/academicCalendarEngine';
 
 const DAYS_OF_WEEK: { id: DayOfWeek; name: string; short: string }[] = [
   { id: 1, name: 'Monday', short: 'Mon' },
@@ -50,6 +55,42 @@ export const AttendanceCalendarTab: React.FC = () => {
   const [markingEvent, setMarkingEvent] = useState<ResolvedCalendarEvent | null>(null);
 
   const todayStr = useMemo(() => formatDateStr(new Date()), []);
+
+  const academicCalendar = useMemo(() => {
+    if (isClassBased && classSpace?.activeWorkspace) {
+      return (
+        classSpace.activeWorkspace.academicCalendar ||
+        createDefaultAcademicSettings('semester')
+      );
+    }
+    return (
+      state.settings?.academicCalendar ||
+      createDefaultAcademicSettings('semester')
+    );
+  }, [isClassBased, classSpace?.activeWorkspace, state.settings?.academicCalendar]);
+
+  // Available subjects for the active scope filter
+  const availableCourses = useMemo(() => {
+    if (isClassBased && classSpace?.activeWorkspace) {
+      const map = new Map<string, { id: string; code: string; name: string }>();
+      for (const r of classSpace.rules) {
+        const code = (r.subjectCode || 'GEN').toUpperCase().trim();
+        if (!map.has(code)) {
+          map.set(code, { id: r.id, code, name: r.subjectName || code });
+        }
+      }
+      for (const o of classSpace.overrides) {
+        if (o.type === 'extra' && o.subjectCode) {
+          const code = o.subjectCode.toUpperCase().trim();
+          if (!map.has(code)) {
+            map.set(code, { id: o.id, code, name: o.subjectName || code });
+          }
+        }
+      }
+      return Array.from(map.values());
+    }
+    return state.subjects.map((s) => ({ id: s.id, code: s.code, name: s.name }));
+  }, [isClassBased, classSpace?.activeWorkspace, classSpace?.rules, classSpace?.overrides, state.subjects]);
 
   const handlePrev = () => {
     const next = new Date(currentDate);
@@ -304,7 +345,7 @@ export const AttendanceCalendarTab: React.FC = () => {
               className="px-3 py-1.5 rounded-xl border border-ivory-300 dark:border-espresso-700 bg-ivory-50 dark:bg-espresso-800 text-xs font-mono text-espresso-900 dark:text-ivory-100 focus:outline-none"
             >
               <option value="all">All Courses</option>
-              {state.subjects.map((s) => (
+              {availableCourses.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.code}
                 </option>
@@ -352,13 +393,17 @@ export const AttendanceCalendarTab: React.FC = () => {
               const isToday = cell.dateStr === todayStr;
               const isFuture = cell.dateStr > todayStr;
               const cellEvents = resolvedEventsByDate.get(cell.dateStr) || [];
+              const isOffDay = isWeeklyOffDay(cell.date, academicCalendar.weeklyOffDays);
+              const holiday = findNationalHoliday(cell.dateStr, academicCalendar.nationalHolidays);
 
               return (
                 <div
                   key={idx}
                   className={`min-h-[110px] p-1.5 sm:p-2 flex flex-col justify-between ${
                     cell.isCurrentMonth
-                      ? 'bg-white dark:bg-espresso-850'
+                      ? isOffDay || holiday
+                        ? 'bg-ivory-50/60 dark:bg-espresso-850/60'
+                        : 'bg-white dark:bg-espresso-850'
                       : 'bg-ivory-50/40 dark:bg-espresso-900/30 opacity-60'
                   } ${isToday ? 'ring-2 ring-inset ring-terracotta-400' : ''}`}
                 >
@@ -374,9 +419,24 @@ export const AttendanceCalendarTab: React.FC = () => {
                     >
                       {cell.date.getDate()}
                     </span>
-                    {isFuture && cellEvents.length > 0 && (
-                      <span className="text-[9px] font-mono text-espresso-400 uppercase">Planned</span>
-                    )}
+
+                    <div className="flex items-center gap-1 overflow-hidden">
+                      {holiday ? (
+                        <span
+                          className="text-[9px] px-1 py-0.2 rounded bg-amber-100 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 font-mono font-semibold truncate max-w-[65px]"
+                          title={`Holiday: ${holiday.name}`}
+                        >
+                          {holiday.name}
+                        </span>
+                      ) : isOffDay ? (
+                        <span className="text-[9px] font-mono text-espresso-400 dark:text-espresso-500">
+                          Off
+                        </span>
+                      ) : null}
+                      {isFuture && cellEvents.length > 0 && (
+                        <span className="text-[9px] font-mono text-espresso-400 uppercase">Planned</span>
+                      )}
+                    </div>
                   </div>
 
                   {/* Class Chips with Attendance Status */}
@@ -449,6 +509,9 @@ export const AttendanceCalendarTab: React.FC = () => {
             <div className="grid grid-cols-7 border-b border-ivory-200 dark:border-espresso-800 bg-ivory-50/70 dark:bg-espresso-900/60 divide-x divide-ivory-200 dark:divide-espresso-800 text-center py-2.5">
               {weekDays.map((day) => {
                 const isToday = day.dateStr === todayStr;
+                const isOffDay = isWeeklyOffDay(day.date, academicCalendar.weeklyOffDays);
+                const holiday = findNationalHoliday(day.dateStr, academicCalendar.nationalHolidays);
+
                 return (
                   <div key={day.dayOfWeek} className="px-2">
                     <span className="font-mono text-[10px] font-bold uppercase text-espresso-500 block">
@@ -463,6 +526,16 @@ export const AttendanceCalendarTab: React.FC = () => {
                     >
                       {day.date.getDate()}
                     </span>
+                    {holiday ? (
+                      <span
+                        className="block text-[8px] font-mono text-amber-600 dark:text-amber-400 font-semibold truncate"
+                        title={holiday.name}
+                      >
+                        {holiday.name}
+                      </span>
+                    ) : isOffDay ? (
+                      <span className="block text-[8px] font-mono text-espresso-400">Off</span>
+                    ) : null}
                   </div>
                 );
               })}
@@ -471,16 +544,24 @@ export const AttendanceCalendarTab: React.FC = () => {
             <div className="grid grid-cols-7 divide-x divide-ivory-200 dark:divide-espresso-800 min-h-[360px]">
               {weekDays.map((day) => {
                 const isToday = day.dateStr === todayStr;
+                const isOffDay = isWeeklyOffDay(day.date, academicCalendar.weeklyOffDays);
+                const holiday = findNationalHoliday(day.dateStr, academicCalendar.nationalHolidays);
                 const dayEvents = resolvedEventsByDate.get(day.dateStr) || [];
 
                 return (
                   <div
                     key={day.dayOfWeek}
-                    className={`p-2 space-y-2 ${isToday ? 'bg-terracotta-50/20' : ''}`}
+                    className={`p-2 space-y-2 ${
+                      isToday
+                        ? 'bg-terracotta-50/20'
+                        : isOffDay || holiday
+                        ? 'bg-ivory-50/40 dark:bg-espresso-900/30'
+                        : ''
+                    }`}
                   >
                     {dayEvents.length === 0 ? (
                       <div className="py-10 text-center text-[10px] text-espresso-400 italic">
-                        No classes
+                        {holiday ? `Holiday (${holiday.name})` : isOffDay ? 'Weekly Off' : 'No classes'}
                       </div>
                     ) : (
                       dayEvents.map((evt) => {

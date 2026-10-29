@@ -1,4 +1,4 @@
-import { DayOfWeek } from './index';
+import { DayOfWeek, AcademicCalendarSettings } from './index';
 
 export type ClassSpaceRole = 'owner' | 'cr' | 'co_admin' | 'member';
 
@@ -15,6 +15,7 @@ export interface ClassSpaceWorkspace {
   createdBy: string; // userId of Owner / CR
   createdAt: string;
   updatedAt: string;
+  academicCalendar?: AcademicCalendarSettings;
 }
 
 export interface ClassSpaceMember {

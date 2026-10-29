@@ -151,6 +151,28 @@ export type AccentColor = 'terracotta' | 'sage' | 'ochre' | 'dusty-blue' | 'plum
 export type BackgroundStyle = 'minimal' | 'abstract' | 'space' | 'ocean' | 'custom';
 export type UserMode = 'individual' | 'class_based';
 
+export type AcademicPeriodType = 'semester' | 'year';
+
+export interface WeeklyHolidaySettings {
+  sundayOff: boolean;
+  saturdayOff: boolean;
+}
+
+export interface NationalHoliday {
+  id: string;
+  name: string;
+  date: string; // YYYY-MM-DD
+}
+
+export interface AcademicCalendarSettings {
+  periodType: AcademicPeriodType;
+  startDate: string; // YYYY-MM-DD
+  endDate: string;   // YYYY-MM-DD
+  isManualEndDate?: boolean;
+  weeklyOffDays: WeeklyHolidaySettings;
+  nationalHolidays: NationalHoliday[];
+}
+
 export interface AppSettings {
   themeMode: ThemeMode;
   accentColor: AccentColor;
@@ -163,6 +185,8 @@ export interface AppSettings {
   userMode?: UserMode;
   /** Shared attendance requirement percentage (0-100). Default 75 when not set. */
   attendanceRequirement?: number;
+  /** Academic calendar configuration for Individual mode (period, off days, holidays) */
+  academicCalendar?: AcademicCalendarSettings;
   /** Single source of truth for dashboard widget visibility toggles */
   dashboardWidgetVisibility?: Record<string, boolean>;
   /** Custom arrangement of dashboard widget IDs */
