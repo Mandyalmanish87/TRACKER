@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, act } from '@testing-library/react';
 import {
   parseRouteFromHash,
   resolveNavTabFromLocation,
@@ -317,6 +317,215 @@ describe('P0 Bug Regression Suite — Refresh Navigation and Active ClassSpace P
 
       expect(localStorage.getItem(ACTIVE_WORKSPACE_STORAGE_KEY)).toBe('ws_henry_math');
       expect(localStorage.getItem(ACTIVE_TAB_STORAGE_KEY)).toBe('classspace');
+    });
+  });
+
+  describe('6. Lifecycle Stability, Loop Prevention & StrictMode Idempotence', () => {
+    it('does not wipe active workspace from storage while auth is still hydrating', async () => {
+      const testUser: AuthUser = {
+        id: 'usr_iris',
+        email: 'iris@college.edu',
+        name: 'Iris Student',
+      };
+      // Setup saved workspace for Iris in storage
+      saveActiveWorkspaceId('ws_iris_batch', testUser.id);
+      expect(getSavedWorkspaceId(testUser.id)).toBe('ws_iris_batch');
+
+      // Now simulate ClassSpaceProvider mounting before auth resolves
+      authService._setTestUser(null);
+
+      let contextValue: any = null;
+      const Consumer = () => {
+        contextValue = useClassSpace();
+        return <div>Status: {contextValue.isLoading ? 'loading' : 'ready'}</div>;
+      };
+
+      const { unmount } = render(
+        <AppProvider>
+          <ClassSpaceProvider>
+            <Consumer />
+          </ClassSpaceProvider>
+        </AppProvider>
+      );
+
+      // Crucial: The saved workspace ID MUST NOT be wiped from storage during unauthenticated hydration!
+      expect(getSavedWorkspaceId(testUser.id)).toBe('ws_iris_batch');
+      unmount();
+    });
+
+    it('re-renders cleanly without trigger loops when updateSettings is called', async () => {
+      const testUser: AuthUser = {
+        id: 'usr_jack',
+        email: 'jack@college.edu',
+        name: 'Jack Student',
+      };
+      authService._setTestUser(testUser);
+
+      const ws = await classSpaceService.createWorkspace(testUser, { name: 'Batch J - Physics' });
+      saveActiveWorkspaceId(ws.workspace!.id, testUser.id);
+
+      let renderCount = 0;
+      const Consumer = () => {
+        const { state, updateSettings } = useApp();
+        const cs = useClassSpace();
+        renderCount++;
+        return (
+          <div>
+            <div>Count: {renderCount}</div>
+            <div>UserMode: {state.settings?.userMode}</div>
+            <div>ActiveWs: {cs.activeWorkspace?.name || 'none'}</div>
+            <button onClick={() => updateSettings({ userMode: 'class_based' })}>
+              Set Class Based
+            </button>
+          </div>
+        );
+      };
+
+      render(
+        <AppProvider>
+          <ClassSpaceProvider>
+            <Consumer />
+          </ClassSpaceProvider>
+        </AppProvider>
+      );
+
+      await waitFor(() => {
+        expect(renderCount).toBeGreaterThan(0);
+      });
+
+      const initialCount = renderCount;
+      // Wait a moment to ensure no runaway effect loop is firing
+      await new Promise((r) => setTimeout(r, 100));
+      // Render count should be completely stable (not increasing continuously)
+      expect(renderCount).toBeLessThanOrEqual(initialCount + 2);
+    });
+
+    it('subscribes to realtime workspace channel only once per active workspace ID', async () => {
+      const testUser: AuthUser = {
+        id: 'usr_kyle',
+        email: 'kyle@college.edu',
+        name: 'Kyle Student',
+      };
+      authService._setTestUser(testUser);
+
+      const ws = await classSpaceService.createWorkspace(testUser, { name: 'Batch K - Calculus' });
+      saveActiveWorkspaceId(ws.workspace!.id, testUser.id);
+
+      let subscribeCount = 0;
+      let unsubscribeCount = 0;
+      const originalSubscribe = classSpaceService.subscribeToWorkspace;
+      classSpaceService.subscribeToWorkspace = (wsId: string, onUpdate: () => void) => {
+        subscribeCount++;
+        const unsub = originalSubscribe.call(classSpaceService, wsId, onUpdate);
+        return () => {
+          unsubscribeCount++;
+          unsub();
+        };
+      };
+
+      const Consumer = () => {
+        const cs = useClassSpace();
+        return <div>ActiveWs: {cs.activeWorkspace?.name || 'none'}</div>;
+      };
+
+      const { unmount } = render(
+        <AppProvider>
+          <ClassSpaceProvider>
+            <Consumer />
+          </ClassSpaceProvider>
+        </AppProvider>
+      );
+
+      await waitFor(() => {
+        expect(subscribeCount).toBe(1);
+      });
+
+      // Ensure it does not repeatedly re-subscribe in a loop
+      await new Promise((r) => setTimeout(r, 100));
+      expect(subscribeCount).toBe(1);
+
+      unmount();
+      expect(unsubscribeCount).toBe(1);
+      classSpaceService.subscribeToWorkspace = originalSubscribe;
+    });
+
+    it('switching channels updates URL hash cleanly without repeated navigation loops', async () => {
+      const testUser: AuthUser = {
+        id: 'usr_leo',
+        email: 'leo@college.edu',
+        name: 'Leo Student',
+      };
+      authService._setTestUser(testUser);
+
+      const wsRes = await classSpaceService.createWorkspace(testUser, { name: 'Batch L' });
+      const ws = wsRes.workspace!;
+      saveActiveWorkspaceId(ws.id, testUser.id);
+
+      window.location.hash = '#classspace/the-commons';
+
+      let replaceStateCount = 0;
+      const originalReplaceState = window.history.replaceState;
+      window.history.replaceState = (...args: any[]) => {
+        replaceStateCount++;
+        originalReplaceState.apply(window.history, args as any);
+      };
+
+      let contextValue: any = null;
+      const Consumer = () => {
+        contextValue = useClassSpace();
+        return <div>Channel: {contextValue.activeChannel?.slug || 'none'}</div>;
+      };
+
+      render(
+        <AppProvider>
+          <ClassSpaceProvider>
+            <Consumer />
+          </ClassSpaceProvider>
+        </AppProvider>
+      );
+
+      await waitFor(() => {
+        expect(contextValue.activeChannel?.slug).toBe('the-commons');
+      });
+
+      // Switch channel to study-vault
+      const studyVault = contextValue.channels.find((c: any) => c.slug === 'study-vault');
+      if (studyVault) {
+        await act(async () => {
+          contextValue.setActiveChannelId(studyVault.id);
+        });
+        await waitFor(() => {
+          expect(contextValue.activeChannel?.slug).toBe('study-vault');
+        });
+      }
+
+      const countAfterSwitch = replaceStateCount;
+      await new Promise((r) => setTimeout(r, 100));
+      // No continuous replaceState storm
+      expect(replaceStateCount).toBe(countAfterSwitch);
+
+      window.history.replaceState = originalReplaceState;
+    });
+
+    it('navigates seamlessly between Dashboard, Attendance, and Settings without resets', () => {
+      // 1. Dashboard
+      window.location.hash = '';
+      expect(getInitialNavTab()).toBe('dashboard');
+
+      // 2. Attendance
+      window.location.hash = '#attendance';
+      expect(resolveNavTabFromLocation()).toBe('attendance');
+      expect(getInitialNavTab()).toBe('attendance');
+
+      // 3. Settings
+      window.location.hash = '#settings';
+      expect(resolveNavTabFromLocation()).toBe('settings');
+      expect(getInitialNavTab()).toBe('settings');
+
+      // 4. ClassSpace with sub-route
+      window.location.hash = '#classspace/study-vault';
+      expect(resolveNavTabFromLocation()).toBe('classspace');
+      expect(parseRouteFromHash(window.location.hash).subRoute).toBe('study-vault');
     });
   });
 });

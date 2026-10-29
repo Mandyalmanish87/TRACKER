@@ -2758,7 +2758,7 @@ export const classSpaceService = {
       window.addEventListener('storage', storageHandler);
     }
 
-    // Gentle fallback heartbeat polling (every 10 seconds, only when tab is visible)
+    // Gentle fallback heartbeat polling (every 60 seconds, only when tab is visible)
     let pollInterval: any = null;
     let visibilityHandler: any = null;
 
@@ -2767,7 +2767,7 @@ export const classSpaceService = {
         if (document.visibilityState === 'visible') {
           onUpdate();
         }
-      }, 10000);
+      }, 60000);
 
       visibilityHandler = () => {
         if (document.visibilityState === 'visible') {

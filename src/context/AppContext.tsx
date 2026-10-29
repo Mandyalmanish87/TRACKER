@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import {
   AppStateData,
   AttendanceMark,
@@ -66,6 +66,7 @@ interface AppContextType {
   state: AppStateData;
   // Google Auth & Cloud Synchronization
   authUser: AuthUser | null;
+  isAuthHydrated: boolean;
   syncStatus: 'idle' | 'syncing' | 'synced' | 'error' | 'offline';
   lastSyncedAt: Date | null;
   signInWithGoogle: () => Promise<{ success: boolean; error?: string }>;
@@ -229,6 +230,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Google Auth & Cloud Sync States
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [isAuthHydrated, setIsAuthHydrated] = useState<boolean>(!authService.isConfigured);
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error' | 'offline'>('idle');
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
   const [conflictData, setConflictData] = useState<{
@@ -454,18 +456,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     let mounted = true;
     authService.getCurrentUser().then((user) => {
-      if (mounted && user) {
-        setAuthUser(user);
-        handleInitialSync(user);
+      if (mounted) {
+        if (user) {
+          setAuthUser(user);
+          handleInitialSync(user);
+        }
+        setIsAuthHydrated(true);
       }
     });
 
     const unsubscribe = authService.onAuthStateChange((user) => {
-      setAuthUser(user);
-      if (user) {
-        handleInitialSync(user);
-      } else {
-        setSyncStatus('idle');
+      if (mounted) {
+        setAuthUser(user);
+        if (user) {
+          handleInitialSync(user);
+        } else {
+          setSyncStatus('idle');
+        }
+        setIsAuthHydrated(true);
       }
     });
 
@@ -1361,8 +1369,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }));
   };
 
-  // Update settings partially (merge with existing settings)
-  const updateSettings = (settings: Partial<AppSettings>) => {
+  // Update settings partially (merge with existing settings, memoized to prevent render loops)
+  const updateSettings = useCallback((settings: Partial<AppSettings>) => {
     setState((prev) => {
       const existing: AppSettings = prev.settings ?? {
         themeMode: 'system',
@@ -1372,12 +1380,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         showExamCountdown: true,
         showFocusRadio: false,
       };
+      let hasChange = false;
+      for (const [key, val] of Object.entries(settings)) {
+        if ((existing as any)[key] !== val) {
+          hasChange = true;
+          break;
+        }
+      }
+      if (!hasChange) return prev;
       return {
         ...prev,
         settings: { ...existing, ...settings } as AppSettings,
       };
     });
-  };
+  }, []);
 
   // ── Syllabus Tracker Actions ──
   const addSyllabusSubject = (name: string, color?: string) => {
@@ -2951,6 +2967,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         fullReset,
         // Google Auth & Cloud Sync
         authUser,
+        isAuthHydrated,
         syncStatus,
         lastSyncedAt,
         signInWithGoogle,

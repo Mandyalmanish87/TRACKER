@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   ClassSpaceWorkspace,
   ClassSpaceMember,
@@ -257,7 +257,12 @@ export const ClassSpaceContext = createContext<ClassSpaceContextType | undefined
 export const useOptionalClassSpace = () => useContext(ClassSpaceContext);
 
 export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { authUser, state: appState, addSubject, markAttendanceForEvent, updateSettings } = useApp();
+  const { authUser, isAuthHydrated, state: appState, addSubject, markAttendanceForEvent, updateSettings } = useApp();
+
+  const userModeRef = useRef(appState.settings?.userMode);
+  useEffect(() => {
+    userModeRef.current = appState.settings?.userMode;
+  }, [appState.settings?.userMode]);
 
   // Active student identity (syncs with user profile email, display name, and avatar)
   const effectiveUser: AuthUser = useMemo(() => {
@@ -335,38 +340,56 @@ export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const canModerateChat = canModerate(currentMember?.role) || isOwner;
   const canManageWs = canManageWorkspace(currentMember?.role) || isOwner;
 
-  // 1. Fetch user's workspaces and profile
+  // 1. Fetch user's workspaces and profile with stable state guards
   const refreshWorkspaces = useCallback(async () => {
+    // Wait for auth hydration so temporary local user does not wipe active workspace
+    if (!isAuthHydrated) return;
     setIsLoading(true);
     try {
       const userWorkspaces = await classSpaceService.getWorkspacesForUser(effectiveUser.id);
-      setWorkspaces(userWorkspaces);
+
+      setWorkspaces((prev) => {
+        if (
+          prev.length === userWorkspaces.length &&
+          prev.every((w, i) => w.id === userWorkspaces[i]?.id && w.updatedAt === userWorkspaces[i]?.updatedAt)
+        ) {
+          return prev;
+        }
+        return userWorkspaces;
+      });
 
       if (userWorkspaces.length > 0) {
-        // Priority for restoring active workspace:
-        // 1. Memory state if already pointing to a valid workspace
-        // 2. Persisted active workspace ID from storage for this user
-        // 3. Fallback to userWorkspaces[0]
         const savedWsId = getSavedWorkspaceId(effectiveUser.id);
 
         setActiveWorkspace((prev) => {
-          if (prev && userWorkspaces.some((w) => w.id === prev.id)) {
-            const current = userWorkspaces.find((w) => w.id === prev.id)!;
-            saveActiveWorkspaceId(current.id, effectiveUser.id);
-            return current;
+          // If previous active workspace is still present and valid, maintain exact reference
+          if (prev) {
+            const current = userWorkspaces.find((w) => w.id === prev.id);
+            if (current) {
+              if (
+                prev.name === current.name &&
+                prev.joinCode === current.joinCode &&
+                prev.updatedAt === current.updatedAt
+              ) {
+                return prev;
+              }
+              saveActiveWorkspaceId(current.id, effectiveUser.id);
+              return current;
+            }
           }
-          if (savedWsId && userWorkspaces.some((w) => w.id === savedWsId)) {
-            const found = userWorkspaces.find((w) => w.id === savedWsId)!;
-            saveActiveWorkspaceId(found.id, effectiveUser.id);
-            return found;
+          if (savedWsId) {
+            const found = userWorkspaces.find((w) => w.id === savedWsId);
+            if (found) {
+              saveActiveWorkspaceId(found.id, effectiveUser.id);
+              return found;
+            }
           }
           const fallback = userWorkspaces[0];
           saveActiveWorkspaceId(fallback.id, effectiveUser.id);
           return fallback;
         });
 
-        // Ensure userMode is class_based when user belongs to one or more workspaces
-        if (appState.settings?.userMode !== 'class_based') {
+        if (userModeRef.current !== 'class_based') {
           updateSettings({ userMode: 'class_based' });
         }
       } else {
@@ -377,13 +400,23 @@ export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       }
 
       const p = await classSpaceService.getUserProfile(effectiveUser.id);
-      setProfile(p);
+      setProfile((prev) => {
+        if (
+          prev &&
+          prev.userId === p.userId &&
+          prev.displayName === p.displayName &&
+          prev.avatarUrl === p.avatarUrl
+        ) {
+          return prev;
+        }
+        return p;
+      });
     } catch (err) {
       console.warn('[ClassSpaceContext] Error loading workspaces:', err);
     } finally {
       setIsLoading(false);
     }
-  }, [effectiveUser.id, effectiveUser.isSimulated, authUser, appState.settings?.userMode, updateSettings]);
+  }, [effectiveUser.id, isAuthHydrated, authUser, effectiveUser.isSimulated, updateSettings]);
 
   useEffect(() => {
     refreshWorkspaces();
@@ -391,7 +424,7 @@ export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   // 2. Refresh active workspace's data
   const refreshWorkspaceData = useCallback(async () => {
-    if (!activeWorkspace) {
+    if (!activeWorkspace?.id) {
       setMembers([]);
       setChannels([]);
       setJoinRequests([]);
@@ -432,8 +465,17 @@ export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setMessages(msgList);
       setSavedMessages(savedList);
       setNotifications(notifList);
-      setChannels(channelList);
       setJoinRequests(reqList);
+
+      setChannels((prev) => {
+        if (
+          prev.length === channelList.length &&
+          prev.every((c, i) => c.id === channelList[i]?.id && c.name === channelList[i]?.name && c.slug === channelList[i]?.slug)
+        ) {
+          return prev;
+        }
+        return channelList;
+      });
 
       // Channel resolution order:
       // 1. URL hash channel slug if present (e.g. #classspace/study-vault)
@@ -455,19 +497,22 @@ export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
       setActiveChannelId((prev) => {
         if (fromHash) {
-          saveActiveChannelId(activeWorkspace.id, fromHash.id);
+          if (fromHash.id !== prev) {
+            saveActiveChannelId(activeWorkspace.id, fromHash.id);
+          }
           return fromHash.id;
         }
         if (prev && channelList.some((c) => c.id === prev)) {
-          saveActiveChannelId(activeWorkspace.id, prev);
           return prev;
         }
         if (fromStorage) {
-          saveActiveChannelId(activeWorkspace.id, fromStorage.id);
+          if (fromStorage.id !== prev) {
+            saveActiveChannelId(activeWorkspace.id, fromStorage.id);
+          }
           return fromStorage.id;
         }
         const fallbackId = channelList[0]?.id || '';
-        if (fallbackId) {
+        if (fallbackId && fallbackId !== prev) {
           saveActiveChannelId(activeWorkspace.id, fallbackId);
         }
         return fallbackId;
@@ -475,7 +520,10 @@ export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     } catch (err) {
       console.warn('[ClassSpaceContext] Error refreshing active workspace data:', err);
     }
-  }, [activeWorkspace, effectiveUser.id]);
+  }, [activeWorkspace?.id, effectiveUser.id]);
+
+  const refreshWorkspaceDataRef = useRef(refreshWorkspaceData);
+  refreshWorkspaceDataRef.current = refreshWorkspaceData;
 
   const handleSetActiveChannelId = useCallback((channelId: string) => {
     setActiveChannelId(channelId);
@@ -494,14 +542,15 @@ export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     refreshWorkspaceData();
   }, [refreshWorkspaceData]);
 
-  // 3. Realtime subscription for active workspace
+  // 3. Realtime subscription for active workspace (depends strictly on workspace ID to prevent subscription thrashing)
   useEffect(() => {
-    if (!activeWorkspace) return;
-    const unsubscribe = classSpaceService.subscribeToWorkspace(activeWorkspace.id, () => {
-      refreshWorkspaceData();
+    if (!activeWorkspace?.id) return;
+    const wsId = activeWorkspace.id;
+    const unsubscribe = classSpaceService.subscribeToWorkspace(wsId, () => {
+      refreshWorkspaceDataRef.current?.();
     });
-    return unsubscribe;
-  }, [activeWorkspace, refreshWorkspaceData]);
+    return () => unsubscribe();
+  }, [activeWorkspace?.id]);
 
   // Resolved occurrences for the current date range
   const occurrences = useMemo(() => {
@@ -1344,80 +1393,151 @@ export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     return res;
   };
 
+  const contextValue = useMemo<ClassSpaceContextType>(
+    () => ({
+      workspaces,
+      activeWorkspace,
+      currentMember,
+      members,
+      channels,
+      activeChannel,
+      activeChannelId,
+      setActiveChannelId: handleSetActiveChannelId,
+      createChannel,
+      deleteChannel,
+      joinRequests,
+      requestToJoinWorkspace,
+      reviewJoinRequest,
+      isLoading,
+      isCloudConfigured: classSpaceService.isCloudConfigured,
+      isOwner,
+      isCR,
+      isCoAdmin,
+      canPublishNotices,
+      canEditSchedule,
+      canModerateChat,
+      canManageWorkspace: canManageWs,
+      transferCRRole,
+      updateCoAdminNoticePermission,
+      rules,
+      overrides,
+      occurrences,
+      scheduleRange,
+      setScheduleRange,
+      attendanceRecords,
+      attendanceStats,
+      messages,
+      savedMessages,
+      pinnedMessages,
+      notifications,
+      unreadNotificationCount,
+      profile,
+      selectWorkspace,
+      createWorkspace,
+      joinWorkspaceByCode,
+      rotateJoinCode,
+      leaveWorkspace,
+      deleteWorkspace,
+      updateMemberRole,
+      removeMember,
+      addTimetableRule,
+      updateTimetableRule,
+      deleteTimetableRule,
+      rescheduleOccurrence,
+      cancelOccurrence,
+      restoreOccurrence,
+      addExtraClass,
+      copyOfficialScheduleToPersonal,
+      markAttendance,
+      sendMessage,
+      createPoll,
+      votePoll,
+      closePoll,
+      shareResource,
+      addReaction,
+      removeReaction,
+      editMessage,
+      deleteMessage,
+      togglePinMessage,
+      toggleSaveMessage,
+      markNotificationRead,
+      markAllNotificationsRead,
+      updateProfile,
+      uploadAvatar,
+    }),
+    [
+      workspaces,
+      activeWorkspace,
+      currentMember,
+      members,
+      channels,
+      activeChannel,
+      activeChannelId,
+      handleSetActiveChannelId,
+      createChannel,
+      deleteChannel,
+      joinRequests,
+      requestToJoinWorkspace,
+      reviewJoinRequest,
+      isLoading,
+      isOwner,
+      isCR,
+      isCoAdmin,
+      canPublishNotices,
+      canEditSchedule,
+      canModerateChat,
+      canManageWs,
+      transferCRRole,
+      updateCoAdminNoticePermission,
+      rules,
+      overrides,
+      occurrences,
+      scheduleRange,
+      attendanceRecords,
+      attendanceStats,
+      messages,
+      savedMessages,
+      pinnedMessages,
+      notifications,
+      unreadNotificationCount,
+      profile,
+      selectWorkspace,
+      createWorkspace,
+      joinWorkspaceByCode,
+      rotateJoinCode,
+      leaveWorkspace,
+      deleteWorkspace,
+      updateMemberRole,
+      removeMember,
+      addTimetableRule,
+      updateTimetableRule,
+      deleteTimetableRule,
+      rescheduleOccurrence,
+      cancelOccurrence,
+      restoreOccurrence,
+      addExtraClass,
+      copyOfficialScheduleToPersonal,
+      markAttendance,
+      sendMessage,
+      createPoll,
+      votePoll,
+      closePoll,
+      shareResource,
+      addReaction,
+      removeReaction,
+      editMessage,
+      deleteMessage,
+      togglePinMessage,
+      toggleSaveMessage,
+      markNotificationRead,
+      markAllNotificationsRead,
+      updateProfile,
+      uploadAvatar,
+    ]
+  );
+
   return (
-    <ClassSpaceContext.Provider
-      value={{
-        workspaces,
-        activeWorkspace,
-        currentMember,
-        members,
-        channels,
-        activeChannel,
-        activeChannelId,
-        setActiveChannelId: handleSetActiveChannelId,
-        createChannel,
-        deleteChannel,
-        joinRequests,
-        requestToJoinWorkspace,
-        reviewJoinRequest,
-        isLoading,
-        isCloudConfigured: classSpaceService.isCloudConfigured,
-        isOwner,
-        isCR,
-        isCoAdmin,
-        canPublishNotices,
-        canEditSchedule,
-        canModerateChat,
-        canManageWorkspace: canManageWs,
-        transferCRRole,
-        updateCoAdminNoticePermission,
-        rules,
-        overrides,
-        occurrences,
-        scheduleRange,
-        setScheduleRange,
-        attendanceRecords,
-        attendanceStats,
-        messages,
-        savedMessages,
-        pinnedMessages,
-        notifications,
-        unreadNotificationCount,
-        profile,
-        selectWorkspace,
-        createWorkspace,
-        joinWorkspaceByCode,
-        rotateJoinCode,
-        leaveWorkspace,
-        deleteWorkspace,
-        updateMemberRole,
-        removeMember,
-        addTimetableRule,
-        updateTimetableRule,
-        deleteTimetableRule,
-        rescheduleOccurrence,
-        cancelOccurrence,
-        restoreOccurrence,
-        addExtraClass,
-        copyOfficialScheduleToPersonal,
-        markAttendance,
-        sendMessage,
-        createPoll,
-        votePoll,
-        closePoll,
-        shareResource,
-        addReaction,
-        removeReaction,
-        editMessage,
-        deleteMessage,
-        togglePinMessage,
-        toggleSaveMessage,
-        markNotificationRead,
-        markAllNotificationsRead,
-        updateProfile,
-        uploadAvatar,
-      }}
-    >
+    <ClassSpaceContext.Provider value={contextValue}>
       {children}
     </ClassSpaceContext.Provider>
   );

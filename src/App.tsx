@@ -115,19 +115,29 @@ export const MainApp: React.FC = () => {
   const classSpace = useOptionalClassSpace();
   const [currentTab, setCurrentTab] = useState<NavTab>(() => getInitialNavTab(authUser?.id));
 
-  // Sync URL hash with currentTab on mount if no hash exists yet
+  const activeChannelSlug = classSpace?.activeChannel?.slug || classSpace?.activeChannel?.id;
+
+  // Sync URL hash with currentTab without triggering continuous navigation or re-render loops
   useEffect(() => {
-    if (typeof window !== 'undefined' && !window.location.hash && currentTab !== 'dashboard') {
-      try {
-        if (currentTab === 'classspace' && classSpace?.activeChannel) {
-          const slug = classSpace.activeChannel.slug || classSpace.activeChannel.id;
-          window.history.replaceState(null, '', `#classspace/${slug}`);
-        } else {
-          window.history.replaceState(null, '', `#${currentTab}`);
+    if (typeof window === 'undefined') return;
+    const currentHash = window.location.hash;
+    if (currentHash.includes('=')) return; // Ignore OAuth fragments
+
+    if (currentTab === 'classspace') {
+      if (activeChannelSlug) {
+        const expected = `#classspace/${activeChannelSlug}`;
+        if (currentHash === '' || currentHash === '#classspace') {
+          window.history.replaceState(null, '', expected);
         }
-      } catch {}
+      } else if (!currentHash) {
+        window.history.replaceState(null, '', '#classspace');
+      }
+    } else if (currentTab !== 'dashboard') {
+      if (!currentHash) {
+        window.history.replaceState(null, '', `#${currentTab}`);
+      }
     }
-  }, [currentTab, classSpace?.activeChannel]);
+  }, [currentTab, activeChannelSlug]);
 
   // When auth resolves or switches, restore user-scoped tab if present and no explicit URL route
   useEffect(() => {
