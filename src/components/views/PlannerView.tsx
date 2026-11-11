@@ -7,10 +7,18 @@ import {
   Search,
   Filter,
   AlertCircle,
+  Table2,
+  Trash2,
+  Check,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { TaskStatus, TaskPriority } from '../../types';
-import { filterTasks, getOverdueTasks } from '../../utils/plannerUtils';
+import { useToast } from '../../context/ToastContext';
+import { useBulkSelection } from '../../hooks/useBulkSelection';
+import { DataTable } from '../common/DataTable';
+import { ConfirmModal } from '../common/ConfirmModal';
+import { Badge } from '../common/Badge';
+import { PlannerTask, TaskStatus, TaskPriority } from '../../types';
+import { filterTasks, getDueTodayTasks, getOverdueTasks } from '../../utils/plannerUtils';
 import { KanbanBoard } from '../planner/KanbanBoard';
 import { SpacedRepetitionPanel } from '../planner/SpacedRepetitionPanel';
 import { DailyQuestionsPanel } from '../planner/DailyQuestionsPanel';
@@ -18,14 +26,17 @@ import { TaskModal } from '../planner/TaskModal';
 
 interface PlannerViewProps {
   onNavigateToSyllabus?: (subjectId?: string) => void;
+  onOpenTaskFocus?: (task: PlannerTask) => void;
 }
 
-export type PlannerSubTab = 'kanban' | 'spaced_repetition' | 'daily_questions';
+export type PlannerSubTab = 'kanban' | 'table' | 'spaced_repetition' | 'daily_questions';
 
-export const PlannerView: React.FC<PlannerViewProps> = ({ onNavigateToSyllabus }) => {
-  const { state } = useApp();
+export const PlannerView: React.FC<PlannerViewProps> = ({ onNavigateToSyllabus, onOpenTaskFocus }) => {
+  const { state, updateTask, deleteTask } = useApp();
+  const toast = useToast();
 
   const [activeTab, setActiveTab] = useState<PlannerSubTab>('kanban');
+  const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false);
 
   // Filter state for Kanban Board
   const [statusFilter, setStatusFilter] = useState<TaskStatus | 'all'>('all');
@@ -43,6 +54,9 @@ export const PlannerView: React.FC<PlannerViewProps> = ({ onNavigateToSyllabus }
 
   // Overdue tasks
   const overdueTasks = useMemo(() => getOverdueTasks(allTasks), [allTasks]);
+  const dueTodayTasks = useMemo(() => getDueTodayTasks(allTasks), [allTasks]);
+  const completedTasks = useMemo(() => allTasks.filter((task) => task.status === 'done'), [allTasks]);
+  const openTasks = allTasks.length - completedTasks.length;
 
   // Filtered tasks for Kanban board
   const filteredTasks = useMemo(() => {
@@ -55,10 +69,31 @@ export const PlannerView: React.FC<PlannerViewProps> = ({ onNavigateToSyllabus }
     });
   }, [allTasks, statusFilter, priorityFilter, subjectFilter, dueFilter, searchQuery]);
 
+  const {
+    selectedIds,
+    selectedCount,
+    toggle,
+    clearSelection,
+    toggleAll,
+  } = useBulkSelection(filteredTasks);
+
+  const handleBulkComplete = () => {
+    selectedIds.forEach((id) => updateTask(id, { status: 'done' }));
+    toast.success(`Marked ${selectedCount} task${selectedCount > 1 ? 's' : ''} as completed!`);
+    clearSelection();
+  };
+
+  const handleBulkDelete = () => {
+    selectedIds.forEach((id) => deleteTask(id));
+    toast.success(`Deleted ${selectedCount} task${selectedCount > 1 ? 's' : ''}`);
+    clearSelection();
+    setBulkDeleteConfirmOpen(false);
+  };
+
   return (
-    <div className="space-y-6 sm:space-y-8 pb-20">
+    <div className="study-workspace space-y-6 sm:space-y-8 pb-20">
       {/* Editorial Header */}
-      <div className="border-b border-ivory-300 dark:border-espresso-800 pb-6">
+      <div className="study-page-hero border-b border-ivory-300 dark:border-espresso-800 pb-6">
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
           <div>
             <span className="text-xs font-mono font-semibold uppercase tracking-wider text-terracotta-600 dark:text-terracotta-400">
@@ -103,8 +138,16 @@ export const PlannerView: React.FC<PlannerViewProps> = ({ onNavigateToSyllabus }
         )}
       </div>
 
+      <div className="planner-command-center">
+      <section className="study-quick-stats" aria-label="Planner overview">
+        <div className="study-quick-stat"><span>Open tasks</span><strong>{openTasks}</strong><small>Ready to move forward</small></div>
+        <div className="study-quick-stat"><span>Due today</span><strong>{dueTodayTasks.length}</strong><small>Your next priorities</small></div>
+        <div className="study-quick-stat"><span>Overdue</span><strong className={overdueTasks.length ? 'is-alert' : ''}>{overdueTasks.length}</strong><small>{overdueTasks.length ? 'Needs a quick review' : 'You are all caught up'}</small></div>
+        <div className="study-quick-stat"><span>Completed</span><strong>{completedTasks.length}</strong><small>Progress already made</small></div>
+      </section>
+
       {/* Navigation Sub-Tabs */}
-      <div className="flex flex-wrap items-center gap-2 border-b border-ivory-300 dark:border-espresso-800 pb-4">
+      <div className="planner-section-switcher flex flex-wrap items-center gap-2 border-b border-ivory-300 dark:border-espresso-800 pb-4">
         <button
           onClick={() => setActiveTab('kanban')}
           className={`flex items-center gap-2 px-3.5 sm:px-4 py-1.5 rounded-xl text-xs font-medium transition ${
@@ -123,6 +166,27 @@ export const PlannerView: React.FC<PlannerViewProps> = ({ onNavigateToSyllabus }
             }`}
           >
             {allTasks.filter((t) => t.status !== 'done').length}
+          </span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('table')}
+          className={`flex items-center gap-2 px-3.5 sm:px-4 py-1.5 rounded-xl text-xs font-medium transition cursor-pointer ${
+            activeTab === 'table'
+              ? 'bg-espresso-950 dark:bg-ivory-100 text-ivory-50 dark:text-espresso-950 font-bold shadow-subtle'
+              : 'text-espresso-600 dark:text-espresso-300 hover:text-espresso-900 dark:hover:text-ivory-100 hover:bg-ivory-200/60 dark:hover:bg-espresso-800/60'
+          }`}
+        >
+          <Table2 className="w-3.5 h-3.5" />
+          <span>Task Ledger</span>
+          <span
+            className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${
+              activeTab === 'table'
+                ? 'bg-white/20 dark:bg-black/20 text-current'
+                : 'bg-ivory-200 dark:bg-espresso-800'
+            }`}
+          >
+            {filteredTasks.length}
           </span>
         </button>
 
@@ -168,12 +232,13 @@ export const PlannerView: React.FC<PlannerViewProps> = ({ onNavigateToSyllabus }
           </span>
         </button>
       </div>
+      </div>
 
       {/* Main Tab Content */}
       {activeTab === 'kanban' && (
         <div className="space-y-6">
           {/* Filters Bar */}
-          <div className="p-4 rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 shadow-subtle flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div className="planner-filter-panel p-4 rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 shadow-subtle flex flex-col md:flex-row md:items-center justify-between gap-3">
             {/* Search Input */}
             <div className="relative flex-1 min-w-[200px]">
               <Search className="w-4 h-4 text-espresso-400 dark:text-espresso-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -277,7 +342,7 @@ export const PlannerView: React.FC<PlannerViewProps> = ({ onNavigateToSyllabus }
           {allTasks.length === 0 ? (
             <div className="py-16 text-center border border-dashed border-ivory-300 dark:border-espresso-750 rounded-2xl bg-white/40 dark:bg-espresso-850/40">
               <CheckSquare className="w-10 h-10 text-espresso-400 mx-auto mb-3" />
-              <h3 className="font-serif text-lg font-semibold text-espresso-900 dark:text-ivory-100">
+              <h3 className="font-serif text-lg font-semibold text-espresso-950 dark:text-ivory-100">
                 No events or tasks yet. Create your first task.
               </h3>
               <p className="text-xs text-espresso-500 dark:text-espresso-400 max-w-sm mx-auto mt-1 mb-4">
@@ -285,15 +350,135 @@ export const PlannerView: React.FC<PlannerViewProps> = ({ onNavigateToSyllabus }
               </p>
               <button
                 onClick={() => setIsTaskModalOpen(true)}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-white text-xs font-semibold shadow-subtle"
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-white text-xs font-semibold shadow-subtle cursor-pointer"
                 style={{ backgroundColor: 'var(--accent)' }}
               >
                 <Plus className="w-4 h-4" /> New Task
               </button>
             </div>
           ) : (
-            <KanbanBoard tasks={filteredTasks} onNavigateToSyllabus={onNavigateToSyllabus} />
+            <KanbanBoard tasks={filteredTasks} onNavigateToSyllabus={onNavigateToSyllabus} onOpenTaskFocus={onOpenTaskFocus} />
           )}
+        </div>
+      )}
+
+      {/* Structured Task Table View with Multi-Selection & Bulk Actions */}
+      {activeTab === 'table' && (
+        <div className="space-y-4">
+          <DataTable<PlannerTask>
+            data={filteredTasks}
+            keyField="id"
+            selectable={true}
+            selectedIds={selectedIds}
+            onToggleSelect={toggle}
+            onToggleSelectAll={toggleAll}
+            bulkActions={[
+              {
+                id: 'bulk-complete',
+                label: 'Mark Done',
+                icon: <Check className="w-3.5 h-3.5" />,
+                variant: 'primary',
+                onClick: handleBulkComplete,
+              },
+              {
+                id: 'bulk-delete',
+                label: 'Delete Selected',
+                icon: <Trash2 className="w-3.5 h-3.5" />,
+                variant: 'danger',
+                onClick: () => setBulkDeleteConfirmOpen(true),
+              },
+            ]}
+            columns={[
+              {
+                key: 'title',
+                header: 'Task Title',
+                sortable: true,
+                render: (task) => (
+                  <div className="space-y-0.5">
+                    <span className={`font-semibold block ${task.status === 'done' ? 'line-through text-espresso-400 dark:text-espresso-500' : 'text-espresso-950 dark:text-ivory-50'}`}>
+                      {task.title}
+                    </span>
+                    {task.description && (
+                      <span className="text-[11px] text-espresso-500 dark:text-espresso-400 line-clamp-1">
+                        {task.description}
+                      </span>
+                    )}
+                  </div>
+                ),
+              },
+              {
+                key: 'priority',
+                header: 'Priority',
+                sortable: true,
+                render: (task) => (
+                  <Badge
+                    variant={
+                      task.priority === 'high'
+                        ? 'danger'
+                        : task.priority === 'medium'
+                        ? 'ochre'
+                        : 'neutral'
+                    }
+                  >
+                    {task.priority.toUpperCase()}
+                  </Badge>
+                ),
+              },
+              {
+                key: 'status',
+                header: 'Status',
+                sortable: true,
+                render: (task) => (
+                  <Badge
+                    variant={
+                      task.status === 'done'
+                        ? 'sage'
+                        : task.status === 'in_progress'
+                        ? 'ochre'
+                        : 'neutral'
+                    }
+                  >
+                    {task.status === 'in_progress' ? 'In Progress' : task.status === 'done' ? 'Done' : 'To Do'}
+                  </Badge>
+                ),
+              },
+              {
+                key: 'dueDate',
+                header: 'Due Date',
+                sortable: true,
+                render: (task) => (
+                  <span className="font-mono text-xs text-espresso-700 dark:text-ivory-200">
+                    {task.dueDate || 'No deadline'}
+                  </span>
+                ),
+              },
+              {
+                key: 'actions',
+                header: 'Action',
+                align: 'right',
+                render: (task) => (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = task.status === 'done' ? 'todo' : 'done';
+                      updateTask(task.id, { status: next });
+                      if (next === 'done') {
+                        toast.success(`Completed "${task.title}"`, {
+                          action: {
+                            label: 'Undo',
+                            onClick: () => updateTask(task.id, { status: 'todo' }),
+                          },
+                        });
+                      }
+                    }}
+                    className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-ivory-200 dark:bg-white/10 hover:bg-ivory-300 dark:hover:bg-white/15 text-espresso-800 dark:text-ivory-100 transition cursor-pointer"
+                  >
+                    {task.status === 'done' ? 'Reopen' : 'Done'}
+                  </button>
+                ),
+              },
+            ]}
+          />
         </div>
       )}
 
@@ -302,6 +487,18 @@ export const PlannerView: React.FC<PlannerViewProps> = ({ onNavigateToSyllabus }
       )}
 
       {activeTab === 'daily_questions' && <DailyQuestionsPanel />}
+
+      {/* Bulk Delete Safety Confirmation */}
+      <ConfirmModal
+        isOpen={bulkDeleteConfirmOpen}
+        title={`Delete ${selectedCount} Selected Tasks`}
+        message={`Are you sure you want to permanently delete ${selectedCount} study tasks? This operation cannot be undone.`}
+        confirmLabel="Delete Tasks"
+        variant="danger"
+        irreversible={true}
+        onConfirm={handleBulkDelete}
+        onCancel={() => setBulkDeleteConfirmOpen(false)}
+      />
 
       {/* Task Creation Modal */}
       <TaskModal

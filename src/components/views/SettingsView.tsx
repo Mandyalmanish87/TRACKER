@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import { useTheme } from '../../theme/ThemeContext';
-import { AccentColor, BackgroundStyle, ThemeMode, AppSettings } from '../../types';
+import { AccentColor, AppearanceMode, BackgroundEffect, BackgroundStyle, PaperContrast, ThemeMode, AppSettings } from '../../types';
 import {
   Sun,
   Moon,
@@ -36,14 +36,30 @@ import {
   School,
   Hash,
   CalendarDays,
+  Sparkles,
+  Dumbbell,
+  Flower2,
+  Circle,
+  Waves,
+  RotateCw,
+  Star,
+  Power,
+  Orbit,
+  Blend,
+  Crown,
 } from 'lucide-react';
 import { useOptionalClassSpace } from '../../context/ClassSpaceContext';
+import { PersonalIntelligenceExport } from '../data-export/PersonalIntelligenceExport';
 import { getAvatarBgColor, getAvatarInitials } from '../../utils/classSpaceUtils';
 import { CreateWorkspaceModal } from '../classspace/CreateWorkspaceModal';
 import { JoinWorkspaceModal } from '../classspace/JoinWorkspaceModal';
 import { ConfirmModal } from '../common/ConfirmModal';
 import { BillingSettingsSection } from '../subscription/BillingSettingsSection';
 import { AcademicCalendarModal } from '../attendance/AcademicCalendarModal';
+import { KeyboardShortcutsDialog } from '../common/KeyboardShortcutsDialog';
+import { usePlatform } from '../../hooks/usePlatform';
+import { storageService } from '../../services/storage';
+import { useEntitlements } from '../../hooks/useEntitlements';
 import {
   createDefaultAcademicSettings,
   AcademicCalendarSettings,
@@ -57,6 +73,13 @@ const ACCENT_OPTIONS: { id: AccentColor; label: string; hex: string }[] = [
   { id: 'dusty-blue', label: 'Dusty Blue',  hex: '#4A6FA5' },
   { id: 'plum',       label: 'Plum',        hex: '#7B4F8A' },
   { id: 'slate',      label: 'Slate',       hex: '#5A6E7F' },
+  { id: 'rose',       label: 'Rose',        hex: '#C34D72' },
+  { id: 'lavender',   label: 'Lavender',    hex: '#7955A5' },
+  { id: 'teal',       label: 'Lagoon',      hex: '#087F82' },
+  { id: 'cobalt',     label: 'Cobalt',      hex: '#3F5FBB' },
+  { id: 'peach',      label: 'Peach',       hex: '#BD6F45' },
+  { id: 'mint',       label: 'Mint',        hex: '#40836A' },
+  { id: 'custom',     label: 'Your colour', hex: '#D77F98' },
 ];
 
 // ─── Background Style Catalogue ───────────────────────────────────────────
@@ -65,7 +88,21 @@ const BG_OPTIONS: { id: BackgroundStyle; label: string; desc: string }[] = [
   { id: 'abstract', label: 'Abstract', desc: 'Subtle geometric pattern' },
   { id: 'space',    label: 'Space',    desc: 'Deep-space gradient' },
   { id: 'ocean',    label: 'Ocean',    desc: 'Serene coastal gradient' },
+  { id: 'colour-wash', label: 'Colour wash', desc: 'Slow, soft layers of your accent colour' },
+  { id: 'aurora', label: 'Aurora', desc: 'Northern-light ribbons in a calm glow' },
+  { id: 'chromatic', label: 'Chromatic', desc: 'A gentle field of shifting colour' },
   { id: 'custom',   label: 'Custom',   desc: 'Your own image URL' },
+];
+
+const BACKGROUND_EFFECTS: { id: BackgroundEffect; label: string; description: string; icon: React.ElementType }[] = [
+  { id: 'static', label: 'Static', description: 'Still colour atmosphere', icon: Circle },
+  { id: 'breathing', label: 'Breathing', description: 'Slow fade in and out', icon: Waves },
+  { id: 'color-cycle', label: 'Color Cycle', description: 'Softly shifts through hues', icon: RotateCw },
+  { id: 'rainbow', label: 'Rainbow', description: 'Flowing spectrum wash', icon: Blend },
+  { id: 'starry-night', label: 'Starry Night', description: 'Gentle, scattered twinkle', icon: Star },
+  { id: 'adaptive-color', label: 'Adaptive Color', description: 'Follows your chosen accent', icon: Palette },
+  { id: 'immersion', label: 'Immersion', description: 'A deep, enveloping glow', icon: Orbit },
+  { id: 'off', label: 'Dark · Off', description: 'No ambient effect', icon: Power },
 ];
 
 // ─── Preset Avatars Catalogue ─────────────────────────────────────────────
@@ -96,8 +133,9 @@ const SectionHeading: React.FC<{ icon: React.ReactNode; title: string; sub?: str
 );
 
 // ─── Card wrapper ──────────────────────────────────────────────────────────
-const Card: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = '' }) => (
+const Card: React.FC<{ children: React.ReactNode; className?: string; id?: string }> = ({ children, className = '', id }) => (
   <div
+    id={id}
     className={`p-5 sm:p-6 rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 shadow-subtle ${className}`}
   >
     {children}
@@ -123,6 +161,11 @@ export const DASHBOARD_WIDGET_CONFIGS: DashboardWidgetConfig[] = [
     id: 'kpi_strip',
     name: 'Overview Stats Strip',
     description: 'Quick metrics for current time, classes, attendance, deep focus, and consistency',
+  },
+  {
+    id: 'dayos_summary',
+    name: 'DayOS Daily Briefing',
+    description: 'Executive briefing combining academic schedule and training agenda',
   },
   {
     id: 'today_schedule',
@@ -170,6 +213,31 @@ export const DASHBOARD_WIDGET_CONFIGS: DashboardWidgetConfig[] = [
     description: "Today's workout session and exercise checklist",
   },
   {
+    id: 'readiness',
+    name: 'Daily Readiness Index',
+    description: 'Recovery score, resting heart rate, and training intensity recommendations',
+  },
+  {
+    id: 'hydration',
+    name: 'Hydration Tracker',
+    description: 'Daily water intake logging against hydration targets',
+  },
+  {
+    id: 'macro_rings',
+    name: 'Macro Targets & Calorie Rings',
+    description: 'Dynamic visual progress bars for protein, carbs, fat, and calories',
+  },
+  {
+    id: 'prs',
+    name: 'Recent Strength PRs',
+    description: 'Highlights of latest personal record milestones achieved in training',
+  },
+  {
+    id: 'body_composition',
+    name: 'Body Composition & Navy BF',
+    description: 'Weight and US Navy anthropometric body fat estimates',
+  },
+  {
     id: 'syllabus',
     name: 'Syllabus Tracker',
     description: 'Course completion status across subjects',
@@ -200,7 +268,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToClassSpa
     signOut,
     syncNow,
   } = useApp();
+  const { canAccess } = useEntitlements();
+  const hasCloudSync = canAccess('unlimited_cloud_sync');
   const { mode, setMode } = useTheme();
+  const { platform, override, setPlatformOverride, modKey } = usePlatform();
+  const [isShortcutsModalOpen, setIsShortcutsModalOpen] = useState(false);
   const classSpace = useOptionalClassSpace();
   const activeWorkspace = classSpace?.activeWorkspace || null;
   const isOwner = classSpace?.isOwner || false;
@@ -225,6 +297,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToClassSpa
     showExamCountdown: true,
     showFocusRadio: false,
     dashboardWidgetVisibility: {},
+    bodyModelPreference: 'male' as const,
+    bloomEnabled: false,
+  };
+
+  const persistSettings = (updates: Partial<AppSettings>) => {
+    const nextState = { ...state, settings: { ...settings, ...updates } };
+    updateSettings(updates);
+    // Write appearance choices immediately so a quick refresh cannot outrun
+    // the app's normal state persistence effect.
+    storageService.saveData(nextState);
+    if (authUser?.id) storageService.saveUserData(authUser.id, nextState);
   };
 
   const profile = state.profile ?? { displayName: '', targetExam: '' };
@@ -305,16 +388,35 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToClassSpa
 
   const handleThemeChange = (newMode: ThemeMode) => {
     setMode(newMode);
-    updateSettings({ themeMode: newMode });
+    persistSettings({ themeMode: newMode });
   };
 
   const handleAccentChange = (accent: AccentColor) => {
-    updateSettings({ accentColor: accent });
+    persistSettings({ accentColor: accent, ...(accent === 'custom' && !settings.customAccentColor ? { customAccentColor: '#d77f98' } : {}) });
+  };
+
+  const handleGenderChange = (gender: 'male' | 'female') => {
+    persistSettings({
+      gender,
+      bodyModelPreference: gender,
+      ...(gender === 'male' ? { bloomEnabled: false } : {}),
+    });
   };
 
   const handleBgChange = (bg: BackgroundStyle) => {
-    updateSettings({ backgroundStyle: bg });
+    persistSettings({ backgroundStyle: bg });
   };
+
+  const saveCurrentAccent = () => {
+    const hex = settings.customAccentColor || '#d77f98';
+    if (!/^#[0-9a-fA-F]{6}$/.test(hex)) return;
+    const existing = (settings.savedAccentColors || []).filter((saved) => /^#[0-9a-fA-F]{6}$/.test(saved));
+    if (existing.some((saved) => saved.toLowerCase() === hex.toLowerCase())) return;
+    persistSettings({ savedAccentColors: [hex, ...existing].slice(0, 12), accentColor: 'custom', customAccentColor: hex });
+  };
+
+  const selectSavedAccent = (hex: string) => persistSettings({ accentColor: 'custom', customAccentColor: hex });
+  const removeSavedAccent = (hex: string) => persistSettings({ savedAccentColors: (settings.savedAccentColors || []).filter((saved) => saved.toLowerCase() !== hex.toLowerCase()) });
 
   const profileTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const qtTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -443,24 +545,31 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToClassSpa
   };
 
   return (
-    <div className="space-y-8 pb-20">
-      {/* Page header */}
-      <div className="border-b border-ivory-300 dark:border-espresso-800 pb-6">
-        <span className="text-xs font-mono font-semibold uppercase tracking-wider text-terracotta-600 dark:text-terracotta-400">
-          Personalisation &amp; Appearance
-        </span>
-        <div className="flex items-end justify-between gap-3 mt-1">
-          <h1 className="font-serif text-3xl sm:text-4xl font-normal text-espresso-950 dark:text-ivory-50 tracking-tight">
-            Settings
-          </h1>
-          <Settings className="w-6 h-6 text-espresso-400 dark:text-espresso-500 mb-1" />
+    <div className="settings-page flex flex-col gap-6 sm:gap-7 pb-12">
+      <header className="settings-hero">
+        <div className="settings-hero-copy">
+          <span className="settings-kicker"><Sparkles className="h-3.5 w-3.5" /> Your space, your rules</span>
+          <h1>Make it feel like yours.</h1>
+          <p>Shape the look, tune your personal experience, and keep your account and data preferences close at hand.</p>
+          <nav className="settings-jump-nav" aria-label="Settings sections">
+            <a href="#settings-profile">Personal info</a>
+            <a href="#settings-appearance">Appearance</a>
+            <a href="#settings-membership">Membership</a>
+            <a href="#settings-sync">Sync &amp; privacy</a>
+            <a href="#settings-personal-export">Personal export</a>
+          </nav>
         </div>
-      </div>
+        <div className="settings-hero-art" aria-hidden="true">
+          <span className="settings-orbit settings-orbit-one" /><span className="settings-orbit settings-orbit-two" />
+          <span className="settings-orbit-core"><Settings className="h-8 w-8" /></span>
+          <span className="settings-orbit-tag"><span className="settings-current-accent" /> {settings.accentColor === 'custom' ? 'Custom palette' : `${settings.accentColor} palette`}</span>
+        </div>
+      </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
         {/* ── Google Account & Cloud Synchronization ── */}
-        <Card className="lg:col-span-2">
+        <Card id="settings-sync" className="lg:col-span-2">
           <SectionHeading
             icon={<Cloud className="w-4 h-4" />}
             title="Google Account & Cloud Synchronization"
@@ -489,26 +598,73 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToClassSpa
                 </div>
 
                 <div className="sm:text-right">
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-mono font-semibold bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                    {syncStatus === 'syncing' ? 'Syncing...' : 'Connected'}
+                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-mono font-semibold ${
+                    hasCloudSync
+                      ? 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
+                      : 'bg-amber-100 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
+                  }`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${hasCloudSync ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                    {syncStatus === 'syncing'
+                      ? 'Syncing...'
+                      : hasCloudSync
+                      ? 'Cloud Sync Active'
+                      : 'Local Storage · Pro Pass Required'}
                   </span>
-                  {lastSyncedAt && (
+                  {hasCloudSync && lastSyncedAt && (
                     <p className="text-[10px] text-espresso-400 dark:text-ivory-400 font-mono mt-1">
                       Last sync: {lastSyncedAt.toLocaleTimeString()}
+                    </p>
+                  )}
+                  {!hasCloudSync && (
+                    <p className="text-[10px] text-amber-700 dark:text-amber-400 font-mono mt-1">
+                      Cloud backup locked
                     </p>
                   )}
                 </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  onClick={syncNow}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold bg-terracotta-600 hover:bg-terracotta-700 text-white shadow-subtle transition flex items-center gap-1.5 cursor-pointer"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" />
-                  <span>Sync Cloud Now</span>
-                </button>
+              {!hasCloudSync && (
+                <div className="mt-3 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                  <p className="text-xs text-amber-900 dark:text-amber-200">
+                    <span className="font-semibold">Pro Pass Required for Multi-Device Sync:</span> Your notes and records are safe on this device. Activate any pass (from ₹20) to enable real-time cloud backup across all your devices.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const el = document.getElementById('settings-membership');
+                      if (el) el.scrollIntoView({ behavior: 'smooth' });
+                    }}
+                    className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold bg-gradient-to-r from-amber-600 to-terracotta-600 hover:from-amber-700 hover:to-terracotta-700 text-white shadow-subtle transition flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Crown className="w-3.5 h-3.5" />
+                    <span>View Passes</span>
+                  </button>
+                </div>
+              )}
+
+              <div className="flex flex-wrap items-center gap-2 mt-4">
+                {hasCloudSync ? (
+                  <button
+                    onClick={syncNow}
+                    disabled={syncStatus === 'syncing'}
+                    className="px-4 py-2 rounded-xl text-xs font-semibold bg-terracotta-600 hover:bg-terracotta-700 disabled:opacity-50 text-white shadow-subtle transition flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${syncStatus === 'syncing' ? 'animate-spin' : ''}`} />
+                    <span>{syncStatus === 'syncing' ? 'Syncing...' : 'Sync Cloud Now'}</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const el = document.getElementById('settings-membership');
+                      if (el) el.scrollIntoView({ behavior: 'smooth' });
+                    }}
+                    className="px-4 py-2 rounded-xl text-xs font-semibold bg-terracotta-600 hover:bg-terracotta-700 text-white shadow-subtle transition flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Crown className="w-3.5 h-3.5" />
+                    <span>Unlock Cloud Sync (From ₹20)</span>
+                  </button>
+                )}
                 <button
                   onClick={signOut}
                   className="px-4 py-2 rounded-xl text-xs font-medium border border-rose-200 dark:border-rose-900 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition cursor-pointer"
@@ -543,11 +699,33 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToClassSpa
           )}
         </Card>
 
+        <Card id="settings-personal-export" className="lg:col-span-2 border-terracotta-200/70 dark:border-terracotta-900/40">
+          <SectionHeading
+            icon={<ShieldCheck className="w-4 h-4 text-emerald-600" />}
+            title="Personal Data & Intelligence Export"
+            sub="A readable snapshot of your TRAKIFY data, with an optional ready-to-use report prompt"
+          />
+          <PersonalIntelligenceExport
+            state={state}
+            classSpace={classSpace ? {
+              userId: authUser?.id || classSpace.currentMember?.userId,
+              isLoading: classSpace.isLoading,
+              workspaces: classSpace.workspaces,
+              members: classSpace.members,
+              activeWorkspace: classSpace.activeWorkspace,
+              currentMember: classSpace.currentMember,
+              rules: classSpace.rules,
+              attendanceRecords: classSpace.attendanceRecords,
+              attendanceStats: classSpace.attendanceStats,
+            } : undefined}
+          />
+        </Card>
+
         {/* ── Membership & Subscriptions (Milestone 05) ── */}
-        <BillingSettingsSection userId={authUser?.id} />
+        <div id="settings-membership" className="settings-membership-anchor lg:col-span-2"><BillingSettingsSection userId={authUser?.id} /></div>
 
         {/* ── User Mode (Type A — Individual vs Type B — Class-based) ── */}
-        <Card className="lg:col-span-2">
+        <Card id="settings-profile" className="lg:col-span-2">
           <SectionHeading
             icon={<Users className="w-4 h-4 text-terracotta-600 dark:text-terracotta-400" />}
             title="User Mode"
@@ -834,6 +1012,29 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToClassSpa
             sub="Customize your avatar photo, student details, contact info, and academic target"
           />
 
+          {(() => {
+            const gender = settings.gender ?? settings.bodyModelPreference ?? 'male';
+            return <section className="settings-gender-panel mb-7" aria-labelledby="settings-gender-title">
+              <div className="settings-gender-heading">
+                <div><span className="settings-mini-kicker">PERSONAL EXPERIENCE</span><h3 id="settings-gender-title">Choose your body profile</h3><p>This choice selects your Iron Lab anatomy and which wellness spaces are available.</p></div>
+                <span className="settings-gender-badge"><Dumbbell className="h-4 w-4" /> Iron Lab</span>
+              </div>
+              <fieldset className="settings-gender-options">
+                <legend className="sr-only">Gender profile</legend>
+                {(['male', 'female'] as const).map((option) => <button key={option} type="button" aria-pressed={gender === option} onClick={() => handleGenderChange(option)} className="settings-gender-option">
+                  <span className="settings-gender-icon"><User className="h-5 w-5" /></span>
+                  <span><strong>{option === 'male' ? 'Male' : 'Female'}</strong><small>{option === 'male' ? 'Male muscle anatomy' : 'Female muscle anatomy + Bloom access'}</small></span>
+                  <span className="settings-gender-check"><Check className="h-4 w-4" /></span>
+                </button>)}
+              </fieldset>
+              {gender === 'female' && <div className="settings-bloom-choice">
+                <span className="settings-bloom-icon"><Flower2 className="h-5 w-5" /></span>
+                <div className="settings-bloom-copy"><strong>Bloom cycle wellness</strong><small>Private, encrypted on this device, and never shared with class spaces.</small><span>Turning Bloom off hides it without deleting its saved records.</span></div>
+                <button type="button" role="switch" aria-checked={Boolean(settings.bloomEnabled)} aria-label="Enable Bloom cycle wellness" onClick={() => updateSettings({ bloomEnabled: !settings.bloomEnabled })} className={`settings-switch ${settings.bloomEnabled ? 'is-on' : ''}`}><span /></button>
+              </div>}
+            </section>;
+          })()}
+
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
             {/* Left Column: Profile Picture (PFP) */}
             <div className="lg:col-span-4 flex flex-col items-center p-5 rounded-2xl bg-ivory-50/70 dark:bg-espresso-900/60 border border-ivory-200 dark:border-espresso-750 text-center">
@@ -1084,12 +1285,49 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToClassSpa
         </Card>
 
         {/* ── Appearance ── */}
-        <Card>
+        <Card id="settings-appearance" className="settings-appearance-card">
           <SectionHeading
             icon={<Palette className="w-4 h-4" />}
-            title="Appearance"
+            title="Personalisation & Appearance"
             sub="Theme, accent colour, and background style"
           />
+
+          <div className="mb-6">
+            <p className="text-xs font-semibold uppercase font-mono tracking-wider text-espresso-700 dark:text-espresso-300 mb-3">Global Appearance</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {([
+                { id: 'classic', label: 'Classic Mode', desc: 'Keep the familiar TRAKIFY look.', preview: 'classic' },
+                { id: 'digital-paper', label: 'Digital Paper', desc: 'A calm, matte color e-paper reading surface.', preview: 'paper' },
+              ] as { id: AppearanceMode; label: string; desc: string; preview: string }[]).map((option) => (
+                <button key={option.id} type="button" aria-pressed={(settings.appearanceMode ?? 'classic') === option.id}
+                  onClick={() => persistSettings({ appearanceMode: option.id })}
+                  className={`appearance-mode-card${(settings.appearanceMode ?? 'classic') === option.id ? ' is-selected' : ''}`}>
+                  <span className={`appearance-mode-preview ${option.preview}`} aria-hidden="true"><i /><i /><i /></span>
+                  <span className="appearance-mode-copy"><strong>{option.label}</strong><small>{option.desc}</small></span>
+                  {(settings.appearanceMode ?? 'classic') === option.id && <Check className="w-4 h-4 shrink-0" />}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {(settings.appearanceMode ?? 'classic') === 'digital-paper' && <div className="digital-paper-settings mb-6" aria-live="polite">
+            <p className="text-xs font-semibold uppercase font-mono tracking-wider mb-1">Digital Paper Settings</p>
+            <p className="text-xs opacity-75 mb-3">Choose a comfortable contrast. The preview updates as you select.</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              {([
+                { id: 'soft', label: 'Soft', detail: 'Gentle for long reading' },
+                { id: 'balanced', label: 'Balanced', detail: 'Recommended everyday setting' },
+                { id: 'crisp', label: 'Crisp', detail: 'Sharper definition' },
+              ] as { id: PaperContrast; label: string; detail: string }[]).map((option) => (
+                <button key={option.id} type="button" aria-pressed={(settings.paperContrast ?? 'balanced') === option.id}
+                  onClick={() => persistSettings({ paperContrast: option.id })}
+                  className={`paper-contrast-card contrast-${option.id}${(settings.paperContrast ?? 'balanced') === option.id ? ' is-selected' : ''}`}>
+                  <span className="paper-contrast-preview" aria-hidden="true"><i /><b /><em /></span>
+                  <strong>{option.label}</strong><small>{option.detail}</small>
+                </button>
+              ))}
+            </div>
+          </div>}
 
           {/* Theme Mode */}
           <div className="mb-6">
@@ -1125,7 +1363,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToClassSpa
             <p className="text-xs font-semibold uppercase font-mono tracking-wider text-espresso-700 dark:text-espresso-300 mb-3">
               Accent Colour
             </p>
-            <div className="grid grid-cols-3 gap-2.5">
+            <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2.5">
               {ACCENT_OPTIONS.map((opt) => (
                 <button
                   key={opt.id}
@@ -1140,12 +1378,25 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToClassSpa
                     className={`w-4 h-4 rounded-full shrink-0 ring-2 ring-offset-1 ring-offset-white dark:ring-offset-espresso-850 ${
                       settings.accentColor === opt.id ? 'ring-current' : 'ring-transparent'
                     }`}
-                    style={{ backgroundColor: opt.hex, color: opt.hex }}
+                    style={{ backgroundColor: opt.id === 'custom' ? (settings.customAccentColor || opt.hex) : opt.hex, color: opt.hex }}
                   />
                   <span className="text-espresso-800 dark:text-ivory-200 truncate">{opt.label}</span>
                 </button>
               ))}
             </div>
+            {settings.accentColor === 'custom' && <div className="settings-custom-colour">
+              <label htmlFor="custom-accent-wheel"><span><strong>Your custom accent</strong><small>Choose a colour, then save it to your personal palette.</small></span>
+                <span className="settings-custom-colour-control"><input id="custom-accent-wheel" type="color" value={/^#[0-9a-fA-F]{6}$/.test(settings.customAccentColor || '') ? settings.customAccentColor! : '#d77f98'} onChange={(event) => persistSettings({ accentColor: 'custom', customAccentColor: event.target.value })} aria-label="Choose a custom accent colour" /><input type="text" value={settings.customAccentColor || '#d77f98'} pattern="^#[0-9a-fA-F]{6}$" maxLength={7} aria-label="Custom accent hex colour" onChange={(event) => { if (/^#[0-9a-fA-F]{0,6}$/.test(event.target.value)) persistSettings({ accentColor: 'custom', customAccentColor: event.target.value }); }} onBlur={() => { if (!/^#[0-9a-fA-F]{6}$/.test(settings.customAccentColor || '')) persistSettings({ customAccentColor: '#d77f98' }); }} /></span>
+              </label>
+              <button type="button" onClick={saveCurrentAccent} disabled={(settings.savedAccentColors || []).some((saved) => saved.toLowerCase() === (settings.customAccentColor || '#d77f98').toLowerCase())} className="settings-save-accent"><Plus className="h-3.5 w-3.5" /> Save colour to palette</button>
+            </div>}
+            {(settings.savedAccentColors || []).length > 0 && <div className="settings-saved-palette">
+              <div className="settings-saved-palette-heading"><span>Saved colours</span><small>{settings.savedAccentColors!.length} / 12</small></div>
+              <div className="settings-saved-swatches">{settings.savedAccentColors!.map((hex) => <div className="settings-saved-swatch-wrap" key={hex}>
+                <button type="button" onClick={() => selectSavedAccent(hex)} aria-pressed={settings.accentColor === 'custom' && settings.customAccentColor?.toLowerCase() === hex.toLowerCase()} title={`Use ${hex}`} className="settings-saved-swatch"><i style={{ backgroundColor: hex }} /><span>{hex.toUpperCase()}</span></button>
+                <button type="button" onClick={() => removeSavedAccent(hex)} aria-label={`Remove saved colour ${hex}`} title="Remove saved colour" className="settings-remove-swatch"><Trash2 className="h-3 w-3" /></button>
+              </div>)}</div>
+            </div>}
           </div>
 
           {/* Background Style */}
@@ -1158,16 +1409,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToClassSpa
                 <button
                   key={opt.id}
                   onClick={() => handleBgChange(opt.id)}
+                  data-background={opt.id}
                   className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-left text-sm transition ${
                     settings.backgroundStyle === opt.id
                       ? 'border-espresso-800 dark:border-ivory-300 bg-espresso-50 dark:bg-espresso-800'
                       : 'border-ivory-300 dark:border-espresso-700 hover:border-ivory-400 dark:hover:border-espresso-600'
                   }`}
                 >
-                  <div>
-                    <p className="font-medium text-espresso-900 dark:text-ivory-100 text-xs">{opt.label}</p>
-                    <p className="text-xs text-espresso-400 dark:text-espresso-500 mt-0.5">{opt.desc}</p>
-                  </div>
+                  <div className="settings-bg-option-copy"><span className="settings-bg-preview" aria-hidden="true" /><span><p className="font-medium text-espresso-900 dark:text-ivory-100 text-xs">{opt.label}</p><p className="text-xs text-espresso-400 dark:text-espresso-500 mt-0.5">{opt.desc}</p></span></div>
                   {settings.backgroundStyle === opt.id && (
                     <Check className="w-4 h-4 text-espresso-800 dark:text-ivory-200 shrink-0" />
                   )}
@@ -1183,7 +1432,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToClassSpa
                       value={customBgUrl}
                       onChange={(e) => {
                         setCustomBgUrl(e.target.value);
-                        updateSettings({ customBackgroundUrl: e.target.value });
+                        persistSettings({ customBackgroundUrl: e.target.value });
                       }}
                       placeholder="https://example.com/wallpaper.jpg"
                       className="flex-1 px-3.5 py-2.5 rounded-xl border border-ivory-300 dark:border-espresso-700 bg-ivory-50 dark:bg-espresso-900 text-espresso-900 dark:text-ivory-100 text-sm placeholder:text-espresso-400 dark:placeholder:text-espresso-600 focus:outline-none focus:ring-2 focus:ring-terracotta-400 transition"
@@ -1193,7 +1442,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToClassSpa
                         type="button"
                         onClick={() => {
                           setCustomBgUrl('');
-                          updateSettings({ customBackgroundUrl: '' });
+                          persistSettings({ customBackgroundUrl: '' });
                         }}
                         className="px-3 py-2 text-xs rounded-xl border border-ivory-300 dark:border-espresso-700 text-espresso-600 dark:text-espresso-300 hover:bg-ivory-200 dark:hover:bg-espresso-800"
                         title="Reset to default custom image"
@@ -1217,7 +1466,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToClassSpa
                           type="button"
                           onClick={() => {
                             setCustomBgUrl(preset.url);
-                            updateSettings({ customBackgroundUrl: preset.url });
+                            persistSettings({ customBackgroundUrl: preset.url });
                           }}
                           className={`text-xs px-2.5 py-1.5 rounded-lg border transition ${
                             customBgUrl === preset.url
@@ -1237,10 +1486,70 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToClassSpa
               )}
             </div>
           </div>
+          <section className="settings-effects-panel" aria-labelledby="settings-effects-title">
+            <div className="settings-effects-heading"><div><span className="settings-mini-kicker"><Sparkles className="h-3.5 w-3.5" /> AMBIENT LIGHT</span><h3 id="settings-effects-title">Background Effects</h3><p>Soft, screen-wide colour motion inspired by Aura lighting modes.</p></div><span className="settings-effect-live"><i /> {settings.backgroundEffect === 'off' ? 'Off' : BACKGROUND_EFFECTS.find((effect) => effect.id === (settings.backgroundEffect || 'static'))?.label}</span></div>
+            <div className="settings-effect-grid">{BACKGROUND_EFFECTS.map(({ id, label, description, icon: Icon }) => <button key={id} type="button" aria-pressed={(settings.backgroundEffect || 'static') === id} onClick={() => persistSettings({ backgroundEffect: id })} className="settings-effect-option"><span className="settings-effect-icon"><Icon className="h-5 w-5" /></span><strong>{label}</strong><small>{description}</small></button>)}</div>
+            {settings.backgroundEffect && settings.backgroundEffect !== 'static' && settings.backgroundEffect !== 'off' && <div className="settings-effect-controls">
+              <label><span><strong>Motion speed</strong><small>Slower movement feels calmer.</small></span><input type="range" min="1" max="5" step="1" value={settings.backgroundEffectSpeed ?? 2} onChange={(event) => persistSettings({ backgroundEffectSpeed: Number(event.target.value) })} aria-label="Background effect motion speed" /><output>{settings.backgroundEffectSpeed ?? 2}</output></label>
+              <label><span><strong>Glow strength</strong><small>Keep the light subtle behind your content.</small></span><input type="range" min="0.08" max="0.4" step="0.01" value={settings.backgroundEffectIntensity ?? 0.22} onChange={(event) => persistSettings({ backgroundEffectIntensity: Number(event.target.value) })} aria-label="Background effect glow strength" /><output>{Math.round((settings.backgroundEffectIntensity ?? 0.22) * 100)}%</output></label>
+            </div>}
+            <div className="settings-edge-glow-row"><span><strong>Accent edge glimmer</strong><small>A fine, slow-moving accent line around cards and workspace panels.</small></span><button type="button" role="switch" aria-checked={settings.accentEdgeGlow !== false} aria-label="Accent edge glimmer" onClick={() => persistSettings({ accentEdgeGlow: settings.accentEdgeGlow === false })} className={`settings-edge-glow-switch${settings.accentEdgeGlow !== false ? ' is-on' : ''}`}><i /></button></div>
+          </section>
+        </Card>
+
+        {/* ── Keyboard Shortcuts & Platform Conventions ── */}
+        <Card>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+            <SectionHeading
+              icon={<Palette className="w-4 h-4" />}
+              title="Keyboard Shortcuts & Platform Conventions"
+              sub="Tailor shortcut modifier keys to your operating system and view hotkey directory."
+            />
+            <button
+              type="button"
+              onClick={() => setIsShortcutsModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 hover:bg-ivory-100 dark:hover:bg-espresso-800 text-xs font-semibold text-espresso-800 dark:text-ivory-100 transition cursor-pointer self-start sm:self-auto shadow-xs"
+            >
+              <span className="font-mono">{modKey}/</span>
+              <span>View Shortcuts</span>
+            </button>
+          </div>
+
+          <div className="space-y-4">
+            <p className="text-xs text-espresso-600 dark:text-espresso-300 leading-relaxed">
+              TRAKIFY dynamically adapts shortcuts to your device. You can force Apple macOS (⌘) or Windows/Linux (Ctrl) convention below:
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {[
+                { id: 'auto', label: 'Auto-Detect', sub: `Currently: ${platform === 'mac' ? 'Apple macOS (⌘)' : 'Windows / Linux (Ctrl)'}` },
+                { id: 'mac', label: 'Apple macOS (⌘)', sub: 'Uses Command (⌘) and Option (⌥)' },
+                { id: 'windows', label: 'Windows / Linux (Ctrl)', sub: 'Uses Control (Ctrl) and Alt' },
+              ].map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => setPlatformOverride(opt.id as any)}
+                  className={`p-3.5 rounded-xl border text-left transition cursor-pointer ${
+                    override === opt.id
+                      ? 'border-espresso-800 dark:border-ivory-200 bg-espresso-50 dark:bg-espresso-800 font-semibold'
+                      : 'border-ivory-300 dark:border-espresso-700 bg-white dark:bg-espresso-850 text-espresso-700 dark:text-ivory-300 hover:bg-ivory-50'
+                  }`}
+                >
+                  <span className="block text-xs font-bold text-espresso-950 dark:text-ivory-50 mb-0.5">
+                    {opt.label}
+                  </span>
+                  <span className="block text-[11px] text-espresso-400 dark:text-espresso-500">
+                    {opt.sub}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
         </Card>
 
         {/* ── Dashboard Control System ── */}
-        <Card>
+        <Card className="lg:col-span-2">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
             <SectionHeading
               icon={<Eye className="w-4 h-4" />}
@@ -1475,7 +1784,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToClassSpa
           <div className="space-y-4">
             <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50">
               <p className="text-xs text-red-700 dark:text-red-300 font-medium">
-                ⚠️ This will delete all subjects, attendance logs, gym workouts, food diary, focus sessions, tasks, syllabus, and settings. There is no undo.
+                ⚠️ This deletes all TRAKIFY data, including any encrypted Bloom cycle records on this device. There is no undo.
               </p>
             </div>
             <div>
@@ -1516,7 +1825,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToClassSpa
       <div className="flex flex-col sm:flex-row items-center justify-between gap-2 py-4 border-t border-ivory-300 dark:border-espresso-800 text-xs text-espresso-400 dark:text-espresso-500 font-mono">
         <span className="flex items-center gap-1.5">
           <Info className="w-3.5 h-3.5" />
-          TRACKER v{APP_VERSION} · Local-First · No Cloud Sync
+          TRAKIFY v{APP_VERSION} · Local-First · No Cloud Sync
         </span>
         <div className="flex items-center gap-4">
           <span>All data stored in your browser&apos;s localStorage</span>
@@ -1561,7 +1870,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToClassSpa
       <ConfirmModal
         isOpen={confirmLeaveOpen}
         title="Leave ClassSpace"
-        message="Are you sure you want to leave this ClassSpace? Your personal attendance logs and notes will remain safely preserved in your private Tracker."
+        message="Are you sure you want to leave this ClassSpace? Your personal attendance logs and notes will remain safely preserved in your private TRAKIFY account."
         confirmLabel="Leave Workspace"
         variant="danger"
         onConfirm={async () => {
@@ -1602,7 +1911,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToClassSpa
         }
         onSave={async (newCalendar: AcademicCalendarSettings) => {
           if (settings.userMode === 'class_based' && activeWorkspace && classSpace) {
-            await classSpace.updateWorkspaceAcademicCalendar(newCalendar);
+            const result = await classSpace.updateWorkspaceAcademicCalendar(newCalendar);
+            if (!result.success) throw new Error(result.error || 'Could not save ClassSpace attendance settings.');
           } else {
             updateSettings({ academicCalendar: newCalendar });
           }
@@ -1610,8 +1920,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigateToClassSpa
         isClassSpaceScope={settings.userMode === 'class_based'}
         canEdit={
           settings.userMode !== 'class_based' ||
-          Boolean(classSpace?.isOwner || classSpace?.isCR || classSpace?.isCoAdmin)
+          Boolean(classSpace?.isOwner || classSpace?.isCR)
         }
+      />
+
+      {/* Keyboard Shortcuts Reference Dialog */}
+      <KeyboardShortcutsDialog
+        isOpen={isShortcutsModalOpen}
+        onClose={() => setIsShortcutsModalOpen(false)}
       />
     </div>
   );

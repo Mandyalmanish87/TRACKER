@@ -10,10 +10,12 @@ import {
   OccurrenceOverride,
   ExtraClass,
   Subject,
+  AttendanceMark,
 } from '../../types';
 import { useOptionalApp } from '../../context/AppContext';
 import { findScheduleConflicts } from '../../utils/scheduleResolver';
 import { ScheduleConflictBanner } from './ScheduleConflictBanner';
+import { getActiveAccentColor } from '../../utils/themeColors';
 
 interface ClassOccurrenceModalProps {
   event: ResolvedCalendarEvent | null;
@@ -33,6 +35,8 @@ interface ClassOccurrenceModalProps {
   ) => void;
   onCancelOccurrence: (slotId: string, originalDate: string) => void;
   onRestoreOccurrence: (slotId: string, originalDate: string) => void;
+  attendanceStatus?: AttendanceMark | 'unmarked';
+  onMarkAttendance?: (status: AttendanceMark) => void;
   onDeleteSlot?: (slotId: string) => void;
   // Optional timetable context props for standalone usage/testing
   timetable?: TimetableSlot[];
@@ -45,12 +49,14 @@ export const ClassOccurrenceModal: React.FC<ClassOccurrenceModalProps> = ({
   event,
   subjectName,
   subjectCode,
-  subjectColor = '#C45532',
+  subjectColor = getActiveAccentColor(),
   isOpen,
   onClose,
   onRescheduleOccurrence,
   onCancelOccurrence,
   onRestoreOccurrence,
+  attendanceStatus = 'unmarked',
+  onMarkAttendance,
   onDeleteSlot: _onDeleteSlot,
   timetable: propTimetable,
   overrides: propOverrides,
@@ -242,6 +248,39 @@ export const ClassOccurrenceModal: React.FC<ClassOccurrenceModalProps> = ({
               <p className="text-[11px] text-espresso-500 dark:text-espresso-400 italic">
                 💡 Rescheduling or cancelling this occurrence will change ONLY this specific date ({event.date}). All other weekly recurring classes will remain unchanged.
               </p>
+            )}
+
+            {!isCancelled && onMarkAttendance && (
+              <div className="space-y-2 rounded-xl border border-ivory-200 dark:border-espresso-800 bg-ivory-50/70 dark:bg-espresso-850/60 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-xs font-semibold text-espresso-700 dark:text-ivory-200">My attendance</span>
+                  <span className="text-[10px] uppercase tracking-wide text-espresso-500 dark:text-espresso-400">
+                    {attendanceStatus === 'unmarked' ? 'Not marked' : attendanceStatus}
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {([
+                    ['present', 'Present'],
+                    ['absent', 'Absent'],
+                    ['cancelled', 'Cancelled'],
+                  ] as const).map(([status, label]) => (
+                    <button
+                      key={status}
+                      type="button"
+                      aria-pressed={attendanceStatus === status}
+                      onClick={() => onMarkAttendance(status)}
+                      className={`min-h-9 rounded-lg border px-2 py-1.5 text-[11px] font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] ${
+                        attendanceStatus === status
+                          ? status === 'present' ? 'border-emerald-600 bg-emerald-600 text-white' : status === 'absent' ? 'border-rose-600 bg-rose-600 text-white' : 'border-amber-600 bg-amber-600 text-white'
+                          : 'border-ivory-300 dark:border-espresso-700 bg-white dark:bg-espresso-900 text-espresso-700 dark:text-ivory-200 hover:border-[var(--accent)]'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[10px] text-espresso-500 dark:text-espresso-400">Only your attendance record is updated.</p>
+              </div>
             )}
 
             {/* Action buttons */}

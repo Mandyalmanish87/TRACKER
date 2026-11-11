@@ -167,13 +167,13 @@ export const EduHubView: React.FC = () => {
   };
 
   return (
-    <div className="space-y-8 pb-16">
+    <div className="eduhub-view space-y-8 pb-16">
       {/* ── 1. HEADER & COURSE SELECTOR ───────────────────────────── */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-ivory-300 dark:border-espresso-800 pb-5">
+      <div className="eduhub-hero flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <span className="font-mono text-xs font-semibold uppercase tracking-wider text-terracotta-600 dark:text-terracotta-400">
-              Academic Lecture Hub
+            <span className="eduhub-eyebrow font-mono text-xs font-semibold uppercase tracking-wider text-terracotta-600 dark:text-terracotta-400">
+              <GraduationCap className="h-3.5 w-3.5" /> Academic Lecture Hub
             </span>
             {currentCourse?.isSample && (
               <span className="font-mono text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-ochre-100 dark:bg-ochre-900/40 text-ochre-700 dark:text-ochre-300 border border-ochre-200 dark:border-ochre-800">
@@ -181,10 +181,10 @@ export const EduHubView: React.FC = () => {
               </span>
             )}
           </div>
-          <h1 className="font-serif text-3xl sm:text-4xl font-normal text-espresso-950 dark:text-ivory-50 tracking-tight mt-1">
-            EduHub Courses &amp; Lectures
+          <h1 className="eduhub-title font-serif text-3xl sm:text-4xl font-normal text-espresso-950 dark:text-ivory-50 tracking-tight mt-1">
+            Your learning studio
           </h1>
-          <p className="text-sm font-serif italic text-espresso-500 dark:text-espresso-400 mt-0.5">
+          <p className="eduhub-subtitle text-sm font-serif italic text-espresso-500 dark:text-espresso-400 mt-0.5">
             Organize YouTube lecture playlists, monitor study completion, and synthesize PDF notes.
           </p>
         </div>
@@ -242,7 +242,7 @@ export const EduHubView: React.FC = () => {
         <section className="grid grid-cols-2 sm:grid-cols-4 gap-3.5 sm:gap-4">
           {/* Stat 1: Total Lectures */}
           <TiltCard maxTilt={6} scale={1.02}>
-            <div className="p-4 rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 shadow-subtle h-full flex flex-col justify-between">
+            <div className="eduhub-stat-card p-4 rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 shadow-subtle h-full flex flex-col justify-between">
               <div className="flex items-center justify-between text-espresso-500 dark:text-espresso-400 mb-2">
                 <span className="text-[11px] font-mono font-semibold uppercase tracking-wider">Lectures</span>
                 <div className="p-1.5 rounded-lg bg-ivory-100 dark:bg-espresso-800">
@@ -260,7 +260,7 @@ export const EduHubView: React.FC = () => {
 
           {/* Stat 2: Completion Percentage */}
           <TiltCard maxTilt={6} scale={1.02}>
-            <div className="p-4 rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 shadow-subtle h-full flex flex-col justify-between">
+            <div className="eduhub-stat-card p-4 rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 shadow-subtle h-full flex flex-col justify-between">
               <div className="flex items-center justify-between text-espresso-500 dark:text-espresso-400 mb-2">
                 <span className="text-[11px] font-mono font-semibold uppercase tracking-wider">Progress</span>
                 <div className="p-1.5 rounded-lg bg-sage-50 dark:bg-sage-900/30">
@@ -281,7 +281,7 @@ export const EduHubView: React.FC = () => {
 
           {/* Stat 3: Remaining Study Workload */}
           <TiltCard maxTilt={6} scale={1.02}>
-            <div className="p-4 rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 shadow-subtle h-full flex flex-col justify-between">
+            <div className="eduhub-stat-card p-4 rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 shadow-subtle h-full flex flex-col justify-between">
               <div className="flex items-center justify-between text-espresso-500 dark:text-espresso-400 mb-2">
                 <span className="text-[11px] font-mono font-semibold uppercase tracking-wider">Remaining Time</span>
                 <div className="p-1.5 rounded-lg bg-ochre-50 dark:bg-ochre-900/30">
@@ -299,7 +299,7 @@ export const EduHubView: React.FC = () => {
 
           {/* Stat 4: Total Course Content */}
           <TiltCard maxTilt={6} scale={1.02}>
-            <div className="p-4 rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 shadow-subtle h-full flex flex-col justify-between">
+            <div className="eduhub-stat-card p-4 rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 shadow-subtle h-full flex flex-col justify-between">
               <div className="flex items-center justify-between text-espresso-500 dark:text-espresso-400 mb-2">
                 <span className="text-[11px] font-mono font-semibold uppercase tracking-wider">Course Duration</span>
                 <div className="p-1.5 rounded-lg bg-ivory-100 dark:bg-espresso-800">
@@ -322,7 +322,7 @@ export const EduHubView: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           {/* Left Column: Player & Active Lecture Actions (7 cols) */}
           <div className="lg:col-span-7 space-y-4">
-            <div className="p-4 sm:p-5 rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 shadow-subtle space-y-4">
+            <div className="eduhub-player-panel p-4 sm:p-5 rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 shadow-subtle space-y-4">
               <EduHubPlayer
                 lecture={selectedLecture}
                 onUpdateProgress={handleUpdateProgress}
@@ -369,7 +369,7 @@ export const EduHubView: React.FC = () => {
             </div>
 
             {/* Course Description Card with Edit / Delete */}
-            <div className="p-4 rounded-2xl border border-ivory-200 dark:border-espresso-800 bg-ivory-50/60 dark:bg-espresso-900/40 flex items-start justify-between gap-4">
+            <div className="eduhub-course-details p-4 rounded-2xl border border-ivory-200 dark:border-espresso-800 bg-ivory-50/60 dark:bg-espresso-900/40 flex items-start justify-between gap-4">
               <div className="space-y-1.5 flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <h4 className="text-xs font-bold font-mono uppercase tracking-wider text-espresso-700 dark:text-ivory-200">
@@ -425,7 +425,7 @@ export const EduHubView: React.FC = () => {
 
           {/* Right Column: Lecture Playlist (5 cols) */}
           <div className="lg:col-span-5">
-            <div className="p-4 sm:p-5 rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 shadow-subtle min-h-[500px]">
+            <div className="eduhub-playlist-panel p-4 sm:p-5 rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 shadow-subtle min-h-[500px]">
               <LectureList
                 lectures={currentCourse.lectures || []}
                 selectedLectureId={selectedLectureId}

@@ -130,7 +130,7 @@ describe('GPT Calendar Import Workflow', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /validate & preview/i }));
 
-    expect(screen.getByText(/not valid JSON|malformed/i)).toBeInTheDocument();
+    expect(screen.getByText(/invalid json|not valid JSON|malformed/i)).toBeInTheDocument();
   });
 });
 

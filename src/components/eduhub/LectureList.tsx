@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import { EduHubLecture } from '../../types/eduhub';
 import { formatDigitalTime } from '../../services/eduhubStorage';
 import {
@@ -10,7 +10,12 @@ import {
   FileText,
   Plus,
   Clock,
+  Search,
+  X,
+  Play,
 } from 'lucide-react';
+
+type LectureFilter = 'all' | 'in-progress' | 'up-next' | 'completed';
 
 interface LectureListProps {
   lectures: EduHubLecture[];
@@ -33,13 +38,37 @@ export const LectureList: React.FC<LectureListProps> = ({
   onOpenNotes,
   onOpenAddLecture,
 }) => {
+  const [query, setQuery] = useState('');
+  const [filter, setFilter] = useState<LectureFilter>('all');
+  const filteredLectures = useMemo(() => {
+    const normalized = query.trim().toLocaleLowerCase();
+    return lectures.filter((lecture) => {
+      const matchesQuery = !normalized || lecture.title.toLocaleLowerCase().includes(normalized);
+      const progress = lecture.durationSeconds > 0
+        ? Math.min(100, Math.round((lecture.lastPositionSeconds / lecture.durationSeconds) * 100))
+        : 0;
+      const matchesFilter = filter === 'all'
+        || (filter === 'completed' && lecture.completed)
+        || (filter === 'in-progress' && !lecture.completed && progress > 0)
+        || (filter === 'up-next' && !lecture.completed && progress === 0);
+      return matchesQuery && matchesFilter;
+    });
+  }, [lectures, query, filter]);
+  const filterOptions: { id: LectureFilter; label: string; count: number }[] = [
+    { id: 'all', label: 'All', count: lectures.length },
+    { id: 'in-progress', label: 'In progress', count: lectures.filter((lecture) => !lecture.completed && lecture.lastPositionSeconds > 0).length },
+    { id: 'up-next', label: 'Up next', count: lectures.filter((lecture) => !lecture.completed && lecture.lastPositionSeconds <= 0).length },
+    { id: 'completed', label: 'Done', count: lectures.filter((lecture) => lecture.completed).length },
+  ];
+  const filteredView = Boolean(query.trim()) || filter !== 'all';
+
   return (
     <div className="space-y-3 flex flex-col h-full">
       {/* Playlist Header */}
       <div className="flex items-center justify-between pb-2 border-b border-ivory-200 dark:border-espresso-800">
         <div className="flex items-center gap-2">
           <span className="font-mono text-xs font-bold uppercase tracking-wider text-espresso-700 dark:text-ivory-200">
-            Course Playlist
+            Lecture queue
           </span>
           <span className="text-xs px-2 py-0.5 rounded-full bg-ivory-200 dark:bg-espresso-800 text-espresso-600 dark:text-espresso-300 font-mono font-semibold">
             {lectures.length}
@@ -55,8 +84,21 @@ export const LectureList: React.FC<LectureListProps> = ({
         </button>
       </div>
 
+      {lectures.length > 0 && <>
+        <label className="eduhub-lecture-search">
+          <Search className="h-4 w-4" aria-hidden="true" />
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Find a lecture…" aria-label="Search course lectures" />
+          {query && <button type="button" onClick={() => setQuery('')} aria-label="Clear lecture search"><X className="h-3.5 w-3.5" /></button>}
+        </label>
+        <div className="eduhub-lecture-filters" role="group" aria-label="Filter lectures">
+          {filterOptions.map((option) => <button key={option.id} type="button" aria-pressed={filter === option.id} onClick={() => setFilter(option.id)}>
+            {option.label}<span>{option.count}</span>
+          </button>)}
+        </div>
+      </>}
+
       {/* Playlist Items */}
-      <div className="space-y-2 flex-1 overflow-y-auto pr-1">
+      <div className="eduhub-lecture-list space-y-2 flex-1 overflow-y-auto pr-1">
         {lectures.length === 0 ? (
           <div className="p-8 text-center rounded-2xl border border-dashed border-ivory-300 dark:border-espresso-750 bg-ivory-50/50 dark:bg-espresso-850/50 text-espresso-400 dark:text-espresso-500 space-y-2">
             <p className="text-xs font-medium">This course playlist is currently empty.</p>
@@ -68,8 +110,11 @@ export const LectureList: React.FC<LectureListProps> = ({
               <span>Add Your First Lecture</span>
             </button>
           </div>
+        ) : filteredLectures.length === 0 ? (
+          <div className="eduhub-lecture-no-results"><Search className="h-5 w-5" /><strong>No lectures match</strong><span>Try another title or switch the filter.</span><button type="button" onClick={() => { setQuery(''); setFilter('all'); }}>Show all lectures</button></div>
         ) : (
-          lectures.map((lecture, idx) => {
+          filteredLectures.map((lecture) => {
+            const idx = lectures.findIndex((item) => item.id === lecture.id);
             const isSelected = selectedLectureId === lecture.id;
             const progressPct =
               lecture.durationSeconds > 0
@@ -102,6 +147,10 @@ export const LectureList: React.FC<LectureListProps> = ({
                   {/* Middle: Lecture Details & Selection */}
                   <div
                     onClick={() => onSelectLecture(lecture)}
+                    onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelectLecture(lecture); } }}
+                    role="button"
+                    tabIndex={0}
+                    aria-pressed={isSelected}
                     className="flex-1 min-w-0 cursor-pointer"
                   >
                     <div className="flex items-center gap-1.5">
@@ -134,6 +183,8 @@ export const LectureList: React.FC<LectureListProps> = ({
                           </span>
                         </>
                       )}
+                      {lecture.completed && <span className="eduhub-complete-label"><CheckCircle2 className="h-3 w-3" /> Complete</span>}
+                      {selectedLectureId === lecture.id && !lecture.completed && <span className="eduhub-now-playing"><Play className="h-2.5 w-2.5 fill-current" /> Selected</span>}
                     </div>
                   </div>
 
@@ -149,7 +200,7 @@ export const LectureList: React.FC<LectureListProps> = ({
 
                     <div className="flex flex-col gap-0.5">
                       <button
-                        disabled={idx === 0}
+                        disabled={idx === 0 || filteredView}
                         onClick={() => onReorder(idx, idx - 1)}
                         className="p-0.5 text-espresso-400 hover:text-espresso-800 dark:hover:text-ivory-200 disabled:opacity-20 cursor-pointer"
                         title="Move up in playlist"
@@ -157,7 +208,7 @@ export const LectureList: React.FC<LectureListProps> = ({
                         <ChevronUp className="w-3 h-3" />
                       </button>
                       <button
-                        disabled={idx === lectures.length - 1}
+                        disabled={idx === lectures.length - 1 || filteredView}
                         onClick={() => onReorder(idx, idx + 1)}
                         className="p-0.5 text-espresso-400 hover:text-espresso-800 dark:hover:text-ivory-200 disabled:opacity-20 cursor-pointer"
                         title="Move down in playlist"

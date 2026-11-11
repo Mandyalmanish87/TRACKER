@@ -8,8 +8,8 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        jb: ['"Syne"', '"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
-        display: ['"Syne"', '"Space Grotesk"', 'sans-serif'],
+        jb: ['"Space Grotesk"', '"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
+        display: ['"Space Grotesk"', '"Plus Jakarta Sans"', 'sans-serif'],
         serif: ['"Playfair Display"', 'Georgia', 'Cambria', 'serif'],
         sans: ['"Plus Jakarta Sans"', 'Inter', 'system-ui', 'sans-serif'],
         mono: ['"JetBrains Mono"', 'Menlo', 'monospace'],
@@ -46,14 +46,17 @@ export default {
           300: '#B8AEA4',
         },
         terracotta: {
-          50: '#FDF4F0',
-          100: '#FBF0EA',
-          200: '#F5DCD1',
-          300: '#EDBFA8',
-          400: '#DE8E6E',
-          500: '#C45532',
-          600: '#B24424',
-          700: '#94351A',
+          50: 'var(--accent-50)',
+          100: 'var(--accent-100)',
+          200: 'var(--accent-200)',
+          300: 'var(--accent-300)',
+          400: 'var(--accent-400)',
+          500: 'var(--accent-500)',
+          600: 'var(--accent-600)',
+          700: 'var(--accent-700)',
+          800: 'var(--accent-800)',
+          900: 'var(--accent-900)',
+          950: 'var(--accent-950)',
         },
         sage: {
           50: '#F2F7F4',

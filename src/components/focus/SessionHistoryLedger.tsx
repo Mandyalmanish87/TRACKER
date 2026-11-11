@@ -43,7 +43,7 @@ export const SessionHistoryLedger: React.FC<SessionHistoryLedgerProps> = ({ sess
   };
 
   return (
-    <div className="w-full bg-white dark:bg-espresso-850 rounded-2xl border border-ivory-300 dark:border-espresso-750 shadow-subtle p-5">
+    <div className="focus-history-card w-full bg-white dark:bg-espresso-850 rounded-2xl border border-ivory-300 dark:border-espresso-750 shadow-subtle p-5">
       {/* Header & Controls */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-ivory-200 dark:border-espresso-750">
         <div>

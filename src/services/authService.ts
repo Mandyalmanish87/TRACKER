@@ -1,4 +1,6 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { firebaseService } from './firebaseService';
+import { getFirebaseDataClient } from './firebaseDataClient';
 
 export interface AuthUser {
   id: string;
@@ -10,7 +12,7 @@ export interface AuthUser {
 
 const env = (import.meta as unknown as { env?: Record<string, string> }).env || {};
 const supabaseUrl = env.VITE_SUPABASE_URL;
-const supabaseAnonKey = env.VITE_SUPABASE_ANON_KEY;
+const supabaseAnonKey = env.VITE_SUPABASE_PUBLISHABLE_KEY || env.VITE_SUPABASE_ANON_KEY;
 
 const isValidSupabaseUrl = (url?: string): boolean => {
   if (!url || typeof url !== 'string') return false;
@@ -41,7 +43,6 @@ const isValidSupabaseKey = (key?: string): boolean => {
 };
 
 let supabaseClient: SupabaseClient | null = null;
-
 if (isValidSupabaseUrl(supabaseUrl) && isValidSupabaseKey(supabaseAnonKey)) {
   try {
     supabaseClient = createClient(supabaseUrl!, supabaseAnonKey!);
@@ -52,125 +53,56 @@ if (isValidSupabaseUrl(supabaseUrl) && isValidSupabaseKey(supabaseAnonKey)) {
 }
 
 export const isSupabaseConfigured = Boolean(supabaseClient);
-
 export const getSupabaseClient = () => supabaseClient;
 
-// Test-only user fixture container (strictly isolated to test environments)
+// Test-only user fixture container (strictly isolated to test environments).
 let testUserFixture: AuthUser | null = null;
 
+function isTestEnvironment(): boolean {
+  return Boolean(
+    ((typeof process !== 'undefined' && (process.env?.NODE_ENV === 'test' || Boolean(process.env?.VITEST))) ||
+      (typeof import.meta !== 'undefined' && (import.meta as any).env?.MODE === 'test'))
+  );
+}
+
+export const isFirebaseDataConfigured = firebaseService.isConfigured;
+export const getFirebaseDataClientForServices = () =>
+  getFirebaseDataClient() || (isTestEnvironment() ? getSupabaseClient() : null);
+
 export const authService = {
-  get isConfigured(): boolean {
-    return Boolean(supabaseClient);
-  },
+  get isConfigured(): boolean { return firebaseService.isConfigured; },
+  get provider(): 'firebase' | 'none' { return firebaseService.isConfigured ? 'firebase' : 'none'; },
 
-  /**
-   * Test-only helper: strictly isolated to test runs and ignored in production builds.
-   */
   _setTestUser(user: AuthUser | null): void {
-    if (
-      (typeof process !== 'undefined' && (process.env?.NODE_ENV === 'test' || Boolean(process.env?.VITEST))) ||
-      (typeof import.meta !== 'undefined' && (import.meta as any).env?.MODE === 'test')
-    ) {
-      testUserFixture = user;
-    }
+    if (isTestEnvironment()) testUserFixture = user;
   },
 
-  /**
-   * Get currently authenticated user
-   */
   async getCurrentUser(): Promise<AuthUser | null> {
-    // In test environment, return test fixture if set
-    if (
-      ((typeof process !== 'undefined' && (process.env?.NODE_ENV === 'test' || Boolean(process.env?.VITEST))) ||
-       (typeof import.meta !== 'undefined' && (import.meta as any).env?.MODE === 'test')) &&
-      testUserFixture
-    ) {
-      return testUserFixture;
-    }
-
-    if (supabaseClient) {
-      try {
-        const { data: { user }, error } = await supabaseClient.auth.getUser();
-        if (error || !user) return null;
-        return {
-          id: user.id,
-          email: user.email || 'user@example.com',
-          name: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0],
-          avatarUrl: user.user_metadata?.avatar_url,
-          isSimulated: false,
-        };
-      } catch {
-        return null;
-      }
-    }
-
-    // No simulated user in production: unconfigured means unauthenticated
-    return null;
+    if (isTestEnvironment() && testUserFixture) return testUserFixture;
+    const fbUser = firebaseService.getAuth()?.currentUser;
+    return firebaseService.mapFirebaseUser(fbUser || null);
   },
 
-  /**
-   * Initiate Google Sign-In
-   */
   async signInWithGoogle(): Promise<{ user?: AuthUser; error?: string }> {
-    if (supabaseClient) {
-      try {
-        const { error } = await supabaseClient.auth.signInWithOAuth({
-          provider: 'google',
-          options: {
-            redirectTo: window.location.origin,
-          },
-        });
-        if (error) return { error: error.message };
-        return {};
-      } catch (err) {
-        return { error: (err as Error).message };
-      }
+    if (!firebaseService.isConfigured) {
+      return { error: 'Google Sign-In is unavailable: Cloud services are not configured. Configure Firebase credentials in .env.local to enable Google Sign-In.' };
     }
-
-    // Never fabricate a mock Google session when cloud is unconfigured
-    return {
-      error: 'Google Sign-In is unavailable: Cloud services are not configured. To enable cloud synchronization, configure VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.',
-    };
+    return firebaseService.signInWithGoogle();
   },
 
-  /**
-   * Sign out
-   */
   async signOut(): Promise<void> {
     testUserFixture = null;
-    if (supabaseClient) {
-      try {
-        await supabaseClient.auth.signOut();
-      } catch (err) {
-        console.warn('[AuthService] Supabase sign out error:', err);
-      }
-    }
+    await firebaseService.signOut();
   },
 
-  /**
-   * Subscribe to auth changes
-   */
   onAuthStateChange(callback: (user: AuthUser | null) => void): () => void {
-    if (supabaseClient) {
-      const { data: { subscription } } = supabaseClient.auth.onAuthStateChange(
-        async (_event, session) => {
-          if (session?.user) {
-            callback({
-              id: session.user.id,
-              email: session.user.email || 'user@example.com',
-              name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0],
-              avatarUrl: session.user.user_metadata?.avatar_url,
-              isSimulated: false,
-            });
-          } else {
-            callback(testUserFixture || null);
-          }
-        }
-      );
-      return () => subscription.unsubscribe();
+    if (!firebaseService.isConfigured) {
+      if (isTestEnvironment() && testUserFixture) callback(testUserFixture);
+      return () => {};
     }
-
-    // Unconfigured environment: no-op unsubscribe
-    return () => {};
+    return firebaseService.onAuthStateChange((user) => {
+      callback(user || (isTestEnvironment() ? testUserFixture : null));
+    });
   },
 };
+

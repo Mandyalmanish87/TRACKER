@@ -20,7 +20,7 @@ interface AcademicCalendarModalProps {
   isOpen: boolean;
   onClose: () => void;
   initialSettings: AcademicCalendarSettings;
-  onSave: (settings: AcademicCalendarSettings) => void;
+  onSave: (settings: AcademicCalendarSettings) => Promise<void> | void;
   isClassSpaceScope?: boolean;
   canEdit?: boolean;
 }
@@ -55,6 +55,8 @@ export const AcademicCalendarModal: React.FC<AcademicCalendarModalProps> = ({
   const [newHolidayName, setNewHolidayName] = useState('');
   const [newHolidayDate, setNewHolidayDate] = useState('');
   const [holidayError, setHolidayError] = useState('');
+  const [saveError, setSaveError] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
   if (!isOpen) return null;
 
@@ -116,19 +118,27 @@ export const AcademicCalendarModal: React.FC<AcademicCalendarModalProps> = ({
     setHolidays((prev) => prev.filter((h) => h.id !== id));
   };
 
-  const handleSave = () => {
-    onSave({
-      periodType,
-      startDate,
-      endDate,
-      isManualEndDate,
-      weeklyOffDays: {
-        sundayOff,
-        saturdayOff,
-      },
-      nationalHolidays: holidays,
-    });
-    onClose();
+  const handleSave = async () => {
+    setIsSaving(true);
+    setSaveError('');
+    try {
+      await onSave({
+        periodType,
+        startDate,
+        endDate,
+        isManualEndDate,
+        weeklyOffDays: {
+          sundayOff,
+          saturdayOff,
+        },
+        nationalHolidays: holidays,
+      });
+      onClose();
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : 'Could not save attendance settings. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -165,6 +175,11 @@ export const AcademicCalendarModal: React.FC<AcademicCalendarModalProps> = ({
         </div>
 
         <div className="p-5 space-y-6">
+          {saveError && (
+            <div role="alert" className="rounded-xl border border-rose-300 bg-rose-50 px-3 py-2 text-sm text-rose-800 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200">
+              {saveError}
+            </div>
+          )}
           {/* 1. Academic Period Type */}
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-espresso-600 dark:text-espresso-300 mb-2">
@@ -392,10 +407,11 @@ export const AcademicCalendarModal: React.FC<AcademicCalendarModalProps> = ({
           {canEdit && (
             <button
               type="button"
-              onClick={handleSave}
+              onClick={() => void handleSave()}
+              disabled={isSaving}
               className="px-5 py-2 rounded-xl bg-terracotta-600 hover:bg-terracotta-700 text-white text-xs font-semibold shadow-subtle transition"
             >
-              Apply Settings
+              {isSaving ? 'Saving…' : 'Apply Settings'}
             </button>
           )}
         </div>

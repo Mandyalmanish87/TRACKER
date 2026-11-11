@@ -118,126 +118,41 @@ export function calculateTimerProgress(timer: ActiveTimerState): {
   };
 }
 
-// ── Picture-in-Picture Controller ────────────────────────────
-
-export interface PipController {
-  isActive: boolean;
-  close: () => void;
-  update: (timeStr: string, subjectName: string, isRunning: boolean) => void;
+/** Adjust the stored timer from the app-wide mini focus panel. */
+export function toggleActiveTimerFromMini(): ActiveTimerState | null {
+  const saved = loadActiveTimer();
+  if (!saved) return null;
+  const progress = calculateTimerProgress(saved);
+  if (saved.mode !== 'stopwatch' && progress.isComplete) return null;
+  const isRunning = !saved.isRunning;
+  const updated: ActiveTimerState = {
+    ...saved,
+    accumulatedSeconds: progress.elapsedFocusSeconds,
+    lastStartedTimestamp: isRunning ? Date.now() : null,
+    isRunning,
+    status: isRunning ? 'running' : 'paused',
+  };
+  saveActiveTimer(updated);
+  window.dispatchEvent(new CustomEvent('tracker:active-timer-updated'));
+  return updated;
 }
 
-export function isPipSupported(): boolean {
-  if (typeof window === 'undefined') return false;
-  // Check Document PiP or Video PiP with canvas stream support
-  const hasDocPip = 'documentPictureInPicture' in window;
-  const hasVideoPip =
-    typeof document !== 'undefined' &&
-    'pictureInPictureEnabled' in document &&
-    Boolean(document.pictureInPictureEnabled);
-  const hasCanvasStream =
-    typeof HTMLCanvasElement !== 'undefined' &&
-    typeof HTMLCanvasElement.prototype.captureStream === 'function';
-
-  return hasDocPip || (hasVideoPip && hasCanvasStream);
-}
-
-/**
- * Request floating Picture-in-Picture window for the timer.
- */
-export async function requestTimerPip(
-  initialTimeStr: string,
-  subjectName: string,
-  isRunning: boolean,
-  onClose?: () => void
-): Promise<PipController | null> {
-  if (!isPipSupported()) return null;
-
-  try {
-    // Check if HTML5 Canvas-in-Video PiP is viable
-    const canvas = document.createElement('canvas');
-    canvas.width = 400;
-    canvas.height = 240;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return null;
-
-    const renderFrame = (time: string, subject: string, running: boolean) => {
-      // Dark slate background
-      ctx.fillStyle = '#100E0D';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-      // Accent border
-      ctx.strokeStyle = '#DE6C47';
-      ctx.lineWidth = 4;
-      ctx.strokeRect(2, 2, canvas.width - 4, canvas.height - 4);
-
-      // App Label
-      ctx.fillStyle = '#C45532';
-      ctx.font = 'bold 13px monospace';
-      ctx.fillText('TRACKER · DEEP FOCUS', 20, 36);
-
-      // Status pill
-      ctx.fillStyle = running ? '#436650' : '#705746';
-      ctx.beginPath();
-      ctx.arc(canvas.width - 30, 30, 6, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Main Timer Display
-      ctx.fillStyle = '#F7F4EF';
-      ctx.font = 'bold 64px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText(time, canvas.width / 2, 126);
-
-      // Subject / Task name
-      ctx.fillStyle = '#A8A096';
-      ctx.font = '16px serif';
-      const cleanSub = subject.length > 32 ? subject.slice(0, 30) + '...' : subject;
-      ctx.fillText(cleanSub, canvas.width / 2, 172);
-
-      // Status subtitle
-      ctx.fillStyle = running ? '#689778' : '#D9944D';
-      ctx.font = '12px sans-serif';
-      ctx.fillText(running ? '• Session in progress' : '⏸ Paused', canvas.width / 2, 206);
-      ctx.textAlign = 'start';
-    };
-
-    renderFrame(initialTimeStr, subjectName, isRunning);
-
-    const stream = canvas.captureStream(30);
-    const video = document.createElement('video');
-    video.muted = true;
-    video.srcObject = stream;
-    await video.play();
-
-    void video.requestPictureInPicture();
-
-    let active = true;
-
-    const handleLeave = () => {
-      active = false;
-      video.srcObject = null;
-      if (onClose) onClose();
-    };
-
-    video.addEventListener('leavepictureinpicture', handleLeave, { once: true });
-
-    return {
-      get isActive() {
-        return active;
-      },
-      close: () => {
-        if (document.pictureInPictureElement === video) {
-          document.exitPictureInPicture().catch(() => {});
-        }
-        active = false;
-        video.srcObject = null;
-      },
-      update: (timeStr: string, sub: string, running: boolean) => {
-        if (!active) return;
-        renderFrame(timeStr, sub, running);
-      },
-    };
-  } catch (err) {
-    console.warn('PiP initiation failed or was dismissed:', err);
-    return null;
-  }
+export function adjustActiveTimerFromMini(minutesDelta: number): ActiveTimerState | null {
+  const saved = loadActiveTimer();
+  if (!saved || saved.mode === 'stopwatch') return null;
+  const progress = calculateTimerProgress(saved);
+  if (progress.isComplete) return null;
+  const currentMinutes = Math.round(saved.plannedSeconds / 60);
+  const minimumMinutes = Math.max(1, Math.ceil(progress.elapsedFocusSeconds / 60));
+  const nextMinutes = currentMinutes + minutesDelta;
+  if (nextMinutes < minimumMinutes || nextMinutes > 240) return null;
+  const updated: ActiveTimerState = {
+    ...saved,
+    plannedSeconds: nextMinutes * 60,
+    accumulatedSeconds: progress.elapsedFocusSeconds,
+    lastStartedTimestamp: saved.isRunning ? Date.now() : null,
+  };
+  saveActiveTimer(updated);
+  window.dispatchEvent(new CustomEvent('tracker:active-timer-updated'));
+  return updated;
 }

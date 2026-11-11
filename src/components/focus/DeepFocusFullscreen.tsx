@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback, useLayoutEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   X,
   Maximize2,
@@ -17,6 +18,9 @@ import {
   Timer,
   Flame,
   Flag,
+  Minus,
+  Plus,
+  Settings2,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import {
@@ -28,24 +32,142 @@ import {
   formatFocusTime,
 } from '../../utils/focusTimer';
 import { ActiveTimerState, StopwatchLap } from '../../types';
+import { PlannerFocusLaunch } from '../../types';
+import { getActiveAccentRgba } from '../../utils/themeColors';
 import { useFocusRadio, Visualizer } from '../focus-radio';
 
 interface DeepFocusFullscreenProps {
   isOpen: boolean;
-  onClose: () => void;
+  onClose: (timerSnapshot: ActiveTimerState) => void;
   initialMinutes?: number;
   initialMode?: 'pomodoro' | 'timer' | 'stopwatch';
+  plannerFocusLaunch?: PlannerFocusLaunch | null;
 }
+
+const SplitFlapDigit: React.FC<{ value: string }> = React.memo(({ value }) => {
+  const [settledValue, setSettledValue] = useState(value);
+
+  useLayoutEffect(() => {
+    if (settledValue === value) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setSettledValue(value);
+      return;
+    }
+    const timeout = window.setTimeout(() => setSettledValue(value), 360);
+    return () => window.clearTimeout(timeout);
+  }, [value, settledValue]);
+
+  return (
+    <span className="deep-focus-flip-digit" aria-hidden="true">
+      <span className="deep-focus-flip-half deep-focus-flip-static-top"><span className="deep-focus-flip-glyph">{value}</span></span>
+      <span className="deep-focus-flip-half deep-focus-flip-static-bottom"><span className="deep-focus-flip-glyph">{settledValue}</span></span>
+      {settledValue !== value && (
+        <span key={value} className="deep-focus-flip-motion" aria-hidden="true">
+          <span className="deep-focus-flip-half deep-focus-flip-motion-upper"><span className="deep-focus-flip-glyph">{settledValue}</span></span>
+          <span className="deep-focus-flip-half deep-focus-flip-motion-lower"><span className="deep-focus-flip-glyph">{value}</span></span>
+        </span>
+      )}
+    </span>
+  );
+});
+
+const FlipClockDisplay: React.FC<{ time: string; embedded?: boolean }> = ({ time, embedded = false }) => {
+  if (embedded) {
+    const groups = time.split(':');
+    const leftValue = groups.length > 2 ? groups.slice(0, -1).join(':') : groups[0];
+    const rightValue = groups[groups.length - 1];
+    const renderDigits = (value: string, keyPrefix: string) => value.split('').map((digit, digitIndex) => (
+      digit === ':'
+        ? <span className="deep-focus-analog-flip-hour-separator" key={`${keyPrefix}-separator-${digitIndex}`}>:</span>
+        : <SplitFlapDigit key={`${keyPrefix}-${digitIndex}`} value={digit} />
+    ));
+
+    return (
+      <div className="deep-focus-analog-flip-display" aria-hidden="true">
+        <span className="deep-focus-analog-flip-group is-left">{renderDigits(leftValue, 'left')}</span>
+        <span className="deep-focus-analog-flip-group is-right">{renderDigits(rightValue, 'right')}</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="deep-focus-flip-display" role="timer" aria-label={time}>
+      <span className="deep-focus-flip-groups">
+        {time.split(':').map((group, groupIndex, groups) => (
+          <React.Fragment key={`flip-group-${groupIndex}`}>
+            <span className="deep-focus-flip-group">
+              {group.split('').map((digit, digitIndex) => <SplitFlapDigit key={`${groupIndex}-${digitIndex}`} value={digit} />)}
+            </span>
+            {groupIndex < groups.length - 1 && <span className="deep-focus-flip-separator">:</span>}
+          </React.Fragment>
+        ))}
+      </span>
+    </div>
+  );
+};
+
+const AnalogClock: React.FC<{ time: string; progress: number; flipClock?: boolean }> = ({ time, progress, flipClock = false }) => {
+  const parts = time.split(':').map((part) => Number.parseInt(part, 10) || 0);
+  const [hours, minutes, seconds] = parts.length === 3 ? parts : [0, parts[0] || 0, parts[1] || 0];
+  const ticks = Array.from({ length: 60 }, (_, index) => index);
+  const hourNumbers = Array.from({ length: 12 }, (_, index) => index + 1);
+  const circumference = 2 * Math.PI * 178;
+
+  return (
+    <div className="deep-focus-analog" role="timer" aria-label={time}>
+      <svg className="deep-focus-analog-svg" viewBox="0 0 400 400" aria-hidden="true">
+        <defs>
+          <radialGradient id="focus-dial-face" cx="46%" cy="38%" r="72%">
+            <stop offset="0%" stopColor="#303638" />
+            <stop offset="72%" stopColor="#1b2022" />
+            <stop offset="100%" stopColor="#101314" />
+          </radialGradient>
+        </defs>
+        <circle className="deep-focus-analog-track" cx="200" cy="200" r="178" />
+        <circle className="deep-focus-analog-progress" cx="200" cy="200" r="178" strokeDasharray={circumference} strokeDashoffset={circumference * (1 - progress)} />
+        <circle className="deep-focus-analog-rim" cx="200" cy="200" r="165" />
+        {ticks.map((tick) => <line key={tick} className={`deep-focus-analog-tick ${tick % 5 === 0 ? 'is-major' : ''}`} x1="200" y1={tick % 5 === 0 ? '68' : '72'} x2="200" y2={tick % 5 === 0 ? '84' : '80'} transform={`rotate(${tick * 6} 200 200)`} />)}
+        {hourNumbers.map((number) => {
+          const angle = ((number % 12) * 30 - 90) * (Math.PI / 180);
+          const radius = 151;
+          return (
+            <text
+              key={number}
+              className="deep-focus-analog-number"
+              x={200 + Math.cos(angle) * radius}
+              y={200 + Math.sin(angle) * radius}
+              textAnchor="middle"
+              dominantBaseline="central"
+            >
+              {number}
+            </text>
+          );
+        })}
+      </svg>
+      {flipClock
+        ? <FlipClockDisplay time={time} embedded />
+        : <span className="deep-focus-analog-digital" aria-hidden="true">{time}</span>}
+      <svg className="deep-focus-analog-hands" viewBox="0 0 400 400" aria-hidden="true">
+        <line className="deep-focus-analog-hand is-hour" x1="200" y1="215" x2="200" y2="112" style={{ transform: `rotate(${(hours % 12) * 30 + minutes * 0.5}deg)` }} />
+        <line className="deep-focus-analog-hand is-minute" x1="200" y1="215" x2="200" y2="76" style={{ transform: `rotate(${minutes * 6 + seconds * 0.1}deg)` }} />
+        <line className="deep-focus-analog-hand is-second" x1="200" y1="222" x2="200" y2="61" style={{ transform: `rotate(${seconds * 6}deg)` }} />
+        <circle className="deep-focus-analog-pin" cx="200" cy="200" r="8" />
+      </svg>
+    </div>
+  );
+};
 
 export const DeepFocusFullscreen: React.FC<DeepFocusFullscreenProps> = ({
   isOpen,
   onClose,
   initialMinutes = 25,
   initialMode = 'pomodoro',
+  plannerFocusLaunch,
 }) => {
   const {
     state,
     logStudySession,
+    updateTask,
   } = useApp();
 
   // Mode: Pomodoro, Timer, or Stopwatch
@@ -53,8 +175,29 @@ export const DeepFocusFullscreen: React.FC<DeepFocusFullscreenProps> = ({
 
   // Fullscreen browser state
   const [isBrowserFullscreen, setIsBrowserFullscreen] = useState(false);
+  const [centerScale, setCenterScale] = useState(1);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSidebarPinned, setIsSidebarPinned] = useState(false);
+  const [isClockOnly, setIsClockOnly] = useState(() => {
+    const savedPreference = window.localStorage.getItem('deep-focus-clock-only');
+    return savedPreference === null
+      ? window.localStorage.getItem('deep-focus-flip-clock-only') === 'true'
+      : savedPreference === 'true';
+  });
+  const [clockStyle, setClockStyle] = useState<'orbit' | 'flip' | 'clean' | 'analog-flip'>(() => {
+    const saved = window.localStorage.getItem('deep-focus-clock-style');
+    return saved === 'flip' || saved === 'clean' || saved === 'analog-flip' ? saved : 'orbit';
+  });
+  const [clockSoundOn, setClockSoundOn] = useState(() => window.localStorage.getItem('deep-focus-clock-sound') === 'on');
+  const [clockVolume, setClockVolume] = useState(() => {
+    const saved = Number(window.localStorage.getItem('deep-focus-clock-volume'));
+    return Number.isFinite(saved) && saved >= 0 ? Math.min(100, saved) : 30;
+  });
+  const clockAudioRef = useRef<AudioContext | null>(null);
+  const previousClockValueRef = useRef<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const sidebarCloseTimerRef = useRef<number | null>(null);
 
   // Timer states
   const [sessionMinutes, setSessionMinutes] = useState(initialMinutes);
@@ -71,6 +214,7 @@ export const DeepFocusFullscreen: React.FC<DeepFocusFullscreenProps> = ({
   const accumulatedSecondsRef = useRef<number>(0);
   const lastStartedTimestampRef = useRef<number | null>(null);
   const sessionStartedAtRef = useRef<string | null>(null);
+  const completionHandledRef = useRef(false);
   const [loggedNotification, setLoggedNotification] = useState<string | null>(null);
 
   // Focus radio integration
@@ -93,6 +237,24 @@ export const DeepFocusFullscreen: React.FC<DeepFocusFullscreenProps> = ({
   // Sync with active saved timer upon opening
   useEffect(() => {
     if (!isOpen) return;
+
+    if (plannerFocusLaunch) {
+      const hasDuration = Boolean(plannerFocusLaunch.estimatedDuration && plannerFocusLaunch.estimatedDuration > 0);
+      const nextMinutes = hasDuration ? Math.max(1, Math.round(plannerFocusLaunch.estimatedDuration!)) : 25;
+      setTimerMode(hasDuration ? 'timer' : 'stopwatch');
+      setSessionMinutes(nextMinutes);
+      setTimeLeft(nextMinutes * 60);
+      setStopwatchSeconds(0);
+      setSelectedSubjectId(plannerFocusLaunch.subjectId || '');
+      setLaps([]);
+      completionHandledRef.current = false;
+      accumulatedSecondsRef.current = 0;
+      lastStartedTimestampRef.current = null;
+      sessionStartedAtRef.current = null;
+      setIsRunning(false);
+      setSessionStatus('idle');
+      return;
+    }
 
     const saved = loadActiveTimer();
     if (saved) {
@@ -177,14 +339,14 @@ export const DeepFocusFullscreen: React.FC<DeepFocusFullscreenProps> = ({
       setIsRunning(false);
       setSessionStatus('idle');
     }
-  }, [isOpen, initialMode]);
+  }, [isOpen, initialMode, plannerFocusLaunch?.id]);
 
   // Fullscreen request & exit helpers
   const enterFullscreen = useCallback(async () => {
     try {
-      if (!document.fullscreenElement && containerRef.current) {
-        if (containerRef.current.requestFullscreen) {
-          await containerRef.current.requestFullscreen();
+      if (!document.fullscreenElement) {
+        if (document.documentElement.requestFullscreen) {
+          await document.documentElement.requestFullscreen();
           setIsBrowserFullscreen(true);
         }
       }
@@ -194,23 +356,61 @@ export const DeepFocusFullscreen: React.FC<DeepFocusFullscreenProps> = ({
     }
   }, []);
 
-  const exitFullscreen = useCallback(async () => {
-    try {
-      if (document.fullscreenElement && document.exitFullscreen) {
-        await document.exitFullscreen();
-      }
-    } catch {
-      // Graceful fallback
-    }
-    setIsBrowserFullscreen(false);
-  }, []);
-
   const handleToggleBrowserFullscreen = () => {
     if (document.fullscreenElement) {
-      exitFullscreen();
+      void document.exitFullscreen?.().catch(() => undefined).finally(() => setIsBrowserFullscreen(false));
     } else {
-      enterFullscreen();
+      void enterFullscreen();
     }
+  };
+
+  const closeImmersive = useCallback(async () => {
+    const now = Date.now();
+    const rawElapsed = timerMode === 'stopwatch'
+      ? accumulatedSecondsRef.current + (isRunning && lastStartedTimestampRef.current ? Math.floor((now - lastStartedTimestampRef.current) / 1000) : 0)
+      : accumulatedSecondsRef.current + (isRunning && lastStartedTimestampRef.current ? Math.floor((now - lastStartedTimestampRef.current) / 1000) : 0);
+    const plannedSeconds = timerMode === 'stopwatch' ? 0 : sessionMinutes * 60;
+    const elapsedSeconds = timerMode === 'stopwatch' ? Math.max(0, rawElapsed) : Math.min(plannedSeconds, Math.max(0, rawElapsed));
+    const remainingSeconds = timerMode === 'stopwatch' ? elapsedSeconds : Math.max(0, plannedSeconds - elapsedSeconds);
+    const status = timerMode === 'stopwatch'
+      ? isRunning ? 'running' : elapsedSeconds > 0 ? 'paused' : 'idle'
+      : remainingSeconds === 0 || sessionStatus === 'completed' ? 'completed' : isRunning ? 'running' : elapsedSeconds > 0 ? 'paused' : 'idle';
+    const snapshot: ActiveTimerState = {
+      mode: timerMode,
+      plannedSeconds,
+      accumulatedSeconds: elapsedSeconds,
+      lastStartedTimestamp: isRunning ? now : null,
+      isRunning,
+      subjectId: selectedSubjectId || undefined,
+      sessionStartedAt: sessionStartedAtRef.current || undefined,
+      status,
+      laps: timerMode === 'stopwatch' ? laps : undefined,
+    };
+    if (document.fullscreenElement) {
+      try { await document.exitFullscreen(); } catch { /* CSS scene remains available as a fallback. */ }
+    }
+    setIsSidebarOpen(false);
+    setIsSidebarPinned(false);
+    onClose(snapshot);
+  }, [timerMode, isRunning, sessionMinutes, sessionStatus, selectedSubjectId, laps, onClose]);
+
+  const setClockDisplayStyle = useCallback((style: 'analog' | 'flip' | 'clean' | 'analog-flip') => {
+    const storedStyle = style === 'analog' ? 'orbit' : style;
+    setClockStyle(storedStyle);
+    try { window.localStorage.setItem('deep-focus-clock-style', storedStyle); } catch { /* Optional preference. */ }
+    window.dispatchEvent(new CustomEvent('tracker:focus-clock-style-updated'));
+  }, []);
+
+  const openSidebar = () => {
+    if (sidebarCloseTimerRef.current) window.clearTimeout(sidebarCloseTimerRef.current);
+    sidebarCloseTimerRef.current = null;
+    setIsSidebarOpen(true);
+  };
+
+  const scheduleSidebarClose = () => {
+    if (isSidebarPinned) return;
+    if (sidebarCloseTimerRef.current) window.clearTimeout(sidebarCloseTimerRef.current);
+    sidebarCloseTimerRef.current = window.setTimeout(() => setIsSidebarOpen(false), 180);
   };
 
   // Keyboard shortcut listener (Escape to exit)
@@ -219,11 +419,13 @@ export const DeepFocusFullscreen: React.FC<DeepFocusFullscreenProps> = ({
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (document.fullscreenElement) {
-          exitFullscreen();
+        if (isSidebarOpen && !document.fullscreenElement) {
+          setIsSidebarOpen(false);
+          setIsSidebarPinned(false);
+          return;
         }
-        onClose();
-      } else if (e.code === 'Space' && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement)) {
+        void closeImmersive();
+      } else if (e.key === 'Enter' && !(e.target instanceof Element && e.target.closest('input, textarea, select, button, a, [role="button"], [contenteditable="true"]'))) {
         e.preventDefault();
         handleToggleTimer();
       }
@@ -233,6 +435,7 @@ export const DeepFocusFullscreen: React.FC<DeepFocusFullscreenProps> = ({
       setIsBrowserFullscreen(Boolean(document.fullscreenElement));
     };
 
+    setIsBrowserFullscreen(Boolean(document.fullscreenElement));
     window.addEventListener('keydown', handleKeyDown);
     document.addEventListener('fullscreenchange', handleFullscreenChange);
 
@@ -240,7 +443,7 @@ export const DeepFocusFullscreen: React.FC<DeepFocusFullscreenProps> = ({
       window.removeEventListener('keydown', handleKeyDown);
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
     };
-  }, [isOpen, isRunning]);
+  }, [isOpen, isRunning, isSidebarOpen, closeImmersive]);
 
   // ── High-Precision Live Timer Loop ──
   useEffect(() => {
@@ -301,14 +504,20 @@ export const DeepFocusFullscreen: React.FC<DeepFocusFullscreenProps> = ({
           accumulatedSecondsRef.current = plannedSec;
           clearActiveTimer();
 
-          // Log exact completed duration
-          handleLogSession(sessionMinutes, 'completed', plannedSec);
+          if (!completionHandledRef.current) {
+            completionHandledRef.current = true;
+            // Log exact completed duration once, then finish the linked task.
+            handleLogSession(sessionMinutes, 'completed', plannedSec);
+            if (plannerFocusLaunch?.taskId) {
+              updateTask(plannerFocusLaunch.taskId, { status: 'done' });
+            }
+          }
         }
       }
     }, 500);
 
     return () => clearInterval(interval);
-  }, [isOpen, isRunning, timerMode, sessionMinutes, selectedSubjectId, laps]);
+  }, [isOpen, isRunning, timerMode, sessionMinutes, selectedSubjectId, laps, plannerFocusLaunch?.id, updateTask]);
 
   // Switch between Pomodoro, Timer, and Stopwatch
   const handleSwitchMode = (newMode: 'pomodoro' | 'timer' | 'stopwatch') => {
@@ -434,7 +643,30 @@ export const DeepFocusFullscreen: React.FC<DeepFocusFullscreenProps> = ({
     clearActiveTimer();
   };
 
+  const getMinimumTimerMinutes = () => {
+    let elapsedSeconds = accumulatedSecondsRef.current;
+    if (isRunning && lastStartedTimestampRef.current) {
+      elapsedSeconds += Math.floor((Date.now() - lastStartedTimestampRef.current) / 1000);
+    }
+    return Math.max(1, Math.ceil(elapsedSeconds / 60));
+  };
+
+  const handleAdjustTimer = (minuteDelta: number) => {
+    if (timerMode === 'stopwatch' || sessionStatus === 'completed') return;
+    const elapsedSeconds = accumulatedSecondsRef.current + (isRunning && lastStartedTimestampRef.current
+      ? Math.floor((Date.now() - lastStartedTimestampRef.current) / 1000)
+      : 0);
+    const minimumMinutes = getMinimumTimerMinutes();
+    const requestedMinutes = sessionMinutes + minuteDelta;
+    if (requestedMinutes < minimumMinutes || requestedMinutes > 240) return;
+    const nextMinutes = requestedMinutes;
+    if (nextMinutes === sessionMinutes) return;
+    setSessionMinutes(nextMinutes);
+    setTimeLeft(Math.max(0, nextMinutes * 60 - elapsedSeconds));
+  };
+
   const handleReset = () => {
+    completionHandledRef.current = false;
     setIsRunning(false);
     lastStartedTimestampRef.current = null;
     accumulatedSecondsRef.current = 0;
@@ -584,7 +816,7 @@ export const DeepFocusFullscreen: React.FC<DeepFocusFullscreenProps> = ({
         height * 0.9,
         width * 0.6
       );
-      nebulaGradient.addColorStop(0, 'rgba(196, 85, 50, 0.08)');
+      nebulaGradient.addColorStop(0, getActiveAccentRgba(0.08));
       nebulaGradient.addColorStop(1, 'transparent');
       ctx.fillStyle = nebulaGradient;
       ctx.fillRect(0, 0, width, height);
@@ -663,8 +895,6 @@ export const DeepFocusFullscreen: React.FC<DeepFocusFullscreenProps> = ({
     };
   }, [isOpen]);
 
-  if (!isOpen) return null;
-
   const progressRatio =
     timerMode === 'stopwatch'
       ? (stopwatchSeconds % 60) / 60
@@ -675,13 +905,118 @@ export const DeepFocusFullscreen: React.FC<DeepFocusFullscreenProps> = ({
       ? formatFocusTime(stopwatchSeconds, true)
       : formatFocusTime(timeLeft, sessionMinutes >= 60);
 
-  return (
+  useEffect(() => {
+    if (!isOpen) return;
+    const syncFromMiniPanel = () => {
+      const saved = loadActiveTimer();
+      if (!saved) return;
+      if (saved.mode === 'stopwatch') {
+        setTimerMode('stopwatch');
+        setStopwatchSeconds(calculateActiveElapsedSeconds(0, saved.accumulatedSeconds, saved.lastStartedTimestamp, saved.isRunning));
+        if (saved.laps) setLaps(saved.laps);
+      } else {
+        setTimerMode(saved.mode === 'timer' ? 'timer' : 'pomodoro');
+        setSessionMinutes(Math.max(1, Math.round(saved.plannedSeconds / 60)));
+        setTimeLeft(Math.max(0, saved.plannedSeconds - calculateActiveElapsedSeconds(saved.plannedSeconds, saved.accumulatedSeconds, saved.lastStartedTimestamp, saved.isRunning)));
+      }
+      if (saved.subjectId) setSelectedSubjectId(saved.subjectId);
+      accumulatedSecondsRef.current = saved.accumulatedSeconds;
+      lastStartedTimestampRef.current = saved.isRunning ? saved.lastStartedTimestamp : null;
+      sessionStartedAtRef.current = saved.sessionStartedAt || null;
+      setIsRunning(saved.isRunning);
+      setSessionStatus(saved.status || (saved.isRunning ? 'running' : 'paused'));
+    };
+    window.addEventListener('tracker:active-timer-updated', syncFromMiniPanel);
+    return () => window.removeEventListener('tracker:active-timer-updated', syncFromMiniPanel);
+  }, [isOpen]);
+
+  useEffect(() => {
+    previousClockValueRef.current = null;
+  }, [clockStyle]);
+
+  useEffect(() => {
+    if (!isOpen || !isRunning || !clockSoundOn || clockVolume === 0) {
+      previousClockValueRef.current = displayTime;
+      return;
+    }
+    if (previousClockValueRef.current === null) {
+      previousClockValueRef.current = displayTime;
+      return;
+    }
+    if (previousClockValueRef.current === displayTime) return;
+    previousClockValueRef.current = displayTime;
+
+    try {
+      const AudioContextClass = window.AudioContext;
+      if (!AudioContextClass) return;
+      const context = clockAudioRef.current || new AudioContextClass();
+      clockAudioRef.current = context;
+      if (context.state === 'suspended') void context.resume().catch(() => undefined);
+      const now = context.currentTime;
+      const peak = (clockVolume / 100) * 0.11;
+      if (clockStyle === 'flip' || clockStyle === 'analog-flip') {
+        // Two short mechanical clacks follow the flap's upper and lower turn.
+        [0.145, 0.32].forEach((offset, index) => {
+          const start = now + offset;
+          const strength = index === 0 ? 1 : 0.72;
+          const frameCount = Math.floor(context.sampleRate * 0.045);
+          const buffer = context.createBuffer(1, frameCount, context.sampleRate);
+          const channel = buffer.getChannelData(0);
+          for (let frame = 0; frame < frameCount; frame += 1) {
+            channel[frame] = (Math.random() * 2 - 1) * Math.pow(1 - frame / frameCount, 2);
+          }
+          const noise = context.createBufferSource();
+          const filter = context.createBiquadFilter();
+          const noiseGain = context.createGain();
+          noise.buffer = buffer;
+          filter.type = 'lowpass';
+          filter.frequency.setValueAtTime(1250, start);
+          filter.frequency.exponentialRampToValueAtTime(520, start + 0.04);
+          noiseGain.gain.setValueAtTime(0.0001, start);
+          noiseGain.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak * 0.5 * strength), start + 0.003);
+          noiseGain.gain.exponentialRampToValueAtTime(0.0001, start + 0.045);
+          noise.connect(filter); filter.connect(noiseGain); noiseGain.connect(context.destination);
+          noise.start(start); noise.stop(start + 0.05);
+
+          const knock = context.createOscillator();
+          const knockGain = context.createGain();
+          knock.type = 'triangle';
+          knock.frequency.setValueAtTime(145, start);
+          knock.frequency.exponentialRampToValueAtTime(78, start + 0.035);
+          knockGain.gain.setValueAtTime(0.0001, start);
+          knockGain.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak * 0.42 * strength), start + 0.003);
+          knockGain.gain.exponentialRampToValueAtTime(0.0001, start + 0.04);
+          knock.connect(knockGain); knockGain.connect(context.destination);
+          knock.start(start); knock.stop(start + 0.045);
+        });
+      } else {
+        const gain = context.createGain();
+        const oscillator = context.createOscillator();
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime(920, now);
+        oscillator.frequency.exponentialRampToValueAtTime(680, now + 0.025);
+        gain.gain.setValueAtTime(0.0001, now);
+        gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak), now + 0.004);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.04);
+        oscillator.connect(gain); gain.connect(context.destination);
+        oscillator.start(now); oscillator.stop(now + 0.045);
+      }
+    } catch {
+      // Sound is an optional enhancement; timer behavior continues if audio is unavailable.
+    }
+  }, [displayTime, isOpen, isRunning, clockSoundOn, clockVolume, clockStyle]);
+
+  if (!isOpen) return null;
+
+  return createPortal((
     <div
       ref={containerRef}
+      data-clock-style={clockStyle === 'orbit' ? 'analog' : clockStyle}
+      data-clock-only={isClockOnly ? 'true' : undefined}
       role="dialog"
       aria-modal="true"
       aria-label="Deep Focus Fullscreen Environment"
-      className="fixed inset-0 z-50 flex flex-col justify-between bg-[#08060D] text-ivory-100 select-none overflow-hidden"
+      className="deep-focus-immersive fixed inset-0 z-50 flex flex-col justify-between text-ivory-100 select-none overflow-hidden"
     >
       {/* Background Canvas */}
       <canvas
@@ -690,16 +1025,44 @@ export const DeepFocusFullscreen: React.FC<DeepFocusFullscreenProps> = ({
       />
 
       {/* Top Header Navigation */}
-      <div className="relative z-10 flex items-center justify-between p-6 sm:p-8 backdrop-blur-xs">
+      <div className="deep-focus-header relative z-20 flex items-center justify-between p-6 sm:p-8 backdrop-blur-xs">
         <div className="flex items-center gap-3">
           <div className="w-2.5 h-2.5 rounded-full bg-terracotta-500 animate-pulse" />
           <span className="font-mono text-xs uppercase tracking-widest text-ivory-200/80 font-semibold">
-            Deep Focus 2.0 · Immersive Space
+            Deep Focus 3.0 · Immersive Space
           </span>
         </div>
 
         {/* Action Controls */}
         <div className="flex items-center gap-2">
+          <div className="deep-focus-size-control flex items-center gap-1 rounded-xl border border-white/10 bg-white/10 p-1 backdrop-blur-md" role="group" aria-label="Timer block size">
+            <button
+              type="button"
+              onClick={() => setCenterScale((scale) => Math.max(0.75, Math.round((scale - 0.1) * 100) / 100))}
+              disabled={centerScale <= 0.75}
+              aria-label="Zoom timer block out"
+              title="Zoom out"
+              className="p-1.5 rounded-lg text-ivory-100 hover:bg-white/15 disabled:opacity-35 disabled:cursor-not-allowed cursor-pointer"
+            ><Minus className="w-3.5 h-3.5" /></button>
+            <span className="min-w-[3.1rem] text-center font-mono text-[10px] tabular-nums text-ivory-200" aria-live="polite">{Math.round(centerScale * 100)}%</span>
+            <button
+              type="button"
+              onClick={() => setCenterScale((scale) => Math.min(1.3, Math.round((scale + 0.1) * 100) / 100))}
+              disabled={centerScale >= 1.3}
+              aria-label="Zoom timer block in"
+              title="Zoom in"
+              className="p-1.5 rounded-lg text-ivory-100 hover:bg-white/15 disabled:opacity-35 disabled:cursor-not-allowed cursor-pointer"
+            ><Plus className="w-3.5 h-3.5" /></button>
+          </div>
+          <button
+            type="button"
+            className="deep-focus-sidebar-trigger rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-[11px] font-semibold text-ivory-100 backdrop-blur-md"
+            aria-label={isSidebarOpen ? 'Close focus settings' : 'Open focus settings'}
+            aria-expanded={isSidebarOpen}
+            onPointerEnter={openSidebar}
+            onFocus={openSidebar}
+            onClick={() => { const nextPinned = !isSidebarPinned; setIsSidebarPinned(nextPinned); setIsSidebarOpen(nextPinned); }}
+          ><Settings2 className="w-3.5 h-3.5" /><span>Settings</span></button>
           {/* Browser Fullscreen API Toggle */}
           <button
             onClick={handleToggleBrowserFullscreen}
@@ -712,10 +1075,7 @@ export const DeepFocusFullscreen: React.FC<DeepFocusFullscreenProps> = ({
 
           {/* Close / Exit Button */}
           <button
-            onClick={() => {
-              if (document.fullscreenElement) exitFullscreen();
-              onClose();
-            }}
+            onClick={() => { void closeImmersive(); }}
             title="Exit Deep Focus (Esc)"
             aria-label="Exit Deep Focus"
             className="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-ivory-100 transition backdrop-blur-md border border-white/10 cursor-pointer"
@@ -725,10 +1085,95 @@ export const DeepFocusFullscreen: React.FC<DeepFocusFullscreenProps> = ({
         </div>
       </div>
 
+      <button
+        type="button"
+        className="deep-focus-sidebar-edge"
+        aria-label={isSidebarOpen ? 'Close focus settings' : 'Open focus settings'}
+        aria-expanded={isSidebarOpen}
+        onPointerEnter={openSidebar}
+        onFocus={openSidebar}
+        onClick={() => { const nextPinned = !isSidebarPinned; setIsSidebarPinned(nextPinned); setIsSidebarOpen(nextPinned); }}
+      ><Settings2 aria-hidden="true" /></button>
+      <aside
+        className={`deep-focus-settings-sidebar ${isSidebarOpen ? 'is-open' : ''}`}
+        aria-label="Focus settings"
+        aria-hidden={!isSidebarOpen}
+        inert={!isSidebarOpen}
+        onPointerEnter={openSidebar}
+        onPointerLeave={scheduleSidebarClose}
+      >
+        <div className="deep-focus-sidebar-heading">
+          <div><span>SESSION CONTROLS</span><h2>Focus settings</h2></div>
+          <button type="button" onClick={() => { setIsSidebarPinned(false); setIsSidebarOpen(false); }} aria-label="Close settings"><X size={17} /></button>
+        </div>
+        <section className="deep-focus-sidebar-section">
+          <h3>Session mode</h3>
+          <div className="deep-focus-sidebar-mode-grid" role="group" aria-label="Session mode">
+            {(['pomodoro', 'timer', 'stopwatch'] as const).map((mode) => (
+              <button key={mode} type="button" onClick={() => handleSwitchMode(mode)} aria-pressed={timerMode === mode}>
+                {mode === 'pomodoro' ? <Flame aria-hidden="true" /> : mode === 'timer' ? <Clock aria-hidden="true" /> : <Timer aria-hidden="true" />}
+                <span>{mode === 'pomodoro' ? 'Pomodoro' : mode === 'timer' ? 'Timer' : 'Stopwatch'}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+        <section className="deep-focus-sidebar-section">
+          <h3>Clock style</h3>
+          <div className="deep-focus-sidebar-style-grid" role="group" aria-label="Clock style">
+            {(['analog', 'flip', 'clean', 'analog-flip'] as const).map((style) => (
+              <button key={style} type="button" onClick={() => setClockDisplayStyle(style)} aria-pressed={(clockStyle === 'orbit' ? 'analog' : clockStyle) === style}>
+                <span className={`deep-focus-style-preview is-${style === 'flip' ? 'flip' : style === 'analog-flip' ? 'analog-flip' : style}`} aria-hidden="true" />
+                <span>{style === 'analog' ? 'Analog' : style === 'flip' ? 'Flip' : style === 'analog-flip' ? 'Analog + Flip' : 'Clean'}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+        <section className="deep-focus-sidebar-section">
+          <h3>Display</h3>
+          <label className="deep-focus-sidebar-sound-toggle">
+            <span>Clock only</span>
+            <input type="checkbox" checked={isClockOnly} onChange={(event) => {
+              const enabled = event.target.checked;
+              setIsClockOnly(enabled);
+              window.localStorage.setItem('deep-focus-clock-only', String(enabled));
+            }} />
+          </label>
+          <p className="deep-focus-sidebar-hint">Hide everything except the clock and settings tab.</p>
+        </section>
+        {timerMode !== 'stopwatch' && <section className="deep-focus-sidebar-section">
+          <div className="deep-focus-sidebar-section-head"><h3>Session length</h3><span>{sessionMinutes} min</span></div>
+          {!isRunning && <div className="deep-focus-sidebar-presets">
+            {(timerMode === 'pomodoro' ? [15, 25, 45, 60] : [15, 30, 45, 60, 90, 120]).map((minutes) => (
+              <button key={minutes} type="button" onClick={() => handleSelectPreset(minutes)} aria-pressed={sessionMinutes === minutes}>{minutes}m</button>
+            ))}
+          </div>}
+          <div className="deep-focus-sidebar-adjust" role="group" aria-label="Adjust session length">
+            {([-5, -1, 1, 5] as const).map((amount) => (
+              <button key={amount} type="button" onClick={() => handleAdjustTimer(amount)} disabled={sessionStatus === 'completed' || sessionMinutes + amount < getMinimumTimerMinutes() || sessionMinutes + amount > 240} aria-label={`${amount < 0 ? 'Reduce by' : 'Add'} ${Math.abs(amount)} minute${Math.abs(amount) === 1 ? '' : 's'}`}>
+                {amount > 0 ? '+' : '−'}{Math.abs(amount)}m
+              </button>
+            ))}
+          </div>
+        </section>}
+        {!isRunning && <section className="deep-focus-sidebar-section">
+          <label className="deep-focus-sidebar-label" htmlFor="deep-focus-subject">Subject or activity</label>
+          <select id="deep-focus-subject" value={selectedSubjectId} onChange={(event) => setSelectedSubjectId(event.target.value)}>
+            <option value="">General Self-Directed Study</option>
+            {unifiedSubjects.map((subject) => <option key={subject.id} value={subject.id}>{subject.name}</option>)}
+          </select>
+        </section>}
+        <section className="deep-focus-sidebar-section">
+          <h3>Session sound</h3>
+          <label className="deep-focus-sidebar-sound-toggle"><span>Clock tick sound</span><input type="checkbox" checked={clockSoundOn} onChange={(event) => { const enabled = event.target.checked; setClockSoundOn(enabled); window.localStorage.setItem('deep-focus-clock-sound', enabled ? 'on' : 'off'); }} /></label>
+          <label className="deep-focus-sidebar-label" htmlFor="deep-focus-clock-volume"><span>Volume</span><output>{clockVolume}%</output></label>
+          <input id="deep-focus-clock-volume" type="range" min="0" max="100" step="5" value={clockVolume} disabled={!clockSoundOn} onChange={(event) => { const volume = Number(event.target.value); setClockVolume(volume); window.localStorage.setItem('deep-focus-clock-volume', String(volume)); }} />
+        </section>
+      </aside>
+
       {/* Central Interactive Focus Core */}
-      <div className="relative z-10 flex flex-col items-center justify-center my-auto px-4 max-w-xl mx-auto w-full text-center">
+      <div className="deep-focus-center relative z-10 flex flex-col items-center justify-center my-auto px-4 max-w-xl mx-auto w-full text-center" style={{ transform: `scale(${centerScale})` }}>
         {/* Mode Switcher Tabs */}
-        <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-white/10 backdrop-blur-md border border-white/10 mb-4 select-none">
+        <div className="deep-focus-center-mode-switcher flex items-center gap-1.5 p-1 rounded-2xl bg-white/10 backdrop-blur-md border border-white/10 mb-4 select-none">
           <button
             type="button"
             onClick={() => handleSwitchMode('pomodoro')}
@@ -768,7 +1213,7 @@ export const DeepFocusFullscreen: React.FC<DeepFocusFullscreenProps> = ({
         </div>
 
         {/* Status Badge */}
-        <div className="mb-2">
+        {clockStyle !== 'analog-flip' && <div className="mb-2">
           <span
             className={`px-3 py-1 rounded-full text-xs font-mono font-bold tracking-wider uppercase backdrop-blur-md border ${
               sessionStatus === 'running'
@@ -794,11 +1239,11 @@ export const DeepFocusFullscreen: React.FC<DeepFocusFullscreenProps> = ({
               ? 'Session Completed'
               : 'Focus Idle'}
           </span>
-        </div>
+        </div>}
 
         {/* Luminous Central Orbital Ring */}
-        <div className="relative flex items-center justify-center my-6">
-          <svg className="w-64 h-64 sm:w-80 sm:h-80 -rotate-90">
+        <div className="deep-focus-orbit relative flex items-center justify-center my-6">
+          <svg className="deep-focus-progress-ring w-64 h-64 sm:w-80 sm:h-80 -rotate-90">
             {/* Background Ring Track */}
             <circle
               cx="50%"
@@ -822,21 +1267,23 @@ export const DeepFocusFullscreen: React.FC<DeepFocusFullscreenProps> = ({
           </svg>
 
           {/* Time digits & subject */}
-          <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-            <span className="font-mono tabular-nums text-5xl sm:text-6xl md:text-7xl font-bold tracking-tight text-white drop-shadow-[0_4px_24px_rgba(0,0,0,0.8)]">
-              {displayTime}
-            </span>
+          <div className={`deep-focus-clock absolute inset-0 flex flex-col items-center justify-center text-center is-${clockStyle === 'orbit' ? 'analog' : clockStyle}`}>
+            {clockStyle === 'clean'
+              ? <span role="timer" aria-label={displayTime} className="deep-focus-clean-digits">{displayTime}</span>
+              : clockStyle === 'flip'
+                ? <FlipClockDisplay time={displayTime} />
+                : <AnalogClock time={displayTime} progress={progressRatio} flipClock={clockStyle === 'analog-flip'} />}
 
             {/* Subject Linkage */}
             {selectedSubjectId ? (
-              <span className="text-xs sm:text-sm font-medium text-ivory-300 mt-2 flex items-center gap-1.5 max-w-[200px] truncate">
+              <span className="deep-focus-clock-subtitle text-xs sm:text-sm font-medium text-ivory-300 mt-2 flex items-center gap-1.5 max-w-[200px] truncate">
                 <BookOpen className="w-3.5 h-3.5 text-terracotta-400 shrink-0" />
                 <span className="truncate">
                   {unifiedSubjects.find((s) => s.id === selectedSubjectId)?.name || 'Subject Linked'}
                 </span>
               </span>
             ) : (
-              <span className="text-xs font-mono text-ivory-400/80 mt-2">
+              <span className="deep-focus-clock-subtitle text-xs font-mono text-ivory-400/80 mt-2">
                 {timerMode === 'stopwatch' ? 'Elapsed Active Study' : 'General Deep Focus'}
               </span>
             )}
@@ -845,7 +1292,7 @@ export const DeepFocusFullscreen: React.FC<DeepFocusFullscreenProps> = ({
 
         {/* Duration Presets for Countdown Modes */}
         {timerMode !== 'stopwatch' && !isRunning && timeLeft === sessionMinutes * 60 && (
-          <div className="flex flex-wrap items-center justify-center gap-2 mb-6">
+          <div className="deep-focus-center-presets flex flex-wrap items-center justify-center gap-2 mb-6">
             {(timerMode === 'pomodoro' ? [15, 25, 45, 60] : [15, 30, 45, 60, 90, 120]).map((mins) => (
               <button
                 key={mins}
@@ -862,9 +1309,43 @@ export const DeepFocusFullscreen: React.FC<DeepFocusFullscreenProps> = ({
           </div>
         )}
 
+        {timerMode !== 'stopwatch' && (
+          <div className="deep-focus-time-adjust mb-5 flex items-center justify-center gap-2" role="group" aria-label="Adjust focus session time">
+            <span className="mr-1 font-mono text-[10px] uppercase tracking-widest text-ivory-400">Adjust time</span>
+            <button
+              type="button"
+              onClick={() => handleAdjustTimer(-1)}
+              disabled={sessionStatus === 'completed' || sessionMinutes - 1 < getMinimumTimerMinutes()}
+              aria-label="Reduce focus time by one minute"
+              className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-[11px] font-mono font-semibold text-ivory-200 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-35 cursor-pointer"
+            >−1m</button>
+            <button
+              type="button"
+              onClick={() => handleAdjustTimer(-5)}
+              disabled={sessionStatus === 'completed' || sessionMinutes - 5 < getMinimumTimerMinutes()}
+              aria-label="Reduce focus time by five minutes"
+              className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] font-mono font-semibold text-ivory-200 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-35 cursor-pointer"
+            >−5m</button>
+            <button
+              type="button"
+              onClick={() => handleAdjustTimer(1)}
+              disabled={sessionStatus === 'completed' || sessionMinutes + 1 > 240}
+              aria-label="Extend focus time by one minute"
+              className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-[11px] font-mono font-semibold text-ivory-200 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-35 cursor-pointer"
+            >+1m</button>
+            <button
+              type="button"
+              onClick={() => handleAdjustTimer(5)}
+              disabled={sessionStatus === 'completed' || sessionMinutes + 5 > 240}
+              aria-label="Extend focus time by five minutes"
+              className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] font-mono font-semibold text-ivory-200 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-35 cursor-pointer"
+            >+5m</button>
+          </div>
+        )}
+
         {/* Subject selector (if not running) */}
         {!isRunning && (
-          <div className="mb-6 w-full max-w-xs">
+          <div className="deep-focus-center-subject mb-6 w-full max-w-xs">
             <select
               value={selectedSubjectId}
               onChange={(e) => setSelectedSubjectId(e.target.value)}
@@ -953,7 +1434,7 @@ export const DeepFocusFullscreen: React.FC<DeepFocusFullscreenProps> = ({
                 )}
               </button>
 
-              {(isRunning || timeLeft < sessionMinutes * 60) && (
+              {!plannerFocusLaunch?.taskId && (isRunning || timeLeft < sessionMinutes * 60) && (
                 <button
                   onClick={handleStopAndLogEarly}
                   title="Stop session early and log actual active focus time"
@@ -1008,11 +1489,11 @@ export const DeepFocusFullscreen: React.FC<DeepFocusFullscreenProps> = ({
       </div>
 
       {/* Bottom Footer: Integrated Focus Radio & Simulated Wave Visualizer */}
-      <div className="relative z-10 p-4 sm:p-6 backdrop-blur-xs flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-white/5 bg-[#0B0D0C]/80">
+      <div className="deep-focus-footer relative z-10 p-4 sm:p-6 backdrop-blur-xs flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-white/5">
         {/* Track info & simulated visualizer */}
         <div className="flex items-center gap-3 min-w-0">
           <div className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center border border-white/10 shrink-0">
-            <Music className="w-4 h-4 text-[#C8FF45]" />
+            <Music className="w-4 h-4 text-[var(--accent)]" />
           </div>
           <div className="min-w-0">
             <p className="text-xs font-semibold text-ivory-100 truncate">
@@ -1026,7 +1507,7 @@ export const DeepFocusFullscreen: React.FC<DeepFocusFullscreenProps> = ({
 
         {/* Decorative Simulated Audio Wave Visualizer */}
         <div className="w-36 h-6 flex items-center justify-center">
-          <Visualizer isPlaying={radio.isPlaying} variant="bars" color="#C8FF45" />
+          <Visualizer isPlaying={radio.isPlaying} variant="bars" color="var(--accent)" />
         </div>
 
         {/* Quick Radio controls */}
@@ -1055,5 +1536,5 @@ export const DeepFocusFullscreen: React.FC<DeepFocusFullscreenProps> = ({
         </div>
       </div>
     </div>
-  );
+  ), document.body);
 };

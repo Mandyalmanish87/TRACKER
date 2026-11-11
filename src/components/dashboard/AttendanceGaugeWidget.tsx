@@ -9,6 +9,7 @@ import {
   calculateOverallAttendance,
 } from '../../utils/attendance';
 import { Plus, AlertCircle, ShieldCheck } from 'lucide-react';
+import { getActiveAccentColor } from '../../utils/themeColors';
 
 export const AttendanceGaugeWidget: React.FC = () => {
   const { state, addSubject, getAttendanceReq } = useApp();
@@ -36,7 +37,7 @@ export const AttendanceGaugeWidget: React.FC = () => {
       attended: Math.max(0, isNaN(attendedNum) ? 0 : attendedNum),
       totalConducted: Math.max(0, isNaN(conductedNum) ? 0 : conductedNum),
       targetPct: targetRequirement,
-      color: '#C45532',
+      color: getActiveAccentColor(),
     });
 
     setNewCode('');

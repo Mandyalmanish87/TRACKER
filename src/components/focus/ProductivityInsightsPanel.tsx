@@ -9,7 +9,7 @@ interface ProductivityInsightsPanelProps {
 export const ProductivityInsightsPanel: React.FC<ProductivityInsightsPanelProps> = ({ insights }) => {
   if (!insights.hasSufficientData) {
     return (
-      <div className="p-5 rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 shadow-subtle">
+      <div className="focus-insights-card p-5 rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 shadow-subtle">
         <div className="flex items-center gap-2 mb-2 text-espresso-700 dark:text-ivory-200">
           <Sparkles className="w-4 h-4 text-ochre-600 dark:text-ochre-400" />
           <h4 className="font-serif font-bold text-sm">Productivity Pattern Intelligence</h4>
@@ -28,7 +28,7 @@ export const ProductivityInsightsPanel: React.FC<ProductivityInsightsPanelProps>
   const { mostProductiveHour, bestDayOfWeek, topSubject, weekComparison } = insights;
 
   return (
-    <div className="p-5 rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 shadow-subtle">
+    <div className="focus-insights-card p-5 rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 shadow-subtle">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <Sparkles className="w-4 h-4" style={{ color: 'var(--accent)' }} />

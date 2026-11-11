@@ -253,7 +253,7 @@ export const TestsView: React.FC<TestsViewProps> = ({ onNavigateToPlanner }) => 
   }, [syllabusSubjects, errorSubjectId]);
 
   return (
-    <div className="space-y-6">
+    <div className="study-workspace space-y-6">
       {/* Toast Notification */}
       {feedbackToast && (
         <div
@@ -275,7 +275,7 @@ export const TestsView: React.FC<TestsViewProps> = ({ onNavigateToPlanner }) => 
       )}
 
       {/* Header and Sub-tab switcher */}
-      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-ivory-300 dark:border-espresso-800 pb-6">
+      <div className="study-page-hero flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-ivory-300 dark:border-espresso-800 pb-6">
         <div>
           <span className="text-xs font-mono font-semibold uppercase tracking-wider text-terracotta-600 dark:text-terracotta-400">
             Performance &amp; Error Log
@@ -324,7 +324,7 @@ export const TestsView: React.FC<TestsViewProps> = ({ onNavigateToPlanner }) => 
       {activeSubTab === 'analytics' && (
         <div className="space-y-6">
           {/* Top Controls: Category Pills & Log Test Button */}
-          <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="tests-command-panel flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="text-xs font-mono font-semibold uppercase tracking-wider text-espresso-500 dark:text-espresso-400 mr-1 flex items-center gap-1">
                 <Filter className="w-3.5 h-3.5" /> Category:
@@ -369,7 +369,7 @@ export const TestsView: React.FC<TestsViewProps> = ({ onNavigateToPlanner }) => 
           {/* KPI Cards Grid */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             {/* Card 1: Tests Count */}
-            <div className="p-4 rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 shadow-subtle">
+            <div className="study-data-card p-4 rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 shadow-subtle">
               <span className="text-[11px] font-semibold uppercase font-mono text-espresso-500 dark:text-espresso-400">
                 Tests Taken
               </span>
@@ -382,7 +382,7 @@ export const TestsView: React.FC<TestsViewProps> = ({ onNavigateToPlanner }) => 
             </div>
 
             {/* Card 2: Average Score % */}
-            <div className="p-4 rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 shadow-subtle">
+            <div className="study-data-card p-4 rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 shadow-subtle">
               <span className="text-[11px] font-semibold uppercase font-mono text-espresso-500 dark:text-espresso-400">
                 Average Score %
               </span>
@@ -395,7 +395,7 @@ export const TestsView: React.FC<TestsViewProps> = ({ onNavigateToPlanner }) => 
             </div>
 
             {/* Card 3: Average Accuracy % */}
-            <div className="p-4 rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 shadow-subtle">
+            <div className="study-data-card p-4 rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 shadow-subtle">
               <span className="text-[11px] font-semibold uppercase font-mono text-espresso-500 dark:text-espresso-400">
                 Average Accuracy %
               </span>
@@ -408,7 +408,7 @@ export const TestsView: React.FC<TestsViewProps> = ({ onNavigateToPlanner }) => 
             </div>
 
             {/* Card 4: Moving Average & Best */}
-            <div className="p-4 rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 shadow-subtle">
+            <div className="study-data-card p-4 rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 shadow-subtle">
               <span className="text-[11px] font-semibold uppercase font-mono text-espresso-500 dark:text-espresso-400 flex items-center justify-between">
                 <span>3-Test Trend</span>
                 <TrendingUp className="w-3.5 h-3.5 text-indigo-500" />
@@ -424,9 +424,10 @@ export const TestsView: React.FC<TestsViewProps> = ({ onNavigateToPlanner }) => 
             </div>
           </div>
 
+          <div className="tests-analytics-workbench">
           {/* Chronological Score % Trend Chart */}
           {trendSeries.length > 0 && (
-            <div className="p-5 rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 shadow-subtle space-y-4">
+            <div className="study-data-card p-5 rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 shadow-subtle space-y-4">
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="font-serif font-bold text-base text-espresso-900 dark:text-ivory-100 flex items-center gap-2">
@@ -577,6 +578,7 @@ export const TestsView: React.FC<TestsViewProps> = ({ onNavigateToPlanner }) => 
                 })}
               </div>
             )}
+          </div>
           </div>
         </div>
       )}

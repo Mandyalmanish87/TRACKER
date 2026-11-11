@@ -57,3 +57,7 @@ export const useTheme = (): ThemeContextType => {
   }
   return context;
 };
+
+export const useOptionalTheme = (): ThemeContextType | undefined => {
+  return useContext(ThemeContext);
+};

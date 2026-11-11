@@ -17,6 +17,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { getActiveAccentColor } from '../../utils/themeColors';
 import {
   ResolvedCalendarEvent,
   Subject,
@@ -27,6 +28,7 @@ import {
   formatDateStr,
   resolveSchedule,
 } from '../../utils/scheduleResolver';
+import { resolveClassSchedule } from '../../utils/classSpaceUtils';
 import {
   RecurrencePromptModal,
   RescheduleProposal,
@@ -57,6 +59,7 @@ interface BlockCalendarProps {
   viewMode: 'month' | 'week' | 'day' | 'list';
   onSelectEvent?: (event: CalendarBlockItem) => void;
   onNavigateDate?: (newDate: Date) => void;
+  scheduleSource?: 'official' | 'personal';
 }
 
 const START_HOUR = 7; // 7:00 AM
@@ -84,6 +87,7 @@ export const BlockCalendar: React.FC<BlockCalendarProps> = ({
   viewMode,
   onSelectEvent,
   onNavigateDate,
+  scheduleSource = 'personal',
 }) => {
   const {
     state,
@@ -92,6 +96,7 @@ export const BlockCalendar: React.FC<BlockCalendarProps> = ({
     updateTimetableSlot,
   } = useApp();
   const classSpace = useOptionalClassSpace();
+  const canEditVisibleSchedule = scheduleSource !== 'official' || Boolean(classSpace?.canEditSchedule);
 
   const [selectedCategory, setSelectedCategory] = useState<ActivityCategory>('all');
   const [activeDrawerBlock, setActiveDrawerBlock] = useState<CalendarBlockItem | null>(null);
@@ -214,56 +219,62 @@ export const BlockCalendar: React.FC<BlockCalendarProps> = ({
   // Unified items aggregator for calendar using resolveSchedule or official ClassSpace
   const allCalendarBlocks = useMemo(() => {
     const blocks: CalendarBlockItem[] = [];
-    const isClassBased = state.settings?.userMode === 'class_based';
 
-    if (isClassBased && classSpace?.activeWorkspace && classSpace.occurrences.length > 0) {
-      const startStr = formatDateStr(visibleStart);
-      const endStr = formatDateStr(visibleEnd);
+    if (scheduleSource === 'official') {
+      if (classSpace?.activeWorkspace) {
+        const visibleOccurrences = resolveClassSchedule(
+          classSpace.rules || [],
+          classSpace.overrides || [],
+          visibleStart,
+          visibleEnd
+        );
 
-      for (const occ of classSpace.occurrences) {
-        if (occ.isCancelled) continue;
-        if (occ.date < startStr || occ.date > endStr) continue;
+        for (const occ of visibleOccurrences) {
+          if (occ.isCancelled) continue;
 
-        blocks.push({
-          id: occ.occurrenceKey,
-          title: occ.subjectName,
-          subtitle: occ.subjectCode,
-          category: 'college',
-          startTime: occ.startTime,
-          endTime: occ.endTime,
-          dateStr: occ.date,
-          color: occ.subjectColor,
-          badgeText:
-            occ.source === 'rescheduled'
-              ? 'Rescheduled'
-              : occ.source === 'extra'
-              ? 'Extra Class'
-              : occ.subjectCode || 'Class',
-          room: occ.room,
-          instructor: occ.instructor,
-          notes: occ.changeNote ? `${occ.changeNote}${occ.notes ? ' · ' + occ.notes : ''}` : occ.notes,
-          isRecurring: occ.source === 'recurring',
-          rawEvent: {
-            occurrenceKey: occ.occurrenceKey,
-            slotId: occ.ruleId,
-            extraClassId: occ.source === 'extra' ? occ.overrideId : undefined,
-            overrideId: occ.overrideId,
-            subjectId: occ.ruleId || occ.overrideId || occ.occurrenceKey,
-            dayOfWeek: dateToDayOfWeek(new Date(occ.date)) as DayOfWeek,
-            date: occ.date,
+          blocks.push({
+            id: occ.occurrenceKey,
+            title: occ.subjectName,
+            subtitle: occ.subjectCode,
+            category: 'college',
             startTime: occ.startTime,
             endTime: occ.endTime,
+            dateStr: occ.date,
+            color: occ.subjectColor,
+            badgeText:
+              occ.source === 'rescheduled'
+                ? 'Rescheduled'
+                : occ.source === 'extra'
+                ? 'Extra Class'
+                : occ.subjectCode || 'Class',
             room: occ.room,
             instructor: occ.instructor,
-            notes: occ.notes,
-            source: occ.source,
-            isCancelled: occ.isCancelled,
-            changeNote: occ.changeNote,
-          },
-        });
+            notes: occ.changeNote ? `${occ.changeNote}${occ.notes ? ' · ' + occ.notes : ''}` : occ.notes,
+            isRecurring: occ.source === 'recurring',
+            rawEvent: {
+              occurrenceKey: occ.occurrenceKey,
+              slotId: occ.ruleId,
+              extraClassId: occ.source === 'extra' ? occ.overrideId : undefined,
+              overrideId: occ.overrideId,
+              subjectId: occ.ruleId || occ.overrideId || occ.occurrenceKey,
+              dayOfWeek: dateToDayOfWeek(new Date(occ.date)) as DayOfWeek,
+              date: occ.date,
+              startTime: occ.startTime,
+              endTime: occ.endTime,
+              room: occ.room,
+              instructor: occ.instructor,
+              notes: occ.notes,
+              source: occ.source,
+              isCancelled: occ.isCancelled,
+              changeNote: occ.changeNote,
+            },
+          });
+        }
       }
-    } else {
-      // 1. College Classes resolved with full override & extra class logic
+      return blocks;
+    }
+
+    // 1. College Classes resolved with full override & extra class logic
       const resolvedEvents = resolveSchedule(
         state.timetable || [],
         state.occurrenceOverrides || [],
@@ -276,7 +287,7 @@ export const BlockCalendar: React.FC<BlockCalendarProps> = ({
         if (evt.isCancelled) continue;
 
         const sub = subjectMap.get(evt.subjectId);
-        const color = sub?.color || '#C45532';
+        const color = sub?.color || getActiveAccentColor();
         const isRecurring = Boolean(evt.slotId && evt.source !== 'extra');
 
         blocks.push({
@@ -301,7 +312,6 @@ export const BlockCalendar: React.FC<BlockCalendarProps> = ({
           rawEvent: evt,
         });
       }
-    }
 
     // 2. Study Tasks with due dates
     for (const task of state.tasks || []) {
@@ -320,7 +330,7 @@ export const BlockCalendar: React.FC<BlockCalendarProps> = ({
           startTime: start,
           endTime: end,
           dateStr: task.dueDate,
-          color: '#E07A5F',
+          color: getActiveAccentColor(),
           badgeText: `Task (${task.priority.toUpperCase()})`,
           notes: task.description,
           isRecurring: false,
@@ -347,6 +357,10 @@ export const BlockCalendar: React.FC<BlockCalendarProps> = ({
 
     return blocks;
   }, [
+    scheduleSource,
+    classSpace?.activeWorkspace,
+    classSpace?.rules,
+    classSpace?.overrides,
     state.timetable,
     state.occurrenceOverrides,
     state.extraClasses,
@@ -388,6 +402,12 @@ export const BlockCalendar: React.FC<BlockCalendarProps> = ({
   };
 
   const getAttendanceStatusForBlock = (block: CalendarBlockItem) => {
+    if (scheduleSource === 'official' || block.rawEvent?.occurrenceKey?.includes('::')) {
+      const rec = classSpace?.attendanceRecords?.find(
+        (r) => r.occurrenceKey === block.id || r.occurrenceKey === block.rawEvent?.occurrenceKey
+      );
+      if (rec) return rec.status;
+    }
     const log = state.attendanceLogs?.find((l) => {
       if (block.rawEvent?.extraClassId) {
         return l.extraClassId === block.rawEvent.extraClassId && l.date === block.rawEvent.date;
@@ -405,6 +425,10 @@ export const BlockCalendar: React.FC<BlockCalendarProps> = ({
   // ─────────────────────────────────────────────────────────────
 
   const handleDragStart = (e: React.DragEvent, blk: CalendarBlockItem) => {
+    if (!canEditVisibleSchedule) {
+      e.preventDefault();
+      return;
+    }
     e.dataTransfer.setData('text/plain', JSON.stringify({ id: blk.id }));
     e.dataTransfer.effectAllowed = 'move';
     setDraggingBlock(blk);
@@ -418,6 +442,7 @@ export const BlockCalendar: React.FC<BlockCalendarProps> = ({
   // Month View Drop Handler (moves block to target date, preserves duration)
   const handleMonthCellDrop = (e: React.DragEvent, targetDateStr: string) => {
     e.preventDefault();
+    if (!canEditVisibleSchedule) return;
     if (!draggingBlock) return;
 
     if (draggingBlock.dateStr === targetDateStr) {
@@ -440,6 +465,7 @@ export const BlockCalendar: React.FC<BlockCalendarProps> = ({
     gridTopY: number
   ) => {
     e.preventDefault();
+    if (!canEditVisibleSchedule) return;
     if (!draggingBlock) return;
 
     const offsetY = Math.max(0, e.clientY - gridTopY);
@@ -474,7 +500,7 @@ export const BlockCalendar: React.FC<BlockCalendarProps> = ({
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
 
-    if (!draggingBlock) return;
+    if (!canEditVisibleSchedule || !draggingBlock) return;
 
     const offsetY = Math.max(0, e.clientY - gridTopY);
     const quarterHours = Math.round((offsetY / HOUR_HEIGHT) * 4);
@@ -509,6 +535,13 @@ export const BlockCalendar: React.FC<BlockCalendarProps> = ({
     const targetDateObj = new Date(newDate + 'T00:00:00');
     const newDow = dateToDayOfWeek(targetDateObj);
 
+    if (scheduleSource === 'official') {
+      if (!classSpace?.canEditSchedule) {
+        alert('Only the Class Representative or Co-Admin can edit the official class timetable.');
+        return;
+      }
+    }
+
     // If it's a recurring slot, prompt user: "This occurrence only" vs "All future occurrences"
     if (block.isRecurring && raw?.slotId) {
       setRecurrenceProposal({
@@ -528,35 +561,63 @@ export const BlockCalendar: React.FC<BlockCalendarProps> = ({
 
     // If it's a non-recurring occurrence (already rescheduled single occurrence or extra class)
     if (raw?.slotId) {
-      rescheduleOccurrence(
-        raw.slotId,
-        block.dateStr,
-        newDate,
-        newStartTime,
-        newEndTime
-      );
+      if (scheduleSource === 'official') {
+        classSpace?.rescheduleOccurrence({
+          ruleId: raw.slotId,
+          originalDate: block.dateStr,
+          newDate,
+          newStartTime,
+          newEndTime,
+        });
+      } else {
+        rescheduleOccurrence(
+          raw.slotId,
+          block.dateStr,
+          newDate,
+          newStartTime,
+          newEndTime
+        );
+      }
     }
   };
 
   const handleConfirmSingleOccurrence = (proposal: RescheduleProposal) => {
     if (!proposal.slotId) return;
-    rescheduleOccurrence(
-      proposal.slotId,
-      proposal.originalDate,
-      proposal.newDate,
-      proposal.newStartTime,
-      proposal.newEndTime
-    );
+    if (scheduleSource === 'official') {
+      classSpace?.rescheduleOccurrence({
+        ruleId: proposal.slotId,
+        originalDate: proposal.originalDate,
+        newDate: proposal.newDate,
+        newStartTime: proposal.newStartTime,
+        newEndTime: proposal.newEndTime,
+      });
+    } else {
+      rescheduleOccurrence(
+        proposal.slotId,
+        proposal.originalDate,
+        proposal.newDate,
+        proposal.newStartTime,
+        proposal.newEndTime
+      );
+    }
     setRecurrenceProposal(null);
   };
 
   const handleConfirmAllOccurrences = (proposal: RescheduleProposal) => {
     if (!proposal.slotId) return;
-    updateTimetableSlot(proposal.slotId, {
-      dayOfWeek: proposal.newDayOfWeek as DayOfWeek,
-      startTime: proposal.newStartTime,
-      endTime: proposal.newEndTime,
-    });
+    if (scheduleSource === 'official') {
+      classSpace?.updateTimetableRule(proposal.slotId, {
+        dayOfWeek: proposal.newDayOfWeek as DayOfWeek,
+        startTime: proposal.newStartTime,
+        endTime: proposal.newEndTime,
+      });
+    } else {
+      updateTimetableSlot(proposal.slotId, {
+        dayOfWeek: proposal.newDayOfWeek as DayOfWeek,
+        startTime: proposal.newStartTime,
+        endTime: proposal.newEndTime,
+      });
+    }
     setRecurrenceProposal(null);
   };
 
@@ -571,7 +632,7 @@ export const BlockCalendar: React.FC<BlockCalendarProps> = ({
   }, [currentTimeMinutes]);
 
   return (
-    <div className="w-full space-y-4">
+    <div className="timetable-calendar w-full space-y-4">
       {/* ── Category Filter Bar ── */}
       <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-xl bg-white dark:bg-espresso-900 border border-ivory-300 dark:border-espresso-750 shadow-subtle">
         <div className="flex flex-wrap items-center gap-1.5">
@@ -591,6 +652,7 @@ export const BlockCalendar: React.FC<BlockCalendarProps> = ({
               <button
                 key={cat.id}
                 onClick={() => setSelectedCategory(cat.id)}
+                aria-pressed={isSelected}
                 className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium transition cursor-pointer ${
                   isSelected
                     ? 'bg-espresso-900 text-ivory-50 dark:bg-ivory-100 dark:text-espresso-950 font-semibold shadow-subtle'
@@ -666,14 +728,14 @@ export const BlockCalendar: React.FC<BlockCalendarProps> = ({
                     {dayBlocks.map((blk) => (
                       <div
                         key={blk.id}
-                        draggable
+                        draggable={canEditVisibleSchedule}
                         onDragStart={(e) => handleDragStart(e, blk)}
                         onDragEnd={handleDragEnd}
                         onClick={(e) => {
                           e.stopPropagation();
                           handleBlockClick(blk);
                         }}
-                        className="group relative w-full text-left p-1.5 rounded-lg border text-xs leading-tight transition hover:shadow-subtle cursor-grab active:cursor-grabbing select-none"
+                        className={`group relative w-full text-left p-1.5 rounded-lg border text-xs leading-tight transition hover:shadow-subtle select-none ${canEditVisibleSchedule ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'}`}
                         style={{
                           backgroundColor: `${blk.color}15`,
                           borderColor: `${blk.color}40`,
@@ -827,7 +889,7 @@ export const BlockCalendar: React.FC<BlockCalendarProps> = ({
                       return (
                         <div
                           key={blk.id}
-                          draggable
+                          draggable={canEditVisibleSchedule}
                           onDragStart={(e) => handleDragStart(e, blk)}
                           onDragEnd={handleDragEnd}
                           onClick={() => handleBlockClick(blk)}
@@ -839,7 +901,7 @@ export const BlockCalendar: React.FC<BlockCalendarProps> = ({
                             borderLeftWidth: '4px',
                             borderLeftColor: blk.color,
                           }}
-                          className="absolute inset-x-1 z-10 p-2 rounded-xl border transition shadow-xs hover:shadow-md cursor-grab active:cursor-grabbing select-none flex flex-col justify-between overflow-hidden group"
+                          className={`absolute inset-x-1 z-10 p-2 rounded-xl border transition shadow-xs hover:shadow-md select-none flex flex-col justify-between overflow-hidden group ${canEditVisibleSchedule ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'}`}
                         >
                           <div>
                             <div className="flex items-center justify-between gap-1">
@@ -973,7 +1035,7 @@ export const BlockCalendar: React.FC<BlockCalendarProps> = ({
                     return (
                       <div
                         key={blk.id}
-                        draggable
+                        draggable={canEditVisibleSchedule}
                         onDragStart={(e) => handleDragStart(e, blk)}
                         onDragEnd={handleDragEnd}
                         onClick={() => handleBlockClick(blk)}
@@ -985,7 +1047,7 @@ export const BlockCalendar: React.FC<BlockCalendarProps> = ({
                           borderLeftWidth: '5px',
                           borderLeftColor: blk.color,
                         }}
-                        className="absolute inset-x-4 z-10 p-3 rounded-xl border transition shadow-xs hover:shadow-md cursor-grab active:cursor-grabbing select-none flex items-start justify-between group overflow-hidden"
+                        className={`absolute inset-x-4 z-10 p-3 rounded-xl border transition shadow-xs hover:shadow-md select-none flex items-start justify-between group overflow-hidden ${canEditVisibleSchedule ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'}`}
                       >
                         <div className="space-y-1">
                           <div className="flex items-center gap-2">
@@ -1134,15 +1196,19 @@ export const BlockCalendar: React.FC<BlockCalendarProps> = ({
                     onClick={() => {
                       if (activeDrawerBlock.rawEvent) {
                         const ev = activeDrawerBlock.rawEvent;
-                        markAttendanceForEvent(
-                          ev.occurrenceKey,
-                          ev.subjectId,
-                          ev.date,
-                          'present',
-                          ev.slotId,
-                          ev.extraClassId,
-                          ev.overrideId
-                        );
+                        if (scheduleSource === 'official') {
+                          classSpace?.markAttendance(ev.occurrenceKey, ev.date, 'present');
+                        } else {
+                          markAttendanceForEvent(
+                            ev.occurrenceKey,
+                            ev.subjectId,
+                            ev.date,
+                            'present',
+                            ev.slotId,
+                            ev.extraClassId,
+                            ev.overrideId
+                          );
+                        }
                       }
                     }}
                     className={`py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer ${
@@ -1157,15 +1223,19 @@ export const BlockCalendar: React.FC<BlockCalendarProps> = ({
                     onClick={() => {
                       if (activeDrawerBlock.rawEvent) {
                         const ev = activeDrawerBlock.rawEvent;
-                        markAttendanceForEvent(
-                          ev.occurrenceKey,
-                          ev.subjectId,
-                          ev.date,
-                          'absent',
-                          ev.slotId,
-                          ev.extraClassId,
-                          ev.overrideId
-                        );
+                        if (scheduleSource === 'official') {
+                          classSpace?.markAttendance(ev.occurrenceKey, ev.date, 'absent');
+                        } else {
+                          markAttendanceForEvent(
+                            ev.occurrenceKey,
+                            ev.subjectId,
+                            ev.date,
+                            'absent',
+                            ev.slotId,
+                            ev.extraClassId,
+                            ev.overrideId
+                          );
+                        }
                       }
                     }}
                     className={`py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer ${
@@ -1180,15 +1250,19 @@ export const BlockCalendar: React.FC<BlockCalendarProps> = ({
                     onClick={() => {
                       if (activeDrawerBlock.rawEvent) {
                         const ev = activeDrawerBlock.rawEvent;
-                        markAttendanceForEvent(
-                          ev.occurrenceKey,
-                          ev.subjectId,
-                          ev.date,
-                          'cancelled',
-                          ev.slotId,
-                          ev.extraClassId,
-                          ev.overrideId
-                        );
+                        if (scheduleSource === 'official') {
+                          classSpace?.markAttendance(ev.occurrenceKey, ev.date, 'cancelled');
+                        } else {
+                          markAttendanceForEvent(
+                            ev.occurrenceKey,
+                            ev.subjectId,
+                            ev.date,
+                            'cancelled',
+                            ev.slotId,
+                            ev.extraClassId,
+                            ev.overrideId
+                          );
+                        }
                       }
                     }}
                     className={`py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer ${

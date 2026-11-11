@@ -1,18 +1,43 @@
-import { getSupabaseClient, isSupabaseConfigured } from './authService';
+import { getFirebaseDataClientForServices, isFirebaseDataConfigured } from './authService';
+import { firebaseService } from './firebaseService';
 import { AppStateData, NutritionProfile, SyncTombstone, EduHubCourse, EduHubLecture } from '../types';
 import {
   DEFAULT_NUTRITION_PROFILE,
   DEFAULT_DAILY_QUESTION_TARGET,
   DEFAULT_REVIEW_INTERVALS,
 } from './defaults';
+import {
+  isQuotaOrDegradedError,
+  markCloudDegraded,
+  isCloudDegraded,
+} from './degradedModeService';
+import { recordRequestStart } from '../utils/networkDiagnostics';
+
+export { isQuotaOrDegradedError };
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const PENDING_SYNC_KEY_PREFIX = 'tracker_pending_sync_';
 
+// In-memory cache of serialized payload signatures to prevent redundant cloud uploads of identical state
+const lastUploadedPayloadByUser = new Map<string, string>();
+
+export function clearCachedPayloadHash(userId?: string): void {
+  if (userId) {
+    lastUploadedPayloadByUser.delete(userId);
+  } else {
+    lastUploadedPayloadByUser.clear();
+  }
+}
+
 function isValidCloudUserId(id?: string | null): boolean {
   if (!id || typeof id !== 'string') return false;
   if (id.startsWith('usr_local_') || id === 'usr_google_student_demo') return false;
-  return UUID_REGEX.test(id);
+  if (UUID_REGEX.test(id)) return true;
+  // Firebase Auth UIDs are 20-40 alphanumeric characters without hyphens
+  if (firebaseService.isConfigured && /^[A-Za-z0-9]{20,40}$/.test(id)) {
+    return true;
+  }
+  return false;
 }
 
 export interface CloudRecord {
@@ -33,29 +58,55 @@ export const cloudSyncService = {
    * - 'found': genuine cloud record exists
    * - 'not_found': confirmed empty cloud account (PGRST116: 0 rows)
    * - 'unconfigured': cloud credentials not configured (local-only mode)
-   * - 'error': transient network, auth, timeout, or RLS error
+   * - 'error': transient network, authentication, or Firestore rules error
    */
   async fetchCloudDataDetailed(userId: string): Promise<FetchCloudResult> {
     if (!isValidCloudUserId(userId)) {
       return { status: 'error', record: null, error: 'Simulated or non-UUID identities cannot perform remote cloud sync.' };
     }
 
-    const supabase = getSupabaseClient();
+    if (isCloudDegraded()) {
+      return { status: 'error', record: null, error: 'HTTP 402: Cloud database quota exceeded' };
+    }
 
-    if (!supabase || !isSupabaseConfigured) {
+    if (firebaseService.isConfigured) {
+      const fbRes = await firebaseService.fetchCloudData(userId);
+      if (fbRes.error) {
+        return { status: 'error', record: null, error: fbRes.error };
+      }
+      if (!fbRes.data) {
+        return { status: 'not_found', record: null };
+      }
+      return {
+        status: 'found',
+        record: {
+          userId,
+          data: fbRes.data,
+          updatedAt: fbRes.updatedAt || new Date().toISOString(),
+        },
+      };
+    }
+
+    const firebaseDb = getFirebaseDataClientForServices();
+
+    if (!firebaseDb || !isFirebaseDataConfigured) {
       return { status: 'unconfigured', record: null };
     }
 
     try {
-      const { data, error } = await supabase
+      const { data, error } = await firebaseDb
         .from('user_trackers')
         .select('user_id, data, updated_at')
         .eq('user_id', userId)
         .single();
 
       if (error) {
-        // PostgREST PGRST116: The result contains 0 rows (confirmed empty cloud account)
-        if (error.code === 'PGRST116') {
+        if (isQuotaOrDegradedError(error)) {
+          markCloudDegraded('HTTP 402 on fetchCloudDataDetailed');
+          return { status: 'error', record: null, error: 'HTTP 402: Cloud database quota exceeded' };
+        }
+        // Firebase's direct-user document lookup reports not-found for a new cloud account.
+        if (error.code === 'not-found' || error.code === 'firestore/not-found') {
           return { status: 'not_found', record: null };
         }
         // Genuine network, auth, timeout, or RLS error
@@ -75,6 +126,10 @@ export const cloudSyncService = {
         },
       };
     } catch (err) {
+      if (isQuotaOrDegradedError(err)) {
+        markCloudDegraded('HTTP 402 on fetchCloudDataDetailed');
+        return { status: 'error', record: null, error: 'HTTP 402: Cloud database quota exceeded' };
+      }
       return { status: 'error', record: null, error: (err as Error).message || 'Failed to fetch cloud data.' };
     }
   },
@@ -88,19 +143,45 @@ export const cloudSyncService = {
   },
 
   /**
-   * Upload data to cloud
+   * Upload data to cloud with payload diffing and quota protection
    */
   async uploadToCloud(userId: string, data: AppStateData): Promise<{ success: boolean; error?: string }> {
     if (!isValidCloudUserId(userId)) {
       return { success: false, error: 'Simulated or non-UUID identities cannot perform remote cloud sync.' };
     }
 
-    const supabase = getSupabaseClient();
+    if (isCloudDegraded()) {
+      return { success: false, error: 'HTTP 402: Cloud database quota exceeded' };
+    }
+
+    // Skip redundant network uploads if payload content is unchanged
+    let payloadSignature: string | null = null;
+    try {
+      const sanitized = { ...data };
+      delete (sanitized as any).progressPhotos;
+      payloadSignature = JSON.stringify(sanitized);
+      if (lastUploadedPayloadByUser.get(userId) === payloadSignature) {
+        return { success: true };
+      }
+    } catch {
+      payloadSignature = null;
+    }
+
+    if (firebaseService.isConfigured) {
+      const res = await firebaseService.uploadToCloud(userId, data);
+      if (res.success && payloadSignature) {
+        lastUploadedPayloadByUser.set(userId, payloadSignature);
+      }
+      return res;
+    }
+
+    const firebaseDb = getFirebaseDataClientForServices();
     const now = new Date().toISOString();
 
-    if (supabase && isSupabaseConfigured) {
+    if (firebaseDb && isFirebaseDataConfigured) {
+      const endDiagnostics = recordRequestStart('user_trackers:upsert');
       try {
-        const { error } = await supabase
+        const { error } = await firebaseDb
           .from('user_trackers')
           .upsert({
             user_id: userId,
@@ -108,14 +189,30 @@ export const cloudSyncService = {
             updated_at: now,
           });
 
-        if (error) return { success: false, error: error.message };
+        if (error) {
+          if (isQuotaOrDegradedError(error)) {
+            markCloudDegraded('HTTP 402 on uploadTrackerData');
+            return { success: false, error: 'HTTP 402: Cloud database quota exceeded' };
+          }
+          return { success: false, error: error.message };
+        }
+
+        if (payloadSignature) {
+          lastUploadedPayloadByUser.set(userId, payloadSignature);
+        }
         return { success: true };
-      } catch (err) {
+      } catch (err: any) {
+        if (isQuotaOrDegradedError(err)) {
+          markCloudDegraded('HTTP 402 on uploadTrackerData');
+          return { success: false, error: 'HTTP 402: Cloud database quota exceeded' };
+        }
         return { success: false, error: (err as Error).message };
+      } finally {
+        endDiagnostics();
       }
     }
 
-    return { success: false, error: 'Cloud sync is unavailable: Supabase credentials are not configured.' };
+    return { success: false, error: 'Cloud sync is unavailable because Firebase is not configured.' };
   },
 
   /**
@@ -259,40 +356,27 @@ export const cloudSyncService = {
             const itemValid = !isNaN(itemMs);
             const existValid = !isNaN(existMs);
 
+            let cloudWins = false;
             if (itemValid && existValid) {
-              if (itemMs > existMs) {
-                map.set(item.id, item);
-              } else if (existMs > itemMs) {
-                // keep local existing (arr1)
-              } else {
-                // Equal timestamps: resolve deterministically
-                // If one record has completed/done status and other does not, completed status takes precedence
+              if (itemMs > existMs) cloudWins = true;
+              else if (itemMs === existMs) {
+                // Equal timestamps: completed state takes precedence, otherwise cloud wins.
                 const itemDone = itemAny.status === 'done' || itemAny.status === 'completed' || Boolean(itemAny.isCompleted);
                 const existDone = existAny.status === 'done' || existAny.status === 'completed' || Boolean(existAny.isCompleted);
-                if (existDone && !itemDone) {
-                  // keep local (arr1)
-                } else {
-                  map.set(item.id, item);
-                }
+                cloudWins = !(existDone && !itemDone);
               }
             } else if (itemValid && !existValid) {
-              // Cloud has a valid timestamp, local is missing/malformed -> use cloud
-              map.set(item.id, item);
-            } else if (!itemValid && existValid) {
-              // Local has a valid timestamp, cloud is missing/malformed -> keep local
-            } else if (
+              cloudWins = true;
+            } else if (!itemValid && !existValid &&
               typeof existAny?.totalConducted === 'number' &&
-              typeof itemAny?.totalConducted === 'number'
-            ) {
-              // For subjects where totalConducted reflects offline attendance marks
-              if (itemAny.totalConducted >= existAny.totalConducted) {
-                map.set(item.id, item);
-              }
-              // else keep existing local subject with higher totalConducted
-            } else {
-              // Cloud (arr2) takes precedence if no timestamps
-              map.set(item.id, item);
+              typeof itemAny?.totalConducted === 'number') {
+              cloudWins = itemAny.totalConducted >= existAny.totalConducted;
+            } else if (!itemValid && !existValid) {
+              cloudWins = true;
             }
+            // Merge fields from both copies after selecting the winner. This
+            // carries fields introduced by newer features through cloud sync.
+            map.set(item.id, cloudWins ? { ...existing, ...item } : { ...item, ...existing });
           } else {
             map.set(item.id, item);
           }
@@ -332,7 +416,43 @@ export const cloudSyncService = {
       if (!cloudProf) return localProf!;
       const localTime = localProf.updatedAt ? new Date(localProf.updatedAt).getTime() : 0;
       const cloudTime = cloudProf.updatedAt ? new Date(cloudProf.updatedAt).getTime() : 0;
-      return cloudTime >= localTime ? cloudProf : localProf;
+      return cloudTime >= localTime
+        ? { ...localProf, ...cloudProf }
+        : { ...cloudProf, ...localProf };
+    };
+
+    // Merge unfamiliar top-level fields too. This covers collections added by
+    // newer releases while an older release is still syncing the same account.
+    const mergeForwardCompatibleState = (cloudState: AppStateData, localState: AppStateData) => {
+      const merged: Record<string, any> = { ...cloudState, ...localState };
+      const keys = new Set([...Object.keys(cloudState), ...Object.keys(localState)]);
+      for (const key of keys) {
+        const cloudValue = (cloudState as any)[key];
+        const localValue = (localState as any)[key];
+        if (localValue === undefined) {
+          merged[key] = cloudValue;
+          continue;
+        }
+        if (Array.isArray(cloudValue) && Array.isArray(localValue)) {
+          const rows = new Map<string, any>();
+          const withoutId: any[] = [];
+          for (const row of [...cloudValue, ...localValue]) {
+            if (row && typeof row === 'object' && typeof row.id === 'string') {
+              rows.set(row.id, { ...(rows.get(row.id) || {}), ...row });
+            } else if (!withoutId.some((existing) => JSON.stringify(existing) === JSON.stringify(row))) {
+              withoutId.push(row);
+            }
+          }
+          merged[key] = [...rows.values(), ...withoutId];
+        } else if (
+          cloudValue && localValue &&
+          typeof cloudValue === 'object' && typeof localValue === 'object' &&
+          !Array.isArray(cloudValue) && !Array.isArray(localValue)
+        ) {
+          merged[key] = { ...cloudValue, ...localValue };
+        }
+      }
+      return merged;
     };
 
     const mergeEduHubCourses = (
@@ -413,6 +533,7 @@ export const cloudSyncService = {
           }
 
           const mergedCourse: EduHubCourse = {
+            ...olderCourse,
             ...newerCourse,
             lectures: Array.from(lectureMap.values()),
             updatedAt: new Date(Math.max(isNaN(localTime) ? 0 : localTime, isNaN(cloudTime) ? 0 : cloudTime, Date.now())).toISOString(),
@@ -442,9 +563,16 @@ export const cloudSyncService = {
     };
 
     return {
-      schemaVersion: 2,
+      ...mergeForwardCompatibleState(cloud, local),
+      schemaVersion: Math.max(local.schemaVersion ?? 2, cloud.schemaVersion ?? 2),
+      retiredFeatureData: {
+        ...((cloud as any).retiredFeatureData || {}),
+        ...((local as any).retiredFeatureData || {}),
+      },
       hasSampleData: false, // Once merged with user account, sample data flag is turned off
       profile: {
+        ...cloud.profile,
+        ...local.profile,
         displayName: local.profile?.displayName || cloud.profile?.displayName || '',
         targetExam: local.profile?.targetExam || cloud.profile?.targetExam || '',
         examDate: local.profile?.examDate || cloud.profile?.examDate,
@@ -457,6 +585,8 @@ export const cloudSyncService = {
         bio: local.profile?.bio || cloud.profile?.bio,
       },
       settings: {
+        ...cloud.settings,
+        ...local.settings,
         themeMode: local.settings?.themeMode || cloud.settings?.themeMode || 'system',
         accentColor: local.settings?.accentColor || cloud.settings?.accentColor || 'terracotta',
         backgroundStyle: local.settings?.backgroundStyle || cloud.settings?.backgroundStyle || 'minimal',
@@ -493,6 +623,20 @@ export const cloudSyncService = {
       recipes: mergeById(local.recipes, cloud.recipes, 'recipes'),
       weightLogs: mergeById(local.weightLogs, cloud.weightLogs, 'weightLogs'),
       nutritionProfile: mergeNutritionProfile(local.nutritionProfile, cloud.nutritionProfile),
+      // Fitness Ecosystem Core Collections
+      workoutSessions: mergeById(local.workoutSessions, cloud.workoutSessions, 'workoutSessions'),
+      workoutPrograms: mergeById(local.workoutPrograms, cloud.workoutPrograms, 'workoutPrograms'),
+      workoutTemplates: mergeById(local.workoutTemplates, cloud.workoutTemplates, 'workoutTemplates'),
+      exerciseLibrary: mergeById(local.exerciseLibrary, cloud.exerciseLibrary, 'exerciseLibrary'),
+      customBarcodes: mergeById(local.customBarcodes, cloud.customBarcodes, 'customBarcodes'),
+      mealPlans: mergeById(local.mealPlans, cloud.mealPlans, 'mealPlans'),
+      bodyMeasurements: mergeById(local.bodyMeasurements, cloud.bodyMeasurements, 'bodyMeasurements'),
+      bodyCompositions: mergeById(local.bodyCompositions, cloud.bodyCompositions, 'bodyCompositions'),
+      progressPhotos: mergeById(local.progressPhotos, cloud.progressPhotos, 'progressPhotos'),
+      sleepRecoveryLogs: mergeById(local.sleepRecoveryLogs, cloud.sleepRecoveryLogs, 'sleepRecoveryLogs'),
+      cardioSessions: mergeById(local.cardioSessions, cloud.cardioSessions, 'cardioSessions'),
+      hydrationLogs: mergeById(local.hydrationLogs, cloud.hydrationLogs, 'hydrationLogs'),
+      fitnessInsights: mergeById(local.fitnessInsights, cloud.fitnessInsights, 'fitnessInsights'),
       radioUrls: mergeById(local.radioUrls, cloud.radioUrls, 'radioUrls'),
       radioQueue: mergeById(local.radioQueue, cloud.radioQueue, 'radioQueue'),
       radioLoopMode: local.radioLoopMode ?? cloud.radioLoopMode ?? 'off',

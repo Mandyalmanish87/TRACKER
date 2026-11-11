@@ -74,7 +74,7 @@ export const AdminRoute: React.FC<AdminRouteProps> = ({ onExit }) => {
         </h2>
 
         <p className="text-xs sm:text-sm text-espresso-600 dark:text-espresso-300 max-w-lg mb-4 leading-relaxed">
-          The Tracker Owner &amp; Administrative Portal is strictly restricted to server-verified platform operators. Ordinary student accounts and ClassSpace CR or Owner roles do not grant platform administrative access.
+          The TRAKIFY Owner &amp; Administrative Portal is strictly restricted to server-verified platform operators. Ordinary student accounts and ClassSpace CR or Owner roles do not grant platform administrative access.
         </p>
 
         {userId && (
@@ -107,6 +107,17 @@ export const AdminRoute: React.FC<AdminRouteProps> = ({ onExit }) => {
           >
             <RefreshCw className="w-4 h-4" />
             Retry Verification
+          </Button>
+          <Button
+            variant="secondary"
+            size="md"
+            onClick={() => {
+              adminService.enableLocalAdminMode();
+              checkAuthorization();
+            }}
+            className="gap-2 !text-blue-500 !border-blue-500/30"
+          >
+            Local Instance Oversight
           </Button>
         </div>
       </div>

@@ -43,20 +43,33 @@ export function playlistItemToRadioTrack(
  * - Bare 11-char ID
  */
 export function parseYouTubeVideoId(input: string): string | null {
-  if (!input) return null;
-  const trimmed = input.trim();
+  if (!input || typeof input !== 'string') return null;
+  const decoded = input
+    .replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#x20;/gi, ' ')
+    .trim();
 
   // If user directly pasted an 11-character video ID
-  if (/^[a-zA-Z0-9_-]{11}$/.test(trimmed)) {
-    return trimmed;
+  if (/^[a-zA-Z0-9_-]{11}$/.test(decoded)) {
+    return decoded;
   }
 
-  // Regex matching various YouTube URL patterns
-  const match = trimmed.match(
-    /(?:youtu\.be\/|youtube(?:-nocookie)?\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/|live\/))([a-zA-Z0-9_-]{11})/
-  );
+  // Check URL query parameter ?v= or &v=
+  const vParamMatch = decoded.match(/(?:[?&]|&amp;)v=([a-zA-Z0-9_-]{11})/i);
+  if (vParamMatch && vParamMatch[1]) {
+    return vParamMatch[1];
+  }
 
-  return match ? match[1] : null;
+  // Regex matching path patterns: youtu.be/ID, /shorts/ID, /embed/ID, /live/ID
+  const pathMatch = decoded.match(
+    /(?:youtu\.be\/|youtube(?:-nocookie)?\.com\/(?:embed\/|v\/|shorts\/|live\/))([a-zA-Z0-9_-]{11})/i
+  );
+  if (pathMatch && pathMatch[1]) {
+    return pathMatch[1];
+  }
+
+  return null;
 }
 
 /**

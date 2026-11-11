@@ -61,5 +61,21 @@ describe('Focus Radio YouTube Utilities', () => {
       expect(track.thumbnailUrl).toContain('img.youtube.com');
     }
   });
+
+  it('validates 11-character video IDs strictly to prevent corrupt queue or playlist entries', () => {
+    const isValidVideoId = (id: string) => typeof id === 'string' && /^[a-zA-Z0-9_-]{11}$/.test(id.trim());
+
+    expect(isValidVideoId('jfKfPfyJRdk')).toBe(true);
+    expect(isValidVideoId('4xDzrJKXOOY')).toBe(true);
+    expect(isValidVideoId('1ZYbU82GVz4')).toBe(true);
+
+    // Corrupt or invalid IDs
+    expect(isValidVideoId('')).toBe(false);
+    expect(isValidVideoId('too-short')).toBe(false);
+    expect(isValidVideoId('video-01')).toBe(false);
+    expect(isValidVideoId('way-too-long-to-be-a-valid-youtube-video-id')).toBe(false);
+    expect(isValidVideoId('invalid/chars!')).toBe(false);
+    expect(isValidVideoId(undefined as any)).toBe(false);
+  });
 });
 

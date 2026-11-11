@@ -9,10 +9,7 @@ import {
   loadActiveTimer,
   clearActiveTimer,
   calculateTimerProgress,
-  requestTimerPip,
-  isPipSupported,
   formatFocusTime,
-  PipController,
 } from '../../utils/focusTimer';
 import { calculateStudyStreaks, calculateFocusSummaries } from '../../utils/focusAnalytics';
 import {
@@ -29,21 +26,24 @@ import {
   Clock,
   Timer,
   Flag,
-  Plus,
-  Minus,
   Coffee,
 } from 'lucide-react';
 import { Focus3DVisualizer } from '../focus/Focus3DVisualizer';
 import { DeepFocusFullscreen } from '../focus/DeepFocusFullscreen';
+import { PlannerFocusLaunch } from '../../types';
 
 interface FocusWidgetProps {
   onNavigateToFocus?: () => void;
   showExtendedAnalyticsLink?: boolean;
+  plannerFocusLaunch?: PlannerFocusLaunch | null;
+  onPlannerFocusLaunchConsumed?: () => void;
 }
 
 export const FocusWidget: React.FC<FocusWidgetProps> = ({
   onNavigateToFocus,
   showExtendedAnalyticsLink = false,
+  plannerFocusLaunch,
+  onPlannerFocusLaunchConsumed,
 }) => {
   const { state, logStudySession } = useApp();
 
@@ -73,6 +73,7 @@ export const FocusWidget: React.FC<FocusWidgetProps> = ({
   const [notes, setNotes] = useState<string>('');
   const [loggedToast, setLoggedToast] = useState<string | null>(null);
   const [isFullscreenOpen, setIsFullscreenOpen] = useState<boolean>(false);
+  const handledPlannerFocusLaunchRef = useRef<string | null>(null);
 
   // Stopwatch state & recorded laps
   const [stopwatchSeconds, setStopwatchSeconds] = useState<number>(0);
@@ -83,17 +84,26 @@ export const FocusWidget: React.FC<FocusWidgetProps> = ({
   const lastStartedTimestampRef = useRef<number | null>(null);
   const sessionStartedAtRef = useRef<string | null>(null);
 
-  // Picture-in-Picture controller ref
-  const pipControllerRef = useRef<PipController | null>(null);
-  const [isPipActive, setIsPipActive] = useState<boolean>(false);
-  const pipSupported = useMemo(() => isPipSupported(), []);
-
   // Set default subject if available
   useEffect(() => {
     if (!selectedSubjectId && unifiedSubjects.length > 0) {
       setSelectedSubjectId(unifiedSubjects[0].id);
     }
   }, [unifiedSubjects, selectedSubjectId]);
+
+  useEffect(() => {
+    if (!plannerFocusLaunch || handledPlannerFocusLaunchRef.current === plannerFocusLaunch.id) return;
+    handledPlannerFocusLaunchRef.current = plannerFocusLaunch.id;
+    const hasDuration = Boolean(plannerFocusLaunch.estimatedDuration && plannerFocusLaunch.estimatedDuration > 0);
+    const nextMode = hasDuration ? 'timer' : 'stopwatch';
+    const nextMinutes = hasDuration ? Math.max(1, Math.round(plannerFocusLaunch.estimatedDuration!)) : 25;
+    setTimerMode(nextMode);
+    setSessionMinutes(nextMinutes);
+    setTimeLeft(nextMinutes * 60);
+    if (plannerFocusLaunch.subjectId) setSelectedSubjectId(plannerFocusLaunch.subjectId);
+    setIsRunning(false);
+    setIsFullscreenOpen(true);
+  }, [plannerFocusLaunch]);
 
   // ── Recovery on initial mount ──
   useEffect(() => {
@@ -147,6 +157,58 @@ export const FocusWidget: React.FC<FocusWidgetProps> = ({
     }
   }, []);
 
+  // Open immersive mode after the global mini-player navigates here.
+  const openDeepFocusFullscreen = () => {
+    window.dispatchEvent(new CustomEvent('tracker:mini-focus-close'));
+    // Request from the same user gesture. If the browser declines, the body-level
+    // portal still provides a viewport-filling CSS fallback.
+    try {
+      const request = document.documentElement.requestFullscreen?.();
+      if (request) void request.catch(() => undefined);
+    } catch { /* The CSS immersive fallback remains available. */ }
+    setIsFullscreenOpen(true);
+  };
+
+  useEffect(() => {
+    const openFullscreen = () => {
+      try { window.sessionStorage.removeItem('tracker_open_focus_fullscreen_after_nav'); } catch {}
+      openDeepFocusFullscreen();
+    };
+    try {
+      if (window.sessionStorage.getItem('tracker_open_focus_fullscreen_after_nav') === '1') {
+        openFullscreen();
+      }
+    } catch {}
+    window.addEventListener('tracker:open-focus-fullscreen', openFullscreen);
+    return () => window.removeEventListener('tracker:open-focus-fullscreen', openFullscreen);
+  }, []);
+
+  useEffect(() => {
+    const syncFromMiniPlayer = () => {
+      const saved = loadActiveTimer();
+      if (!saved) return;
+      const progress = calculateTimerProgress(saved);
+      if (saved.mode === 'stopwatch') {
+        setTimerMode('stopwatch');
+        setStopwatchSeconds(progress.elapsedFocusSeconds);
+        if (saved.laps) setLaps(saved.laps);
+      } else {
+        setTimerMode(saved.mode === 'timer' ? 'timer' : 'pomodoro');
+        if (saved.mode === 'short_break') setPomodoroPhase('short_break');
+        else if (saved.mode === 'long_break') setPomodoroPhase('long_break');
+        else setPomodoroPhase('work');
+        setSessionMinutes(Math.max(1, Math.round(saved.plannedSeconds / 60)));
+        setTimeLeft(progress.timeLeftSeconds);
+      }
+      accumulatedSecondsRef.current = progress.elapsedFocusSeconds;
+      lastStartedTimestampRef.current = saved.isRunning ? saved.lastStartedTimestamp : null;
+      sessionStartedAtRef.current = saved.sessionStartedAt || null;
+      setIsRunning(saved.isRunning);
+    };
+    window.addEventListener('tracker:active-timer-updated', syncFromMiniPlayer);
+    return () => window.removeEventListener('tracker:active-timer-updated', syncFromMiniPlayer);
+  }, []);
+
   // Web Audio Chime for Session Completion
   const playCompletionSound = () => {
     try {
@@ -173,7 +235,7 @@ export const FocusWidget: React.FC<FocusWidgetProps> = ({
 
   // ── High-Precision Live Timer Loop ──
   useEffect(() => {
-    if (!isRunning) return;
+    if (!isRunning || isFullscreenOpen) return;
 
     if (!lastStartedTimestampRef.current) {
       lastStartedTimestampRef.current = Date.now();
@@ -204,13 +266,6 @@ export const FocusWidget: React.FC<FocusWidgetProps> = ({
         };
         saveActiveTimer(activeState);
 
-        // Update PiP display if active
-        if (pipControllerRef.current?.isActive) {
-          const timeStr = formatFocusTime(totalElapsed, true);
-          const subName =
-            unifiedSubjects.find((sub) => sub.id === selectedSubjectId)?.name || 'General Focus';
-          pipControllerRef.current.update(timeStr, `⏱ Stopwatch · ${subName}`, true);
-        }
       } else {
         // Pomodoro or Timer countdown
         const plannedSec = sessionMinutes * 60;
@@ -238,20 +293,6 @@ export const FocusWidget: React.FC<FocusWidgetProps> = ({
         };
         saveActiveTimer(activeState);
 
-        // Update PiP display if active
-        if (pipControllerRef.current?.isActive) {
-          const timeStr = formatFocusTime(remaining, sessionMinutes >= 60);
-          const subName =
-            unifiedSubjects.find((sub) => sub.id === selectedSubjectId)?.name || 'General Focus';
-          const modeLabel =
-            timerMode === 'pomodoro'
-              ? pomodoroPhase === 'work'
-                ? '🍅 Pomodoro'
-                : '☕ Break'
-              : '⏳ Timer';
-          pipControllerRef.current.update(timeStr, `${modeLabel} · ${subName}`, true);
-        }
-
         // Check completion
         if (remaining === 0) {
           setIsRunning(false);
@@ -274,6 +315,7 @@ export const FocusWidget: React.FC<FocusWidgetProps> = ({
     return () => clearInterval(interval);
   }, [
     isRunning,
+    isFullscreenOpen,
     timerMode,
     pomodoroPhase,
     sessionMinutes,
@@ -296,6 +338,7 @@ export const FocusWidget: React.FC<FocusWidgetProps> = ({
     setIsRunning(false);
     lastStartedTimestampRef.current = null;
     clearActiveTimer();
+    window.dispatchEvent(new CustomEvent('tracker:mini-focus-close'));
 
     setTimerMode(newMode);
 
@@ -316,10 +359,6 @@ export const FocusWidget: React.FC<FocusWidgetProps> = ({
       setTimeLeft(25 * 60);
     }
 
-    if (pipControllerRef.current?.isActive) {
-      pipControllerRef.current.close();
-      setIsPipActive(false);
-    }
   };
 
   const handleSelectPreset = (mins: number, phase: 'work' | 'short_break' | 'long_break' = 'work') => {
@@ -337,6 +376,7 @@ export const FocusWidget: React.FC<FocusWidgetProps> = ({
     setSessionMinutes(mins);
     setTimeLeft(mins * 60);
     clearActiveTimer();
+    window.dispatchEvent(new CustomEvent('tracker:mini-focus-close'));
   };
 
   const handleAdjustCustomMinutes = (delta: number) => {
@@ -372,12 +412,6 @@ export const FocusWidget: React.FC<FocusWidgetProps> = ({
         };
         saveActiveTimer(activeState);
 
-        if (pipControllerRef.current?.isActive) {
-          const timeStr = formatFocusTime(stopwatchSeconds, true);
-          const subName =
-            unifiedSubjects.find((sub) => sub.id === selectedSubjectId)?.name || 'General Focus';
-          pipControllerRef.current.update(timeStr, `⏸ Stopwatch · ${subName}`, false);
-        }
       } else {
         const activeMode: FocusTimerMode =
           timerMode === 'pomodoro'
@@ -398,12 +432,6 @@ export const FocusWidget: React.FC<FocusWidgetProps> = ({
         };
         saveActiveTimer(activeState);
 
-        if (pipControllerRef.current?.isActive) {
-          const timeStr = formatFocusTime(timeLeft, sessionMinutes >= 60);
-          const subName =
-            unifiedSubjects.find((sub) => sub.id === selectedSubjectId)?.name || 'General Focus';
-          pipControllerRef.current.update(timeStr, subName, false);
-        }
       }
     } else {
       // Resuming / Starting
@@ -450,10 +478,7 @@ export const FocusWidget: React.FC<FocusWidgetProps> = ({
       setTimeLeft(sessionMinutes * 60);
     }
 
-    if (pipControllerRef.current?.isActive) {
-      pipControllerRef.current.close();
-      setIsPipActive(false);
-    }
+    window.dispatchEvent(new CustomEvent('tracker:mini-focus-close'));
   };
 
   // Stop & Log Early as 'interrupted' session using actual elapsed time
@@ -546,47 +571,31 @@ export const FocusWidget: React.FC<FocusWidgetProps> = ({
     }
   };
 
-  // ── Picture-in-Picture Toggle ──
-  const handleTogglePip = async () => {
-    if (isPipActive && pipControllerRef.current) {
-      pipControllerRef.current.close();
-      setIsPipActive(false);
-      return;
+  const handleOpenMiniFocus = () => {
+    let elapsedSeconds = accumulatedSecondsRef.current;
+    if (isRunning && lastStartedTimestampRef.current) {
+      elapsedSeconds += Math.floor((Date.now() - lastStartedTimestampRef.current) / 1000);
     }
-
-    const timeStr =
-      timerMode === 'stopwatch'
-        ? formatFocusTime(stopwatchSeconds, true)
-        : formatFocusTime(timeLeft, sessionMinutes >= 60);
-
-    const subName =
-      unifiedSubjects.find((s) => s.id === selectedSubjectId)?.name || 'General Focus';
-    const modeLabel =
-      timerMode === 'pomodoro'
-        ? '🍅 Pomodoro'
-        : timerMode === 'timer'
-        ? '⏳ Timer'
-        : '⏱ Stopwatch';
-
-    const controller = await requestTimerPip(`${modeLabel} ${timeStr}`, subName, isRunning, () => {
-      setIsPipActive(false);
-      pipControllerRef.current = null;
-    });
-
-    if (controller) {
-      pipControllerRef.current = controller;
-      setIsPipActive(true);
-    }
-  };
-
-  // Clean up PiP on unmount
-  useEffect(() => {
-    return () => {
-      if (pipControllerRef.current?.isActive) {
-        pipControllerRef.current.close();
-      }
+    const mode: FocusTimerMode = timerMode === 'pomodoro'
+      ? pomodoroPhase === 'work' ? 'pomodoro' : pomodoroPhase
+      : timerMode;
+    const subjectName = unifiedSubjects.find((subject) => subject.id === selectedSubjectId)?.name || 'General Focus';
+    const timerState: ActiveTimerState = {
+      mode,
+      plannedSeconds: timerMode === 'stopwatch' ? 0 : sessionMinutes * 60,
+      accumulatedSeconds: elapsedSeconds,
+      lastStartedTimestamp: isRunning ? Date.now() : null,
+      isRunning,
+      subjectId: selectedSubjectId || undefined,
+      subjectName,
+      notes: notes || undefined,
+      sessionStartedAt: sessionStartedAtRef.current || undefined,
+      status: isRunning ? 'running' : elapsedSeconds > 0 ? 'paused' : 'idle',
+      laps: timerMode === 'stopwatch' ? laps : undefined,
     };
-  }, []);
+    saveActiveTimer(timerState);
+    window.dispatchEvent(new CustomEvent('tracker:mini-focus-open'));
+  };
 
   // Compute live focus summaries & streaks
   const rolloverHour = state.settings?.studyDayRolloverHour ?? 0;
@@ -596,9 +605,13 @@ export const FocusWidget: React.FC<FocusWidgetProps> = ({
   // Time display strings
   const formattedCountdown = formatFocusTime(timeLeft, sessionMinutes >= 60);
   const formattedStopwatch = formatFocusTime(stopwatchSeconds, true);
+  const clockProgress = timerMode === 'stopwatch'
+    ? (stopwatchSeconds % 3600) / 3600
+    : Math.max(0, Math.min(1, (sessionMinutes * 60 - timeLeft) / Math.max(sessionMinutes * 60, 1)));
 
   return (
     <Card
+      className="focus-studio-card"
       eyebrow="Cognitive Energy"
       title="Deep Focus & Study"
       subtitle={
@@ -623,10 +636,11 @@ export const FocusWidget: React.FC<FocusWidgetProps> = ({
       }
     >
       {/* ── Mode Switcher Tab Bar ───────────────────────────────── */}
-      <div className="flex items-center justify-center p-1 rounded-xl bg-ivory-150 dark:bg-espresso-900 border border-ivory-300 dark:border-espresso-750 mb-4 max-w-sm mx-auto w-full select-none">
+      <div className="focus-mode-switch flex items-center justify-center p-1 rounded-xl bg-ivory-150 dark:bg-espresso-900 border border-ivory-300 dark:border-espresso-750 mb-4 max-w-sm mx-auto w-full select-none" role="group" aria-label="Choose focus clock mode">
         <button
           type="button"
           onClick={() => handleSwitchMode('pomodoro')}
+          aria-pressed={timerMode === 'pomodoro'}
           className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer ${
             timerMode === 'pomodoro'
               ? 'bg-white dark:bg-espresso-750 text-espresso-950 dark:text-ivory-50 shadow-xs'
@@ -640,6 +654,7 @@ export const FocusWidget: React.FC<FocusWidgetProps> = ({
         <button
           type="button"
           onClick={() => handleSwitchMode('timer')}
+          aria-pressed={timerMode === 'timer'}
           className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer ${
             timerMode === 'timer'
               ? 'bg-white dark:bg-espresso-750 text-espresso-950 dark:text-ivory-50 shadow-xs'
@@ -653,6 +668,7 @@ export const FocusWidget: React.FC<FocusWidgetProps> = ({
         <button
           type="button"
           onClick={() => handleSwitchMode('stopwatch')}
+          aria-pressed={timerMode === 'stopwatch'}
           className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer ${
             timerMode === 'stopwatch'
               ? 'bg-white dark:bg-espresso-750 text-espresso-950 dark:text-ivory-50 shadow-xs'
@@ -666,40 +682,30 @@ export const FocusWidget: React.FC<FocusWidgetProps> = ({
 
       {/* Timer / Stopwatch Display Box */}
       <div
-        className={`flex flex-col items-center justify-center py-6 px-4 rounded-2xl bg-ivory-100/90 dark:bg-espresso-800/90 border transition-all duration-300 text-center mb-6 relative overflow-hidden ${
+        className={`focus-clock-stage flex flex-col items-center justify-center py-6 px-4 rounded-2xl bg-ivory-100/90 dark:bg-espresso-800/90 border transition-all duration-300 text-center mb-6 relative overflow-hidden ${
           isRunning
             ? 'border-transparent neon-ring shadow-[0_0_30px_-5px_color-mix(in_srgb,var(--accent)_40%,transparent)]'
             : 'border-ivory-200 dark:border-espresso-750'
         }`}
       >
-        {/* Fullscreen & PiP Controls */}
+        {/* Fullscreen & in-app mini player controls */}
         <div className="absolute top-3 right-3 flex items-center gap-1.5 z-10">
           <button
-            onClick={() => setIsFullscreenOpen(true)}
+            onClick={openDeepFocusFullscreen}
             title="Enter Fullscreen Mode"
             aria-label="Enter Fullscreen Mode"
             className="p-2 rounded-xl transition bg-white/80 dark:bg-espresso-700/80 text-espresso-700 dark:text-espresso-200 hover:text-espresso-950 dark:hover:text-white border border-ivory-300 dark:border-espresso-600 shadow-xs flex items-center gap-1 text-xs font-semibold cursor-pointer"
           >
             <Maximize2 className="w-3.5 h-3.5 text-terracotta-500" />
-            <span className="hidden sm:inline">Fullscreen</span>
           </button>
-          {pipSupported && (
-            <button
-              onClick={handleTogglePip}
-              title={
-                isPipActive
-                  ? 'Close floating Picture-in-Picture window'
-                  : 'Pop out floating Picture-in-Picture timer'
-              }
-              className={`p-2 rounded-xl transition cursor-pointer ${
-                isPipActive
-                  ? 'bg-espresso-800 text-ivory-50 dark:bg-ivory-100 dark:text-espresso-950 shadow-subtle'
-                  : 'bg-white/80 dark:bg-espresso-700/80 text-espresso-600 dark:text-espresso-300 hover:text-espresso-900 border border-ivory-300 dark:border-espresso-600'
-              }`}
-            >
-              <Tv className="w-3.5 h-3.5" />
-            </button>
-          )}
+          <button
+            onClick={handleOpenMiniFocus}
+            aria-label="Open mini focus panel"
+            title="Open mini focus panel"
+            className="p-2 rounded-xl transition bg-white/80 dark:bg-espresso-700/80 text-espresso-600 dark:text-espresso-300 hover:text-espresso-900 border border-ivory-300 dark:border-espresso-600 shadow-xs flex items-center gap-1.5 text-xs font-semibold cursor-pointer"
+          >
+            <Tv className="w-3.5 h-3.5 text-terracotta-500" />
+          </button>
         </div>
 
         {/* 3D Focus Polyhedron Sculpture */}
@@ -726,17 +732,22 @@ export const FocusWidget: React.FC<FocusWidgetProps> = ({
           </div>
         )}
 
-        {/* Large Digits */}
-        <div className="relative my-2">
-          {isRunning && (
-            <div
-              className="absolute -inset-4 rounded-full blur-xl animate-pulse pointer-events-none"
-              style={{ backgroundColor: 'color-mix(in srgb, var(--accent) 25%, transparent)' }}
-            />
-          )}
-          <span className="relative z-10 font-mono tabular-nums text-5xl sm:text-6xl font-bold tracking-tight text-espresso-950 dark:text-ivory-50 select-none">
-            {timerMode === 'stopwatch' ? formattedStopwatch : formattedCountdown}
-          </span>
+        {/* High contrast interval clock */}
+        <div className="focus-clock-face relative my-3 flex h-44 w-44 items-center justify-center rounded-full">
+          <svg viewBox="0 0 180 180" className="absolute inset-0 h-full w-full -rotate-90" aria-hidden="true">
+            <circle cx="90" cy="90" r="77" fill="none" stroke="rgba(255,255,255,0.09)" strokeWidth="2" />
+            <circle cx="90" cy="90" r="77" fill="none" stroke="url(#focus-clock-gradient)" strokeWidth="4" strokeLinecap="round" strokeDasharray="483.8" strokeDashoffset={483.8 * (1 - clockProgress)} className="transition-[stroke-dashoffset] duration-500" />
+            <defs><linearGradient id="focus-clock-gradient" x1="0" y1="0" x2="1" y2="1"><stop stopColor="var(--accent)" /><stop offset="1" stopColor="var(--accent-dark-resolved)" /></linearGradient></defs>
+          </svg>
+          <div className="absolute inset-5 rounded-full border border-white/[0.08] bg-white/[0.035] shadow-[inset_0_1px_18px_rgba(255,255,255,0.04)]" />
+          <div className="relative z-10 text-center">
+            <span role="timer" aria-label={`${timerMode === 'stopwatch' ? 'Elapsed' : 'Remaining'} ${timerMode === 'stopwatch' ? formattedStopwatch : formattedCountdown}`} className="focus-clock-digits block font-mono tabular-nums text-[2.6rem] sm:text-5xl font-semibold tracking-[-0.08em] text-white select-none">
+              {timerMode === 'stopwatch' ? formattedStopwatch : formattedCountdown}
+            </span>
+            <span className="mt-1 block text-[9px] font-mono uppercase tracking-[0.24em] text-violet-200/60">
+              {timerMode === 'stopwatch' ? 'Elapsed' : isRunning ? 'Remaining' : 'Minutes'}
+            </span>
+          </div>
         </div>
 
         {/* ── Mode-Specific Sub-Controls & Presets ────────────── */}
@@ -812,10 +823,11 @@ export const FocusWidget: React.FC<FocusWidgetProps> = ({
                 type="button"
                 onClick={() => handleAdjustCustomMinutes(-5)}
                 disabled={isRunning || sessionMinutes <= 5}
+                aria-label="Decrease duration by 5 minutes"
                 title="Decrease 5 minutes"
-                className="p-1.5 rounded-lg border border-ivory-300 dark:border-espresso-600 bg-white dark:bg-espresso-700 text-espresso-700 dark:text-espresso-200 hover:bg-ivory-100 dark:hover:bg-espresso-600 disabled:opacity-40 transition cursor-pointer"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full border-0 bg-transparent text-2xl leading-none font-medium text-espresso-700 dark:text-ivory-200 hover:text-[var(--accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] disabled:opacity-35 transition-colors cursor-pointer"
               >
-                <Minus className="w-3.5 h-3.5" />
+                −
               </button>
 
               <span className="text-xs font-mono font-semibold text-espresso-700 dark:text-espresso-300">
@@ -826,10 +838,11 @@ export const FocusWidget: React.FC<FocusWidgetProps> = ({
                 type="button"
                 onClick={() => handleAdjustCustomMinutes(5)}
                 disabled={isRunning || sessionMinutes >= 360}
+                aria-label="Increase duration by 5 minutes"
                 title="Increase 5 minutes"
-                className="p-1.5 rounded-lg border border-ivory-300 dark:border-espresso-600 bg-white dark:bg-espresso-700 text-espresso-700 dark:text-espresso-200 hover:bg-ivory-100 dark:hover:bg-espresso-600 disabled:opacity-40 transition cursor-pointer"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full border-0 bg-transparent text-2xl leading-none font-medium text-espresso-700 dark:text-ivory-200 hover:text-[var(--accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] disabled:opacity-35 transition-colors cursor-pointer"
               >
-                <Plus className="w-3.5 h-3.5" />
+                +
               </button>
             </div>
           </div>
@@ -1056,31 +1069,29 @@ export const FocusWidget: React.FC<FocusWidgetProps> = ({
         </div>
       )}
 
-      {/* Deep Focus 2.0 Fullscreen Immersive Mode */}
+      {/* Deep Focus 3.0 is portaled to document.body by the immersive component. */}
       <DeepFocusFullscreen
         isOpen={isFullscreenOpen}
-        onClose={() => {
+        plannerFocusLaunch={plannerFocusLaunch}
+        onClose={(snapshot) => {
           setIsFullscreenOpen(false);
-          const saved = loadActiveTimer();
-          if (saved) {
-            if (saved.mode === 'stopwatch') {
-              setTimerMode('stopwatch');
-              const progress = calculateTimerProgress(saved);
-              setStopwatchSeconds(progress.elapsedFocusSeconds);
-              accumulatedSecondsRef.current = progress.elapsedFocusSeconds;
-              setIsRunning(saved.isRunning);
-              lastStartedTimestampRef.current = saved.isRunning ? Date.now() : null;
-              if (saved.laps) setLaps(saved.laps);
-            } else {
-              if (saved.mode === 'timer') setTimerMode('timer');
-              else setTimerMode('pomodoro');
-              const progress = calculateTimerProgress(saved);
-              setTimeLeft(progress.timeLeftSeconds);
-              accumulatedSecondsRef.current = progress.elapsedFocusSeconds;
-              setIsRunning(saved.isRunning);
-              lastStartedTimestampRef.current = saved.isRunning ? Date.now() : null;
-            }
+          const progress = calculateTimerProgress(snapshot);
+          if (snapshot.mode === 'stopwatch') {
+            setTimerMode('stopwatch');
+            setStopwatchSeconds(progress.elapsedFocusSeconds);
+            if (snapshot.laps) setLaps(snapshot.laps);
+          } else {
+            setTimerMode(snapshot.mode === 'timer' ? 'timer' : 'pomodoro');
+            setSessionMinutes(Math.max(1, Math.round(snapshot.plannedSeconds / 60)));
+            setTimeLeft(progress.timeLeftSeconds);
           }
+          if (snapshot.subjectId) setSelectedSubjectId(snapshot.subjectId);
+          accumulatedSecondsRef.current = progress.elapsedFocusSeconds;
+          lastStartedTimestampRef.current = snapshot.isRunning ? Date.now() : null;
+          sessionStartedAtRef.current = snapshot.sessionStartedAt || null;
+          setIsRunning(snapshot.isRunning);
+          if (!snapshot.isRunning && snapshot.status === 'completed') clearActiveTimer();
+          if (plannerFocusLaunch) onPlannerFocusLaunchConsumed?.();
         }}
         initialMinutes={sessionMinutes}
         initialMode={timerMode}

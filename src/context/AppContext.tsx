@@ -36,7 +36,26 @@ import {
   MockTest,
   ErrorLogEntry,
   CalendarEvent,
+  WorkoutSession,
+  WorkoutExercise,
+  ExerciseSet,
+  SetType,
+  WorkoutProgram,
+  WorkoutTemplate,
+  ExerciseLibraryItem,
+  LocalBarcodeMapping,
+  MealPlanDay,
+  BodyMeasurementEntry,
+  BodyCompositionEntry,
+  ProgressPhotoEntry,
+  SleepRecoveryEntry,
+  CardioSession,
+  HydrationLogEntry,
 } from '../types';
+import { convertWorkoutSessionToGymWorkout } from '../utils/fitnessAdapters';
+import { getActiveAccentColor } from '../utils/themeColors';
+import { detectSessionPRs } from '../utils/progressiveOverload';
+import { DEFAULT_WORKOUT_PROGRAMS, DEFAULT_WORKOUT_TEMPLATES } from '../data/defaultPrograms';
 import {
   storageService,
   STORAGE_KEY_V2,
@@ -57,17 +76,18 @@ import {
   buildCustomPlaylistEmbedUrl,
 } from '../utils/youtubeValidator';
 import { authService, AuthUser } from '../services/authService';
-import { cloudSyncService, CloudRecord } from '../services/cloudSyncService';
+import { cloudSyncService, CloudRecord, isQuotaOrDegradedError } from '../services/cloudSyncService';
 import { classSpaceService } from '../services/classSpaceService';
 import { SAMPLE_EDUHUB_COURSE } from '../services/eduhubStorage';
+import { removeBloomEnvelope } from '../services/bloomVault';
 import { SyncConflictModal } from '../components/common/SyncConflictModal';
 
-interface AppContextType {
+export interface AppContextType {
   state: AppStateData;
   // Google Auth & Cloud Synchronization
   authUser: AuthUser | null;
   isAuthHydrated: boolean;
-  syncStatus: 'idle' | 'syncing' | 'synced' | 'error' | 'offline';
+  syncStatus: 'idle' | 'syncing' | 'synced' | 'error' | 'offline' | 'pass_required';
   lastSyncedAt: Date | null;
   signInWithGoogle: () => Promise<{ success: boolean; error?: string }>;
   signOut: () => Promise<void>;
@@ -215,6 +235,56 @@ interface AppContextType {
   toggleEventComplete: (id: string) => void;
   toggleEventSubtask: (eventId: string, subtaskId: string) => void;
   fullReset: () => void;
+  // Fitness Ecosystem: Active Workout Execution
+  activeWorkout: WorkoutSession | null;
+  isWorkoutModalMinimized: boolean;
+  setWorkoutModalMinimized: (minimized: boolean) => void;
+  startWorkout: (templateOrSplitName?: string, programId?: string, templateId?: string) => void;
+  updateActiveWorkoutSet: (exerciseIndex: number, setIndex: number, updates: Partial<ExerciseSet>) => void;
+  addActiveWorkoutSet: (exerciseIndex: number, setType?: SetType) => void;
+  removeActiveWorkoutSet: (exerciseIndex: number, setIndex: number) => void;
+  addExerciseToActiveWorkout: (exerciseId: string, exerciseName: string) => void;
+  substituteExerciseInActiveWorkout: (exerciseIndex: number, newExerciseId: string, newExerciseName: string) => void;
+  completeActiveWorkout: () => void;
+  discardActiveWorkout: () => void;
+  linkSuperset: (exerciseIndexA: number, exerciseIndexB: number) => void;
+  // Fitness Ecosystem: Rest Timer
+  restTimer: { targetEndTimeMs: number; totalSeconds: number; exerciseName?: string } | null;
+  startRestTimer: (seconds: number, exerciseName?: string) => void;
+  adjustRestTimer: (deltaSeconds: number) => void;
+  clearRestTimer: () => void;
+  // Fitness Ecosystem: Workout History & Programs
+  saveWorkoutSession: (session: WorkoutSession) => void;
+  deleteWorkoutSession: (id: string) => void;
+  saveWorkoutProgram: (program: WorkoutProgram) => void;
+  deleteWorkoutProgram: (id: string) => void;
+  setActiveProgram: (id: string) => void;
+  saveWorkoutTemplate: (template: WorkoutTemplate) => void;
+  deleteWorkoutTemplate: (id: string) => void;
+  addCustomExercise: (exercise: Omit<ExerciseLibraryItem, 'id' | 'isCustom'>) => string;
+  toggleExerciseFavorite: (exerciseId: string) => void;
+  // Fitness Ecosystem: Meal Planning & Barcodes
+  saveMealPlanDay: (planDay: MealPlanDay) => void;
+  deleteMealPlanDay: (id: string) => void;
+  copyPlannedToActualDiary: (date: string) => number;
+  saveBarcodeMapping: (barcode: string, foodId: string, brand?: string) => void;
+  // Fitness Ecosystem: Body Tracking & Progress Photos
+  logBodyMeasurement: (entry: Omit<BodyMeasurementEntry, 'id' | 'createdAt'>) => string;
+  deleteBodyMeasurement: (id: string) => void;
+  logBodyComposition: (entry: Omit<BodyCompositionEntry, 'id'>) => string;
+  deleteBodyComposition: (id: string) => void;
+  saveProgressPhoto: (entry: Omit<ProgressPhotoEntry, 'id' | 'createdAt'> & { id?: string }) => string;
+  deleteProgressPhoto: (id: string) => void;
+  // Fitness Ecosystem: Recovery, Sleep & Cardio
+  logSleepRecovery: (entry: Omit<SleepRecoveryEntry, 'id' | 'createdAt'>) => string;
+  deleteSleepRecovery: (id: string) => void;
+  logCardioSession: (session: Omit<CardioSession, 'id' | 'createdAt'>) => string;
+  deleteCardioSession: (id: string) => void;
+  // Fitness Ecosystem: Hydration & Insights
+  logHydration: (amountMl: number, date?: string) => void;
+  deleteHydrationLog: (id: string) => void;
+  getTodayHydration: () => number;
+  dismissFitnessInsight: (id: string) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -231,13 +301,51 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Google Auth & Cloud Sync States
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [isAuthHydrated, setIsAuthHydrated] = useState<boolean>(!authService.isConfigured);
-  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error' | 'offline'>('idle');
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error' | 'offline' | 'pass_required'>('idle');
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
   const [conflictData, setConflictData] = useState<{
     cloudRecord: CloudRecord;
   } | null>(null);
   const initialSyncedUserIdRef = useRef<string | null>(null);
   const stateVersionRef = useRef<number>(0);
+  const lastSyncedVersionRef = useRef<number>(-1);
+  const isSyncingRef = useRef<boolean>(false);
+  const syncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const backoffDelayRef = useRef<number>(2500);
+  const isDegradedModeRef = useRef<boolean>(false);
+  const degradedUntilRef = useRef<number>(0);
+
+  // Fitness Ecosystem: Active Workout & Rest Timer States
+  const [activeWorkout, setActiveWorkout] = useState<WorkoutSession | null>(() => {
+    try {
+      const activeUid = localStorage.getItem('tracker_active_user_id') || 'usr_local_student';
+      const saved = localStorage.getItem(`tracker_active_workout_${activeUid}`);
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const [restTimer, setRestTimer] = useState<{
+    targetEndTimeMs: number;
+    totalSeconds: number;
+    exerciseName?: string;
+  } | null>(null);
+
+  const [isWorkoutModalMinimized, setIsWorkoutModalMinimized] = useState<boolean>(false);
+
+  // Sync active workout to localStorage
+  useEffect(() => {
+    try {
+      const activeUid = authUser?.id || 'usr_local_student';
+      const key = `tracker_active_workout_${activeUid}`;
+      if (activeWorkout) {
+        localStorage.setItem(key, JSON.stringify(activeWorkout));
+      } else {
+        localStorage.removeItem(key);
+      }
+    } catch {}
+  }, [activeWorkout, authUser?.id]);
 
   // Automatically track state mutations for upload in-flight correctness
   useEffect(() => {
@@ -307,7 +415,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       (data.foodDiaryEntries?.length || 0) > 0 ||
       (data.customFoods?.length || 0) > 0 ||
       (data.recipes?.length || 0) > 0 ||
-      (data.weightLogs?.length || 0) > 0
+      (data.weightLogs?.length || 0) > 0 ||
+      (data.workoutSessions?.length || 0) > 0 ||
+      (data.workoutPrograms?.length || 0) > 0 ||
+      (data.workoutTemplates?.length || 0) > 0 ||
+      (data.customBarcodes?.length || 0) > 0 ||
+      (data.mealPlans?.length || 0) > 0 ||
+      (data.bodyMeasurements?.length || 0) > 0 ||
+      (data.bodyCompositions?.length || 0) > 0 ||
+      (data.progressPhotos?.length || 0) > 0 ||
+      (data.sleepRecoveryLogs?.length || 0) > 0 ||
+      (data.cardioSessions?.length || 0) > 0 ||
+      (data.hydrationLogs?.length || 0) > 0
     );
   };
 
@@ -366,6 +485,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             cloudSyncService.clearPendingSync(user.id);
             setSyncStatus('synced');
             setLastSyncedAt(new Date());
+            lastSyncedVersionRef.current = stateVersionRef.current;
           } else {
             cloudSyncService.markPendingSync(user.id);
             setSyncStatus('offline');
@@ -395,6 +515,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setSyncStatus('synced');
           setLastSyncedAt(new Date(cloudRecord.updatedAt));
           initialSyncedUserIdRef.current = user.id;
+          lastSyncedVersionRef.current = stateVersionRef.current;
         }
         return;
       }
@@ -415,6 +536,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             cloudSyncService.clearPendingSync(user.id);
             setSyncStatus('synced');
             setLastSyncedAt(new Date());
+            lastSyncedVersionRef.current = stateVersionRef.current;
           } else {
             cloudSyncService.markPendingSync(user.id);
             setSyncStatus('offline');
@@ -434,6 +556,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             cloudSyncService.clearPendingSync(user.id);
             setSyncStatus('synced');
             setLastSyncedAt(new Date());
+            lastSyncedVersionRef.current = stateVersionRef.current;
           } else {
             cloudSyncService.markPendingSync(user.id);
             setSyncStatus('offline');
@@ -444,6 +567,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setSyncStatus('synced');
           setLastSyncedAt(new Date());
           initialSyncedUserIdRef.current = user.id;
+          lastSyncedVersionRef.current = stateVersionRef.current;
         }
         return;
       }
@@ -485,31 +609,97 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Auto-sync debounced when state changes and user is signed in
   useEffect(() => {
-    if (!authUser || conflictData || syncStatus === 'syncing' || initialSyncedUserIdRef.current !== authUser.id) return;
+    if (!authUser || conflictData || initialSyncedUserIdRef.current !== authUser.id) return;
+
+    // Guard against redundant uploads when state version has already been successfully synced
+    if (stateVersionRef.current === lastSyncedVersionRef.current) return;
+
+    // Degraded mode: if Supabase quota is exhausted (HTTP 402), back off for 15 minutes
+    if (isDegradedModeRef.current && Date.now() < degradedUntilRef.current) {
+      cloudSyncService.markPendingSync(authUser.id);
+      return;
+    }
+
+    if (syncTimeoutRef.current) {
+      clearTimeout(syncTimeoutRef.current);
+      syncTimeoutRef.current = null;
+    }
+
     const versionAtStart = stateVersionRef.current;
     const targetUserId = authUser.id;
-    const timeout = setTimeout(async () => {
-      if (initialSyncedUserIdRef.current !== targetUserId) return;
-      setSyncStatus('syncing');
-      const res = await cloudSyncService.uploadToCloud(targetUserId, state);
-      if (initialSyncedUserIdRef.current !== targetUserId) return;
-      if (res.success) {
-        // If state was modified while this upload was in flight, preserve pending sync
-        if (stateVersionRef.current === versionAtStart) {
-          cloudSyncService.clearPendingSync(targetUserId);
-          setSyncStatus('synced');
-          setLastSyncedAt(new Date());
-        } else {
-          cloudSyncService.markPendingSync(targetUserId);
-        }
-      } else {
-        cloudSyncService.markPendingSync(targetUserId);
-        setSyncStatus('offline');
-      }
-    }, 2500);
+    const delay = backoffDelayRef.current;
 
-    return () => clearTimeout(timeout);
-  }, [state, authUser, conflictData, syncStatus]);
+    syncTimeoutRef.current = setTimeout(async () => {
+      if (initialSyncedUserIdRef.current !== targetUserId) return;
+      if (isSyncingRef.current) {
+        // Queue pending sync if an upload is currently in flight
+        cloudSyncService.markPendingSync(targetUserId);
+        return;
+      }
+
+      isSyncingRef.current = true;
+      setSyncStatus('syncing');
+
+      try {
+        const res = await cloudSyncService.uploadToCloud(targetUserId, state);
+        if (initialSyncedUserIdRef.current !== targetUserId) return;
+
+        if (res.success) {
+          lastSyncedVersionRef.current = versionAtStart;
+          backoffDelayRef.current = 2500;
+          isDegradedModeRef.current = false;
+
+          // If state was modified while this upload was in flight, preserve pending sync
+          if (stateVersionRef.current === versionAtStart) {
+            cloudSyncService.clearPendingSync(targetUserId);
+            setSyncStatus('synced');
+            setLastSyncedAt(new Date());
+          } else {
+            cloudSyncService.markPendingSync(targetUserId);
+            setSyncStatus('idle');
+          }
+        } else {
+          if (res.error && isQuotaOrDegradedError(res.error)) {
+            isDegradedModeRef.current = true;
+            degradedUntilRef.current = Date.now() + 15 * 60 * 1000;
+            cloudSyncService.markPendingSync(targetUserId);
+            setSyncStatus('offline');
+          } else if (res.error && (res.error.includes('permission') || res.error.includes('insufficient permissions'))) {
+            // Server Firestore rule hasActivePass rejected write: user requires an active Pro Pass
+            cloudSyncService.clearPendingSync(targetUserId);
+            setSyncStatus('pass_required');
+          } else {
+            backoffDelayRef.current = Math.min(30000, backoffDelayRef.current * 2);
+            cloudSyncService.markPendingSync(targetUserId);
+            setSyncStatus('offline');
+          }
+        }
+      } catch (err: any) {
+        if (isQuotaOrDegradedError(err?.message)) {
+          isDegradedModeRef.current = true;
+          degradedUntilRef.current = Date.now() + 15 * 60 * 1000;
+          cloudSyncService.markPendingSync(targetUserId);
+          setSyncStatus('offline');
+        } else if (err?.message && (err.message.includes('permission') || err.message.includes('insufficient permissions'))) {
+          cloudSyncService.clearPendingSync(targetUserId);
+          setSyncStatus('pass_required');
+        } else {
+          backoffDelayRef.current = Math.min(30000, backoffDelayRef.current * 2);
+          cloudSyncService.markPendingSync(targetUserId);
+          setSyncStatus('offline');
+        }
+      } finally {
+        isSyncingRef.current = false;
+      }
+    }, delay);
+
+    return () => {
+      if (syncTimeoutRef.current) {
+        clearTimeout(syncTimeoutRef.current);
+        syncTimeoutRef.current = null;
+      }
+    };
+  }, [state, authUser, conflictData]);
 
   // Network reconnect listener to auto-flush pending syncs when connection is restored
   useEffect(() => {
@@ -553,6 +743,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     initialSyncedUserIdRef.current = null;
+    lastSyncedVersionRef.current = -1;
+    isSyncingRef.current = false;
+    if (syncTimeoutRef.current) {
+      clearTimeout(syncTimeoutRef.current);
+      syncTimeoutRef.current = null;
+    }
     classSpaceService.archiveAndClearLocalData(authUser?.id);
     await authService.signOut();
     setAuthUser(null);
@@ -579,22 +775,55 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const syncNow = async () => {
     if (!authUser || initialSyncedUserIdRef.current !== authUser.id) return;
+    if (isSyncingRef.current) return;
     const targetUserId = authUser.id;
     const versionAtStart = stateVersionRef.current;
+    isSyncingRef.current = true;
     setSyncStatus('syncing');
-    const res = await cloudSyncService.uploadToCloud(targetUserId, state);
-    if (initialSyncedUserIdRef.current !== targetUserId) return;
-    if (res.success) {
-      if (stateVersionRef.current === versionAtStart) {
+    try {
+      const res = await cloudSyncService.uploadToCloud(targetUserId, state);
+      if (initialSyncedUserIdRef.current !== targetUserId) return;
+      if (res.success) {
+        lastSyncedVersionRef.current = versionAtStart;
+        backoffDelayRef.current = 2500;
+        isDegradedModeRef.current = false;
+        if (stateVersionRef.current === versionAtStart) {
+          cloudSyncService.clearPendingSync(targetUserId);
+          setSyncStatus('synced');
+          setLastSyncedAt(new Date());
+        } else {
+          cloudSyncService.markPendingSync(targetUserId);
+          setSyncStatus('idle');
+        }
+      } else {
+        if (res.error && isQuotaOrDegradedError(res.error)) {
+          isDegradedModeRef.current = true;
+          degradedUntilRef.current = Date.now() + 15 * 60 * 1000;
+          cloudSyncService.markPendingSync(targetUserId);
+          setSyncStatus('offline');
+        } else if (res.error && (res.error.includes('permission') || res.error.includes('insufficient permissions'))) {
+          cloudSyncService.clearPendingSync(targetUserId);
+          setSyncStatus('pass_required');
+        } else {
+          cloudSyncService.markPendingSync(targetUserId);
+          setSyncStatus('offline');
+        }
+      }
+    } catch (err: any) {
+      if (isQuotaOrDegradedError(err?.message)) {
+        isDegradedModeRef.current = true;
+        degradedUntilRef.current = Date.now() + 15 * 60 * 1000;
+        cloudSyncService.markPendingSync(targetUserId);
+        setSyncStatus('offline');
+      } else if (err?.message && (err.message.includes('permission') || err.message.includes('insufficient permissions'))) {
         cloudSyncService.clearPendingSync(targetUserId);
-        setSyncStatus('synced');
-        setLastSyncedAt(new Date());
+        setSyncStatus('pass_required');
       } else {
         cloudSyncService.markPendingSync(targetUserId);
+        setSyncStatus('offline');
       }
-    } else {
-      cloudSyncService.markPendingSync(targetUserId);
-      setSyncStatus('offline');
+    } finally {
+      isSyncingRef.current = false;
     }
   };
 
@@ -979,9 +1208,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         isSample: false,
       };
 
+      let updatedSessions = prev.workoutSessions || [];
+      const sessionIdx = updatedSessions.findIndex((s) => s.date === todayStr);
+      if (sessionIdx >= 0) {
+        const curSess = updatedSessions[sessionIdx];
+        updatedSessions = [...updatedSessions];
+        updatedSessions[sessionIdx] = {
+          ...curSess,
+          completed: nextCompleted,
+          updatedAt: new Date().toISOString(),
+        };
+      }
+
       return {
         ...prev,
         gymWorkouts: newWorkouts,
+        workoutSessions: updatedSessions,
       };
     });
   };
@@ -1402,7 +1644,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const newSubject: SyllabusSubject = {
         id: 'syl-' + Date.now() + '-' + Math.random().toString(36).slice(2, 5),
         name: name.trim(),
-        color: color || '#C45532',
+        color: color || getActiveAccentColor(),
         chapters: [],
       };
       return {
@@ -1697,73 +1939,71 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     let importedCount = 0;
     let skippedCount = 0;
 
-    setState((prev) => {
-      const baseTimetable = replaceExisting ? [] : [...prev.timetable];
-      const updatedSubjects = [...prev.subjects];
-      const req = getAttendanceReq();
+    const baseTimetable = replaceExisting ? [] : [...state.timetable];
+    const updatedSubjects = [...state.subjects];
+    const req = getAttendanceReq();
 
-      classes.forEach((item) => {
-        const normalizedDay = dayMap[item.day.toLowerCase().trim()];
-        if (!normalizedDay) {
-          skippedCount++;
-          return;
-        }
+    classes.forEach((item) => {
+      const normalizedDay = dayMap[item.day.toLowerCase().trim()];
+      if (!normalizedDay) {
+        skippedCount++;
+        return;
+      }
 
-        // Match or create subject
-        const subName = item.subject.trim();
-        let subject = updatedSubjects.find(
-          (s) =>
-            s.name.toLowerCase() === subName.toLowerCase() ||
-            s.code.toLowerCase() === subName.toLowerCase()
-        );
+      // Match or create subject
+      const subName = item.subject.trim();
+      let subject = updatedSubjects.find(
+        (s) =>
+          s.name.toLowerCase() === subName.toLowerCase() ||
+          s.code.toLowerCase() === subName.toLowerCase()
+      );
 
-        if (!subject) {
-          subject = {
-            id: 'sub-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
-            code: subName.length <= 6 ? subName.toUpperCase() : subName.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 5),
-            name: subName,
-            attended: 0,
-            totalConducted: 0,
-            targetPct: req,
-            color: '#B8732E',
-          };
-          updatedSubjects.push(subject);
-        }
-
-        // Check for duplicate in baseTimetable
-        const isDuplicate = baseTimetable.some(
-          (slot) =>
-            slot.dayOfWeek === normalizedDay &&
-            slot.startTime === item.startTime &&
-            slot.subjectId === subject!.id
-        );
-
-        if (isDuplicate) {
-          skippedCount++;
-          return;
-        }
-
-        const newSlot: TimetableSlot = {
-          id: 'tt-imp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7),
-          dayOfWeek: normalizedDay,
-          startTime: item.startTime,
-          endTime: item.endTime,
-          subjectId: subject.id,
-          room: item.room || item.location || undefined,
-          instructor: item.instructor || undefined,
-          notes: item.notes || undefined,
+      if (!subject) {
+        subject = {
+          id: 'sub-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+          code: subName.length <= 6 ? subName.toUpperCase() : subName.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 5),
+          name: subName,
+          attended: 0,
+          totalConducted: 0,
+          targetPct: req,
+          color: '#B8732E',
         };
+        updatedSubjects.push(subject);
+      }
 
-        baseTimetable.push(newSlot);
-        importedCount++;
-      });
+      // Check for duplicate in baseTimetable
+      const isDuplicate = baseTimetable.some(
+        (slot) =>
+          slot.dayOfWeek === normalizedDay &&
+          slot.startTime === item.startTime &&
+          slot.subjectId === subject!.id
+      );
 
-      return {
-        ...prev,
-        subjects: updatedSubjects,
-        timetable: baseTimetable,
+      if (isDuplicate) {
+        skippedCount++;
+        return;
+      }
+
+      const newSlot: TimetableSlot = {
+        id: 'tt-imp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7),
+        dayOfWeek: normalizedDay,
+        startTime: item.startTime,
+        endTime: item.endTime,
+        subjectId: subject.id,
+        room: item.room || item.location || undefined,
+        instructor: item.instructor || undefined,
+        notes: item.notes || undefined,
       };
+
+      baseTimetable.push(newSlot);
+      importedCount++;
     });
+
+    setState((prev) => ({
+      ...prev,
+      subjects: updatedSubjects,
+      timetable: baseTimetable,
+    }));
 
     return { importedCount, skippedCount };
   };
@@ -1869,7 +2109,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   ): { chaptersAdded: number; topicsAdded: number; subjectName: string } => {
     let chaptersAdded = 0;
     let topicsAdded = 0;
-    const subjectName = payload.subject.name;
+    const importedSubject = payload.subject;
+    if (!importedSubject) return { chaptersAdded, topicsAdded, subjectName: '' };
+    const subjectName = importedSubject.name;
 
     setState((prev) => {
       const currentList = [...(prev.syllabusSubjects ?? [])];
@@ -1895,7 +2137,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const target = { ...currentList[targetIdx], chapters: [...currentList[targetIdx].chapters] };
 
       // Import chapters
-      for (const importChapter of payload.subject.chapters) {
+      for (const importChapter of importedSubject.chapters) {
         // Check for existing chapter with same name
         const existingChapIdx = target.chapters.findIndex(
           (c) => c.name.toLowerCase() === importChapter.name.toLowerCase()
@@ -2828,12 +3070,615 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   };
 
+  // ── Fitness Ecosystem: Rest Timer ────────────────────────────────────────
+
+  const startRestTimer = useCallback((seconds: number, exerciseName?: string) => {
+    const sec = Math.max(5, seconds);
+    setRestTimer({
+      targetEndTimeMs: Date.now() + sec * 1000,
+      totalSeconds: sec,
+      exerciseName,
+    });
+  }, []);
+
+  const adjustRestTimer = useCallback((deltaSeconds: number) => {
+    setRestTimer((prev) => {
+      if (!prev) return null;
+      const newTarget = prev.targetEndTimeMs + deltaSeconds * 1000;
+      if (newTarget <= Date.now()) return null;
+      return {
+        ...prev,
+        targetEndTimeMs: newTarget,
+        totalSeconds: Math.max(5, prev.totalSeconds + deltaSeconds),
+      };
+    });
+  }, []);
+
+  const clearRestTimer = useCallback(() => {
+    setRestTimer(null);
+  }, []);
+
+  // ── Fitness Ecosystem: Active Workout Execution ──────────────────────────
+
+  const startWorkout = useCallback((templateOrSplitName?: string, programId?: string, templateId?: string) => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const nowIso = new Date().toISOString();
+
+    const templates = (state.workoutTemplates && state.workoutTemplates.length > 0)
+      ? state.workoutTemplates
+      : DEFAULT_WORKOUT_TEMPLATES;
+
+    const programs = (state.workoutPrograms && state.workoutPrograms.length > 0)
+      ? state.workoutPrograms
+      : DEFAULT_WORKOUT_PROGRAMS;
+
+    const resolvedProgramId = programId || programs.find((p) => p.isActive)?.id;
+    const matchedTemplate = templates.find((t) => t.id === templateId || t.name === templateOrSplitName);
+
+    let exercises: WorkoutExercise[] = [];
+    if (matchedTemplate) {
+      exercises = matchedTemplate.exercises.map((item, idx) => ({
+        id: `we-${Date.now()}-${idx}`,
+        exerciseId: item.exerciseId,
+        exerciseName: item.exerciseName,
+        order: idx + 1,
+        sets: Array.from({ length: item.targetSets }, (_, setIdx) => ({
+          id: `set-${Date.now()}-${idx}-${setIdx}`,
+          setNumber: setIdx + 1,
+          type: 'working' as SetType,
+          targetReps: item.recommendedRepRange.max,
+          actualReps: item.recommendedRepRange.max,
+          targetWeightKg: 0,
+          actualWeightKg: 0,
+          completed: false,
+          restTimeSeconds: item.defaultRestSeconds,
+        })),
+      }));
+    } else {
+      exercises = [
+        {
+          id: `we-${Date.now()}-0`,
+          exerciseId: 'ex-barbell-bench-press',
+          exerciseName: 'Barbell Bench Press',
+          order: 1,
+          sets: [
+            { id: `set-${Date.now()}-0-0`, setNumber: 1, type: 'warmup', actualWeightKg: 20, actualReps: 10, completed: false, restTimeSeconds: 60 },
+            { id: `set-${Date.now()}-0-1`, setNumber: 2, type: 'working', actualWeightKg: 40, actualReps: 8, completed: false, restTimeSeconds: 90 },
+            { id: `set-${Date.now()}-0-2`, setNumber: 3, type: 'working', actualWeightKg: 40, actualReps: 8, completed: false, restTimeSeconds: 90 },
+          ],
+        },
+      ];
+    }
+
+    const newSession: WorkoutSession = {
+      id: `session-${Date.now()}`,
+      date: todayStr,
+      startTime: nowIso,
+      programId: resolvedProgramId,
+      templateId: matchedTemplate?.id || templateId,
+      splitName: templateOrSplitName || matchedTemplate?.name || 'Workout Session',
+      exercises,
+      completed: false,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    };
+
+    setActiveWorkout(newSession);
+  }, [state.workoutTemplates]);
+
+  const updateActiveWorkoutSet = useCallback((exerciseIndex: number, setIndex: number, updates: Partial<ExerciseSet>) => {
+    setActiveWorkout((prev) => {
+      if (!prev || !prev.exercises[exerciseIndex] || !prev.exercises[exerciseIndex].sets[setIndex]) return prev;
+      const newExercises = [...prev.exercises];
+      const targetEx = { ...newExercises[exerciseIndex] };
+      const newSets = [...targetEx.sets];
+      const oldSet = newSets[setIndex];
+      const updatedSet = { ...oldSet, ...updates };
+      newSets[setIndex] = updatedSet;
+      targetEx.sets = newSets;
+      newExercises[exerciseIndex] = targetEx;
+
+      // Auto start rest timer on newly completed set
+      if (!oldSet.completed && updatedSet.completed) {
+        const restSec = updatedSet.restTimeSeconds || 90;
+        startRestTimer(restSec, targetEx.exerciseName);
+      }
+
+      return {
+        ...prev,
+        exercises: newExercises,
+        updatedAt: new Date().toISOString(),
+      };
+    });
+  }, [startRestTimer]);
+
+  const addActiveWorkoutSet = useCallback((exerciseIndex: number, setType: SetType = 'working') => {
+    setActiveWorkout((prev) => {
+      if (!prev || !prev.exercises[exerciseIndex]) return prev;
+      const newExercises = [...prev.exercises];
+      const targetEx = { ...newExercises[exerciseIndex] };
+      const lastSet = targetEx.sets[targetEx.sets.length - 1];
+      const newSetNumber = targetEx.sets.length + 1;
+      const newSet: ExerciseSet = {
+        id: `set-${Date.now()}-${newSetNumber}`,
+        setNumber: newSetNumber,
+        type: setType,
+        targetWeightKg: lastSet ? lastSet.actualWeightKg : 20,
+        actualWeightKg: lastSet ? lastSet.actualWeightKg : 20,
+        targetReps: lastSet ? lastSet.actualReps : 10,
+        actualReps: lastSet ? lastSet.actualReps : 10,
+        completed: false,
+        restTimeSeconds: lastSet?.restTimeSeconds || 90,
+      };
+      targetEx.sets = [...targetEx.sets, newSet];
+      newExercises[exerciseIndex] = targetEx;
+      return { ...prev, exercises: newExercises, updatedAt: new Date().toISOString() };
+    });
+  }, []);
+
+  const removeActiveWorkoutSet = useCallback((exerciseIndex: number, setIndex: number) => {
+    setActiveWorkout((prev) => {
+      if (!prev || !prev.exercises[exerciseIndex]) return prev;
+      const newExercises = [...prev.exercises];
+      const targetEx = { ...newExercises[exerciseIndex] };
+      const filtered = targetEx.sets.filter((_, idx) => idx !== setIndex).map((s, idx) => ({
+        ...s,
+        setNumber: idx + 1,
+      }));
+      targetEx.sets = filtered;
+      newExercises[exerciseIndex] = targetEx;
+      return { ...prev, exercises: newExercises, updatedAt: new Date().toISOString() };
+    });
+  }, []);
+
+  const addExerciseToActiveWorkout = useCallback((exerciseId: string, exerciseName: string) => {
+    setActiveWorkout((prev) => {
+      if (!prev) return prev;
+      const order = prev.exercises.length + 1;
+      const newExercise: WorkoutExercise = {
+        id: `we-${Date.now()}-${order}`,
+        exerciseId,
+        exerciseName,
+        order,
+        sets: [
+          { id: `set-${Date.now()}-1`, setNumber: 1, type: 'warmup', actualWeightKg: 20, actualReps: 10, completed: false, restTimeSeconds: 60 },
+          { id: `set-${Date.now()}-2`, setNumber: 2, type: 'working', actualWeightKg: 30, actualReps: 10, completed: false, restTimeSeconds: 90 },
+          { id: `set-${Date.now()}-3`, setNumber: 3, type: 'working', actualWeightKg: 30, actualReps: 10, completed: false, restTimeSeconds: 90 },
+        ],
+      };
+      return {
+        ...prev,
+        exercises: [...prev.exercises, newExercise],
+        updatedAt: new Date().toISOString(),
+      };
+    });
+  }, []);
+
+  const substituteExerciseInActiveWorkout = useCallback((exerciseIndex: number, newExerciseId: string, newExerciseName: string) => {
+    setActiveWorkout((prev) => {
+      if (!prev || !prev.exercises[exerciseIndex]) return prev;
+      const newExercises = [...prev.exercises];
+      const orig = newExercises[exerciseIndex];
+      newExercises[exerciseIndex] = {
+        ...orig,
+        substitutionOriginalExerciseId: orig.exerciseId,
+        exerciseId: newExerciseId,
+        exerciseName: newExerciseName,
+      };
+      return { ...prev, exercises: newExercises, updatedAt: new Date().toISOString() };
+    });
+  }, []);
+
+  const linkSuperset = useCallback((exerciseIndexA: number, exerciseIndexB: number) => {
+    setActiveWorkout((prev) => {
+      if (!prev || !prev.exercises[exerciseIndexA] || !prev.exercises[exerciseIndexB]) return prev;
+      const groupId = `ss-${Date.now()}`;
+      const newExercises = [...prev.exercises];
+      newExercises[exerciseIndexA] = { ...newExercises[exerciseIndexA], supersetGroupId: groupId };
+      newExercises[exerciseIndexB] = { ...newExercises[exerciseIndexB], supersetGroupId: groupId };
+      return { ...prev, exercises: newExercises, updatedAt: new Date().toISOString() };
+    });
+  }, []);
+
+  const completeActiveWorkout = useCallback(() => {
+    if (!activeWorkout) return;
+    const nowIso = new Date().toISOString();
+    let durationMinutes = activeWorkout.durationMinutes || 45;
+    if (activeWorkout.startTime) {
+      const elapsed = Math.round((Date.now() - new Date(activeWorkout.startTime).getTime()) / 60000);
+      if (elapsed > 0) durationMinutes = elapsed;
+    }
+
+    // Detect PRs against all historical sessions
+    const existingSessions = state.workoutSessions || [];
+    const exercisesWithPRs = detectSessionPRs(activeWorkout.exercises, existingSessions);
+
+    const completedSession: WorkoutSession = {
+      ...activeWorkout,
+      exercises: exercisesWithPRs,
+      durationMinutes,
+      completed: true,
+      endTime: nowIso,
+      updatedAt: nowIso,
+    };
+
+    // Synchronize legacy GymWorkout
+    const legacyGymWorkout = convertWorkoutSessionToGymWorkout(completedSession);
+
+    setState((prev) => {
+      const updatedSessions = [
+        completedSession,
+        ...(prev.workoutSessions || []).filter((s) => s.id !== completedSession.id),
+      ];
+      const updatedGymWorkouts = [
+        legacyGymWorkout,
+        ...(prev.gymWorkouts || []).filter((w) => w.id !== legacyGymWorkout.id && w.date !== completedSession.date),
+      ];
+      return {
+        ...prev,
+        workoutSessions: updatedSessions,
+        gymWorkouts: updatedGymWorkouts,
+      };
+    });
+
+    setActiveWorkout(null);
+    clearRestTimer();
+  }, [activeWorkout, state.workoutSessions, clearRestTimer]);
+
+  const discardActiveWorkout = useCallback(() => {
+    setActiveWorkout(null);
+    clearRestTimer();
+  }, [clearRestTimer]);
+
+  // ── Fitness Ecosystem: Programs & Templates ──────────────────────────────
+
+  const saveWorkoutSession = (session: WorkoutSession) => {
+    const legacy = convertWorkoutSessionToGymWorkout(session);
+    setState((prev) => ({
+      ...prev,
+      workoutSessions: [session, ...(prev.workoutSessions || []).filter((s) => s.id !== session.id)],
+      gymWorkouts: [legacy, ...(prev.gymWorkouts || []).filter((w) => w.id !== legacy.id && w.date !== session.date)],
+      tombstones: (prev.tombstones || []).filter((t) => !(t.id === session.id && t.collection === 'workoutSessions')),
+    }));
+  };
+
+  const deleteWorkoutSession = (id: string) => {
+    setState((prev) => {
+      const sessionToDelete = (prev.workoutSessions || []).find((s) => s.id === id);
+      const updatedGymWorkouts = sessionToDelete
+        ? (prev.gymWorkouts || []).filter((w) => w.id !== id && !(w.date === sessionToDelete.date && w.split === sessionToDelete.splitName))
+        : (prev.gymWorkouts || []).filter((w) => w.id !== id);
+
+      return {
+        ...prev,
+        workoutSessions: (prev.workoutSessions || []).filter((s) => s.id !== id),
+        gymWorkouts: updatedGymWorkouts,
+        tombstones: cloudSyncService.addTombstone(prev.tombstones, id, 'workoutSessions'),
+      };
+    });
+  };
+
+  const saveWorkoutProgram = (program: WorkoutProgram) => {
+    setState((prev) => ({
+      ...prev,
+      workoutPrograms: [program, ...(prev.workoutPrograms || []).filter((p) => p.id !== program.id)],
+      tombstones: (prev.tombstones || []).filter((t) => !(t.id === program.id && t.collection === 'workoutPrograms')),
+    }));
+  };
+
+  const deleteWorkoutProgram = (id: string) => {
+    setState((prev) => ({
+      ...prev,
+      workoutPrograms: (prev.workoutPrograms || []).filter((p) => p.id !== id),
+      tombstones: cloudSyncService.addTombstone(prev.tombstones, id, 'workoutPrograms'),
+    }));
+  };
+
+  const setActiveProgram = (id: string) => {
+    setState((prev) => ({
+      ...prev,
+      workoutPrograms: (prev.workoutPrograms || []).map((p) => ({
+        ...p,
+        isActive: p.id === id,
+      })),
+    }));
+  };
+
+  const saveWorkoutTemplate = (template: WorkoutTemplate) => {
+    setState((prev) => ({
+      ...prev,
+      workoutTemplates: [template, ...(prev.workoutTemplates || []).filter((t) => t.id !== template.id)],
+      tombstones: (prev.tombstones || []).filter((t) => !(t.id === template.id && t.collection === 'workoutTemplates')),
+    }));
+  };
+
+  const deleteWorkoutTemplate = (id: string) => {
+    setState((prev) => ({
+      ...prev,
+      workoutTemplates: (prev.workoutTemplates || []).filter((t) => t.id !== id),
+      tombstones: cloudSyncService.addTombstone(prev.tombstones, id, 'workoutTemplates'),
+    }));
+  };
+
+  const addCustomExercise = (exercise: Omit<ExerciseLibraryItem, 'id' | 'isCustom'>): string => {
+    const id = `cust-ex-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const newEx: ExerciseLibraryItem = {
+      ...exercise,
+      id,
+      isCustom: true,
+    };
+    setState((prev) => ({
+      ...prev,
+      exerciseLibrary: [newEx, ...(prev.exerciseLibrary || [])],
+      tombstones: (prev.tombstones || []).filter((t) => !(t.id === id && t.collection === 'exerciseLibrary')),
+    }));
+    return id;
+  };
+
+  const toggleExerciseFavorite = (exerciseId: string) => {
+    setState((prev) => ({
+      ...prev,
+      exerciseLibrary: (prev.exerciseLibrary || []).map((ex) =>
+        ex.id === exerciseId ? { ...ex, isFavorite: !ex.isFavorite } : ex
+      ),
+    }));
+  };
+
+  // ── Fitness Ecosystem: Nutrition, Meal Plans & Barcodes ───────────────────
+
+  const saveMealPlanDay = (planDay: MealPlanDay) => {
+    setState((prev) => ({
+      ...prev,
+      mealPlans: [planDay, ...(prev.mealPlans || []).filter((m) => m.id !== planDay.id && m.date !== planDay.date)],
+      tombstones: (prev.tombstones || []).filter((t) => !(t.id === planDay.id && t.collection === 'mealPlans')),
+    }));
+  };
+
+  const deleteMealPlanDay = (id: string) => {
+    setState((prev) => ({
+      ...prev,
+      mealPlans: (prev.mealPlans || []).filter((m) => m.id !== id),
+      tombstones: cloudSyncService.addTombstone(prev.tombstones, id, 'mealPlans'),
+    }));
+  };
+
+  const copyPlannedToActualDiary = (date: string): number => {
+    const plan = (state.mealPlans || []).find((p) => p.date === date);
+    if (!plan || !plan.plannedMeals || plan.plannedMeals.length === 0) return 0;
+
+    const newEntries: FoodDiaryEntry[] = plan.plannedMeals.map((m, idx) => ({
+      id: `fd-plan-${Date.now()}-${idx}`,
+      date,
+      mealType: m.mealType,
+      foodId: m.foodId,
+      name: m.customFoodName || 'Planned Meal',
+      quantity: m.plannedQuantity,
+      servingUnit: m.plannedUnit,
+      calories: m.calories,
+      protein: m.protein,
+      carbs: m.carbs,
+      fat: m.fat,
+      lastEditedAt: new Date().toISOString(),
+      isSample: false,
+    }));
+
+    setState((prev) => ({
+      ...prev,
+      foodDiaryEntries: [...newEntries, ...(prev.foodDiaryEntries || [])],
+    }));
+
+    return newEntries.length;
+  };
+
+  const saveBarcodeMapping = (barcode: string, foodId: string, brand?: string) => {
+    const mapping: LocalBarcodeMapping = {
+      id: `bc-${Date.now()}`,
+      barcode: barcode.trim(),
+      foodId,
+      brand,
+      verified: true,
+      createdAt: new Date().toISOString(),
+    };
+    setState((prev) => ({
+      ...prev,
+      customBarcodes: [mapping, ...(prev.customBarcodes || []).filter((b) => b.barcode !== barcode.trim())],
+      tombstones: (prev.tombstones || []).filter((t) => !(t.id === mapping.id && t.collection === 'customBarcodes')),
+    }));
+  };
+
+  // ── Fitness Ecosystem: Body Tracking & Progress Photos ────────────────────
+
+  const logBodyMeasurement = (entry: Omit<BodyMeasurementEntry, 'id' | 'createdAt'>): string => {
+    const id = `bm-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const newEntry: BodyMeasurementEntry = {
+      ...entry,
+      id,
+      createdAt: new Date().toISOString(),
+    };
+
+    setState((prev) => {
+      const existingLogs = prev.weightLogs || [];
+      const updatedLogs = [
+        {
+          id: `wl-${Date.now()}`,
+          date: entry.date,
+          weightKg: entry.weightKg,
+          notes: entry.notes,
+        },
+        ...existingLogs.filter((w) => w.date !== entry.date),
+      ];
+
+      return {
+        ...prev,
+        bodyMeasurements: [newEntry, ...(prev.bodyMeasurements || []).filter((b) => b.id !== id)],
+        weightLogs: updatedLogs,
+        tombstones: (prev.tombstones || []).filter((t) => !(t.id === id && t.collection === 'bodyMeasurements')),
+      };
+    });
+
+    return id;
+  };
+
+  const deleteBodyMeasurement = (id: string) => {
+    setState((prev) => ({
+      ...prev,
+      bodyMeasurements: (prev.bodyMeasurements || []).filter((b) => b.id !== id),
+      tombstones: cloudSyncService.addTombstone(prev.tombstones, id, 'bodyMeasurements'),
+    }));
+  };
+
+  const logBodyComposition = (entry: Omit<BodyCompositionEntry, 'id'>): string => {
+    const id = `bc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const newEntry: BodyCompositionEntry = {
+      ...entry,
+      id,
+    };
+    setState((prev) => ({
+      ...prev,
+      bodyCompositions: [newEntry, ...(prev.bodyCompositions || []).filter((b) => b.id !== id)],
+      tombstones: (prev.tombstones || []).filter((t) => !(t.id === id && t.collection === 'bodyCompositions')),
+    }));
+    return id;
+  };
+
+  const deleteBodyComposition = (id: string) => {
+    setState((prev) => ({
+      ...prev,
+      bodyCompositions: (prev.bodyCompositions || []).filter((b) => b.id !== id),
+      tombstones: cloudSyncService.addTombstone(prev.tombstones, id, 'bodyCompositions'),
+    }));
+  };
+
+  const saveProgressPhoto = (
+    entry: (Omit<ProgressPhotoEntry, 'id' | 'createdAt'> & { id?: string }) | ProgressPhotoEntry
+  ): string => {
+    const id =
+      entry.id ||
+      (entry.storagePath?.startsWith('local_idb://')
+        ? entry.storagePath.replace('local_idb://', '')
+        : `photo-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`);
+
+    const newEntry: ProgressPhotoEntry = {
+      ...entry,
+      id,
+      createdAt: (entry as ProgressPhotoEntry).createdAt || new Date().toISOString(),
+    };
+    setState((prev) => ({
+      ...prev,
+      progressPhotos: [newEntry, ...(prev.progressPhotos || []).filter((p) => p.id !== id)],
+      tombstones: (prev.tombstones || []).filter((t) => !(t.id === id && t.collection === 'progressPhotos')),
+    }));
+    return id;
+  };
+
+  const deleteProgressPhoto = (id: string) => {
+    setState((prev) => ({
+      ...prev,
+      progressPhotos: (prev.progressPhotos || []).filter((p) => p.id !== id),
+      tombstones: cloudSyncService.addTombstone(prev.tombstones, id, 'progressPhotos'),
+    }));
+  };
+
+  // ── Fitness Ecosystem: Recovery, Sleep & Cardio ───────────────────────────
+
+  const logSleepRecovery = (entry: Omit<SleepRecoveryEntry, 'id' | 'createdAt'>): string => {
+    const id = `sleep-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const newEntry: SleepRecoveryEntry = {
+      ...entry,
+      id,
+      createdAt: new Date().toISOString(),
+    };
+    setState((prev) => ({
+      ...prev,
+      sleepRecoveryLogs: [newEntry, ...(prev.sleepRecoveryLogs || []).filter((s) => s.id !== id && s.date !== entry.date)],
+      tombstones: (prev.tombstones || []).filter((t) => !(t.id === id && t.collection === 'sleepRecoveryLogs')),
+    }));
+    return id;
+  };
+
+  const deleteSleepRecovery = (id: string) => {
+    setState((prev) => ({
+      ...prev,
+      sleepRecoveryLogs: (prev.sleepRecoveryLogs || []).filter((s) => s.id !== id),
+      tombstones: cloudSyncService.addTombstone(prev.tombstones, id, 'sleepRecoveryLogs'),
+    }));
+  };
+
+  const logCardioSession = (session: Omit<CardioSession, 'id' | 'createdAt'>): string => {
+    const id = `cardio-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const newEntry: CardioSession = {
+      ...session,
+      id,
+      createdAt: new Date().toISOString(),
+    };
+    setState((prev) => ({
+      ...prev,
+      cardioSessions: [newEntry, ...(prev.cardioSessions || [])],
+      tombstones: (prev.tombstones || []).filter((t) => !(t.id === id && t.collection === 'cardioSessions')),
+    }));
+    return id;
+  };
+
+  const deleteCardioSession = (id: string) => {
+    setState((prev) => ({
+      ...prev,
+      cardioSessions: (prev.cardioSessions || []).filter((c) => c.id !== id),
+      tombstones: cloudSyncService.addTombstone(prev.tombstones, id, 'cardioSessions'),
+    }));
+  };
+
+  // ── Fitness Ecosystem: Hydration & Insights ───────────────────────────────
+
+  const logHydration = (amountMl: number, date?: string) => {
+    const targetDate = date || new Date().toISOString().split('T')[0];
+    const newEntry: HydrationLogEntry = {
+      id: `hyd-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      date: targetDate,
+      amountMl,
+      timestamp: new Date().toISOString(),
+    };
+    setState((prev) => ({
+      ...prev,
+      hydrationLogs: [newEntry, ...(prev.hydrationLogs || [])],
+      tombstones: (prev.tombstones || []).filter((t) => !(t.id === newEntry.id && t.collection === 'hydrationLogs')),
+    }));
+  };
+
+  const deleteHydrationLog = (id: string) => {
+    setState((prev) => ({
+      ...prev,
+      hydrationLogs: (prev.hydrationLogs || []).filter((h) => h.id !== id),
+      tombstones: cloudSyncService.addTombstone(prev.tombstones, id, 'hydrationLogs'),
+    }));
+  };
+
+  const getTodayHydration = (): number => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    return (state.hydrationLogs || [])
+      .filter((h) => h.date === todayStr)
+      .reduce((sum, item) => sum + item.amountMl, 0);
+  };
+
+  const dismissFitnessInsight = (id: string) => {
+    setState((prev) => ({
+      ...prev,
+      fitnessInsights: (prev.fitnessInsights || []).map((ins) =>
+        ins.id === id ? { ...ins, isDismissed: true } : ins
+      ),
+    }));
+  };
+
   // ── Milestone 8: Full Reset ──────────────────────────────────────────────
 
   const fullReset = (): void => {
+    removeBloomEnvelope();
     localStorage.removeItem(STORAGE_KEY_V2);
     localStorage.removeItem('tracker_app_data_v1');
     localStorage.removeItem('tracker_active_focus_timer');
+    const activeUid = authUser?.id || 'usr_local_student';
+    localStorage.removeItem(`tracker_active_workout_${activeUid}`);
+    setActiveWorkout(null);
+    setRestTimer(null);
     setState(storageService.loadData());
     setActiveRadioIndex(null);
   };
@@ -2973,6 +3818,56 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         signInWithGoogle,
         signOut,
         syncNow,
+        // Fitness Ecosystem: Active Workout Execution
+        activeWorkout,
+        isWorkoutModalMinimized,
+        setWorkoutModalMinimized: setIsWorkoutModalMinimized,
+        startWorkout,
+        updateActiveWorkoutSet,
+        addActiveWorkoutSet,
+        removeActiveWorkoutSet,
+        addExerciseToActiveWorkout,
+        substituteExerciseInActiveWorkout,
+        completeActiveWorkout,
+        discardActiveWorkout,
+        linkSuperset,
+        // Fitness Ecosystem: Rest Timer
+        restTimer,
+        startRestTimer,
+        adjustRestTimer,
+        clearRestTimer,
+        // Fitness Ecosystem: Programs & Templates
+        saveWorkoutSession,
+        deleteWorkoutSession,
+        saveWorkoutProgram,
+        deleteWorkoutProgram,
+        setActiveProgram,
+        saveWorkoutTemplate,
+        deleteWorkoutTemplate,
+        addCustomExercise,
+        toggleExerciseFavorite,
+        // Fitness Ecosystem: Nutrition, Meal Plans & Barcodes
+        saveMealPlanDay,
+        deleteMealPlanDay,
+        copyPlannedToActualDiary,
+        saveBarcodeMapping,
+        // Fitness Ecosystem: Body Tracking & Progress Photos
+        logBodyMeasurement,
+        deleteBodyMeasurement,
+        logBodyComposition,
+        deleteBodyComposition,
+        saveProgressPhoto,
+        deleteProgressPhoto,
+        // Fitness Ecosystem: Recovery, Sleep & Cardio
+        logSleepRecovery,
+        deleteSleepRecovery,
+        logCardioSession,
+        deleteCardioSession,
+        // Fitness Ecosystem: Hydration & Insights
+        logHydration,
+        deleteHydrationLog,
+        getTodayHydration,
+        dismissFitnessInsight,
       }}
     >
       {conflictData && (
@@ -2993,10 +3888,183 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   );
 };
 
+const createFallbackAppContext = (): AppContextType => {
+  let fallbackState: AppStateData;
+  try {
+    fallbackState = storageService.loadData();
+  } catch {
+    fallbackState = EMPTY_STATE;
+  }
+
+  return {
+    state: fallbackState,
+    authUser: null,
+    isAuthHydrated: true,
+    syncStatus: 'idle',
+    lastSyncedAt: null,
+    signInWithGoogle: async () => ({ success: false, error: 'Provider not mounted' }),
+    signOut: async () => {},
+    syncNow: async () => {},
+    markAttendance: () => {},
+    markAttendanceForEvent: () => {},
+    logStudySession: () => {},
+    deleteStudySession: () => {},
+    toggleGymSet: () => {},
+    toggleGymWorkoutComplete: () => {},
+    startTodayWorkout: () => {},
+    addGymExercise: () => {},
+    toggleReminder: () => {},
+    addReminder: () => {},
+    deleteReminder: () => {},
+    addSubject: () => {},
+    clearSampleData: () => {},
+    restoreSampleData: () => {},
+    exportData: () => JSON.stringify(fallbackState),
+    importData: () => false,
+    updateProfile: () => {},
+    updateSettings: () => {},
+    addSyllabusSubject: () => {},
+    updateSyllabusSubject: () => {},
+    deleteSyllabusSubject: () => {},
+    addChapter: () => {},
+    updateChapter: () => {},
+    deleteChapter: () => {},
+    addSubtopic: () => {},
+    updateSubtopic: () => {},
+    deleteSubtopic: () => {},
+    setTopicStatus: () => {},
+    incrementRevision: () => {},
+    addTimetableSlot: () => {},
+    updateTimetableSlot: () => {},
+    deleteTimetableSlot: () => {},
+    importTimetableClasses: () => ({ importedCount: 0, skippedCount: 0 }),
+    rescheduleOccurrence: () => {},
+    cancelOccurrence: () => {},
+    restoreOccurrence: () => {},
+    addExtraClass: () => {},
+    deleteExtraClass: () => {},
+    importSyllabus: () => ({ chaptersAdded: 0, topicsAdded: 0, subjectName: '' }),
+    getAttendanceReq: () => 75,
+    addTask: () => '',
+    updateTask: () => {},
+    deleteTask: () => {},
+    setTaskStatus: () => {},
+    toggleTaskSubtask: () => {},
+    addSpacedReview: () => '',
+    updateSpacedReview: () => {},
+    deleteSpacedReview: () => {},
+    completeSpacedReview: () => {},
+    rescheduleSpacedReview: () => {},
+    updateReviewIntervals: () => {},
+    addDailyQuestionEntry: () => '',
+    updateDailyQuestionEntry: () => {},
+    deleteDailyQuestionEntry: () => {},
+    setDailyQuestionTarget: () => {},
+    addFoodDiaryEntry: () => '',
+    addMultipleFoodDiaryEntries: () => {},
+    updateFoodDiaryEntry: () => {},
+    deleteFoodDiaryEntry: () => {},
+    addCustomFood: () => '',
+    deleteCustomFood: () => {},
+    addRecipe: () => '',
+    deleteRecipe: () => {},
+    logWeight: () => {},
+    deleteWeightLog: () => {},
+    updateNutritionProfile: () => {},
+    addRadioUrl: () => {},
+    removeRadioUrl: () => {},
+    reorderRadioUrl: () => {},
+    radioQueue: [],
+    radioLoopMode: 'off',
+    radioIsShuffle: false,
+    activeRadioStation: null,
+    activeRadioIndex: null,
+    activeRadioSource: 'stations',
+    setActiveRadio: () => {},
+    addToRadioQueue: () => {},
+    removeFromRadioQueue: () => {},
+    clearRadioQueue: () => {},
+    reorderRadioQueue: () => {},
+    cycleRadioLoopMode: () => {},
+    setRadioLoopMode: () => {},
+    toggleRadioShuffle: () => {},
+    playNextTrack: () => {},
+    playPrevTrack: () => {},
+    customPlaylists: [],
+    activeCustomPlaylistId: null,
+    createCustomPlaylist: () => '',
+    deleteCustomPlaylist: () => {},
+    addTrackToCustomPlaylist: () => false,
+    removeTrackFromCustomPlaylist: () => {},
+    reorderTrackInCustomPlaylist: () => {},
+    playCustomPlaylist: () => {},
+    addPlaylistToRadioQueue: () => {},
+    addMockTest: () => '',
+    updateMockTest: () => {},
+    deleteMockTest: () => {},
+    addErrorLogEntry: () => '',
+    updateErrorLogEntry: () => {},
+    deleteErrorLogEntry: () => {},
+    resolveErrorLogEntry: () => {},
+    convertErrorToPlannerTask: () => ({ success: false }),
+    events: [],
+    addEvent: () => '',
+    updateEvent: () => {},
+    deleteEvent: () => {},
+    toggleEventComplete: () => {},
+    toggleEventSubtask: () => {},
+    fullReset: () => {},
+    activeWorkout: null,
+    isWorkoutModalMinimized: false,
+    setWorkoutModalMinimized: () => {},
+    startWorkout: () => {},
+    updateActiveWorkoutSet: () => {},
+    addActiveWorkoutSet: () => {},
+    removeActiveWorkoutSet: () => {},
+    addExerciseToActiveWorkout: () => {},
+    substituteExerciseInActiveWorkout: () => {},
+    completeActiveWorkout: () => {},
+    discardActiveWorkout: () => {},
+    linkSuperset: () => {},
+    restTimer: null,
+    startRestTimer: () => {},
+    adjustRestTimer: () => {},
+    clearRestTimer: () => {},
+    saveWorkoutSession: () => {},
+    deleteWorkoutSession: () => {},
+    saveWorkoutProgram: () => {},
+    deleteWorkoutProgram: () => {},
+    setActiveProgram: () => {},
+    saveWorkoutTemplate: () => {},
+    deleteWorkoutTemplate: () => {},
+    addCustomExercise: () => '',
+    toggleExerciseFavorite: () => {},
+    saveMealPlanDay: () => {},
+    deleteMealPlanDay: () => {},
+    copyPlannedToActualDiary: () => 0,
+    saveBarcodeMapping: () => {},
+    logBodyMeasurement: () => '',
+    deleteBodyMeasurement: () => {},
+    logBodyComposition: () => '',
+    deleteBodyComposition: () => {},
+    saveProgressPhoto: () => '',
+    deleteProgressPhoto: () => {},
+    logSleepRecovery: () => '',
+    deleteSleepRecovery: () => {},
+    logCardioSession: () => '',
+    deleteCardioSession: () => {},
+    logHydration: () => {},
+    deleteHydrationLog: () => {},
+    getTodayHydration: () => 0,
+    dismissFitnessInsight: () => {},
+  };
+};
+
 export const useApp = (): AppContextType => {
   const context = useContext(AppContext);
   if (!context) {
-    throw new Error('useApp must be used within an AppProvider');
+    console.warn('[useApp] Accessing AppContext outside of AppProvider; serving safe fallback state.');
+    return createFallbackAppContext();
   }
   return context;
 };

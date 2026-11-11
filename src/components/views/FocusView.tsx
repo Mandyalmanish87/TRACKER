@@ -7,15 +7,21 @@ import { ProductivityInsightsPanel } from '../focus/ProductivityInsightsPanel';
 import { SessionHistoryLedger } from '../focus/SessionHistoryLedger';
 import { JourneyHeatmap } from '../focus/JourneyHeatmap';
 import { FocusRadioDashboardCard } from '../focus-radio';
-import {
-  calculateSevenDayFocus,
+import { PlannerFocusLaunch } from '../../types';
+import { calculateSevenDayFocus,
   calculateFocusSummaries,
   calculateStudyStreaks,
   calculateProductivityInsights,
 } from '../../utils/focusAnalytics';
+import { ProFeatureGate } from '../common/ProFeatureGate';
 
 
-export const FocusView: React.FC = () => {
+interface FocusViewProps {
+  plannerFocusLaunch?: PlannerFocusLaunch | null;
+  onPlannerFocusLaunchConsumed?: () => void;
+}
+
+export const FocusView: React.FC<FocusViewProps> = ({ plannerFocusLaunch, onPlannerFocusLaunchConsumed }) => {
   const { state, updateSettings } = useApp();
 
   const rolloverHour = state.settings?.studyDayRolloverHour ?? 0;
@@ -44,18 +50,22 @@ export const FocusView: React.FC = () => {
   );
 
   return (
-    <div className="space-y-6 sm:space-y-8 pb-20">
-      {/* Editorial Header */}
-      <div className="border-b border-ivory-300 dark:border-espresso-800 pb-6">
-        <span className="text-xs font-mono font-semibold uppercase tracking-wider text-terracotta-600 dark:text-terracotta-400">
-          Cognitive Focus & Immersion
-        </span>
-        <h1 className="font-serif text-3xl sm:text-4xl font-normal text-espresso-950 dark:text-ivory-50 tracking-tight mt-1">
-          Deep Focus &amp; Cognitive Energy
-        </h1>
-        <p className="text-xs sm:text-sm text-espresso-500 dark:text-espresso-400 mt-1">
-          Distraction-free Pomodoro intervals, study streaks, and empirical focus analytics.
-        </p>
+    <div className="focus-page flex flex-col gap-6 sm:gap-7 pb-8 p-3 sm:p-5 rounded-[30px]">
+      <div className="focus-hero relative overflow-hidden rounded-[28px] px-6 py-7 sm:px-9 sm:py-9">
+        <div className="focus-hero-orbit" aria-hidden="true" />
+        <div className="relative z-10 max-w-2xl">
+          <div className="focus-hero-label inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-mono font-bold uppercase tracking-[0.16em]">
+            <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)]" />
+            Study workspace
+          </div>
+          <h1 className="focus-hero-title mt-4 font-serif text-3xl sm:text-4xl font-semibold tracking-tight">
+            Deep Focus
+          </h1>
+          <p className="focus-hero-copy mt-2 max-w-xl text-sm leading-relaxed">
+            Pomodoro intervals, custom timers, and study history in one place.
+          </p>
+        </div>
+        <div className="focus-hero-glint" aria-hidden="true" />
       </div>
 
       {/* 1. Quick Metrics Ribbon (Today, 7-Day Total, Streaks, Rolling Avg) */}
@@ -65,19 +75,24 @@ export const FocusView: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(340px,0.85fr)_minmax(0,1.15fr)] gap-6 lg:gap-8 items-start">
         {/* Left: Enhanced Timer Widget */}
         <div className="min-w-0">
-          <FocusWidget />
+          <FocusWidget plannerFocusLaunch={plannerFocusLaunch} onPlannerFocusLaunchConsumed={onPlannerFocusLaunchConsumed} />
         </div>
 
-        {/* Right: 7-Day Distribution Chart & Productivity Insights */}
+        {/* Right: Analytics and the year-long consistency map fill the companion column. */}
         <div className="min-w-0 space-y-6">
-          <SevenDayFocusChart data={sevenDayData} />
-          <ProductivityInsightsPanel insights={insights} />
+          <ProFeatureGate featureKey="advanced_analytics">
+            <div className="space-y-6">
+              <SevenDayFocusChart data={sevenDayData} />
+              <ProductivityInsightsPanel insights={insights} />
+              <JourneyHeatmap />
+            </div>
+          </ProFeatureGate>
         </div>
       </div>
 
       {/* 3. Focus Radio in Deep Focus */}
       {!showRadio && (
-        <div className="p-4 rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 shadow-subtle flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="focus-radio-prompt p-4 rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 shadow-subtle flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-ivory-200 dark:bg-espresso-800 text-espresso-900 dark:text-ivory-100 flex items-center justify-center font-bold text-lg shrink-0">
               📻
@@ -111,7 +126,6 @@ export const FocusView: React.FC = () => {
       <div className="w-full">
         <SessionHistoryLedger sessions={sessions} />
       </div>
-      <JourneyHeatmap />
     </div>
   );
 };

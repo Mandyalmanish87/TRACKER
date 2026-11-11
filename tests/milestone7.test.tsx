@@ -9,6 +9,7 @@ import { loadData, storageService } from '../src/services/storage';
 describe('Milestone 7: Gym & Nutrition (Full)', () => {
   beforeEach(() => {
     localStorage.clear();
+    window.location.hash = '';
     storageService.populateSampleData();
     document.documentElement.className = '';
     document.documentElement.removeAttribute('data-accent');

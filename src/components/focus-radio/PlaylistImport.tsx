@@ -60,16 +60,40 @@ export const PlaylistImport: React.FC<{ onDone?: () => void }> = ({ onDone }) =>
       // Priority 1: If input contains a YouTube playlist
       if (playlistId) {
         const res = await fetchYouTubePlaylistPreview(trimmed);
-        if (!res.success || !res.preview) {
-          throw new Error(res.error || 'Failed to load YouTube playlist details.');
+        if (res.success && res.preview && Array.isArray(res.preview.lectures) && res.preview.lectures.length > 0) {
+          setPlaylistPreview(res.preview);
+          setFeedback({
+            type: 'success',
+            message: `Loaded "${res.preview.title}" (${res.preview.lectures.length} tracks)`,
+          });
+          return;
         }
 
-        setPlaylistPreview(res.preview);
-        setFeedback({
-          type: 'success',
-          message: `Loaded "${res.preview.title}" (${res.preview.itemCount} tracks)`,
-        });
-        return;
+        // If playlist fetch failed or returned 0 tracks, BUT the URL ALSO contains a valid video ID:
+        if (videoId) {
+          try {
+            const meta = await fetchYouTubeMetadata(videoId);
+            const newTrack: RadioTrack = {
+              id: `track-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+              videoId,
+              title: meta.title,
+              author: meta.author,
+              thumbnailUrl: meta.thumbnailUrl,
+            };
+            addToQueue(newTrack, true);
+            setFeedback({
+              type: 'success',
+              message: `Full playlist unavailable. Added current video "${meta.title.substring(0, 30)}..." to queue!`,
+            });
+            setUrlInput('');
+            if (onDone) setTimeout(onDone, 800);
+            return;
+          } catch {
+            // Fall through to throw playlist error
+          }
+        }
+
+        throw new Error(res.error || 'Failed to load YouTube playlist details.');
       }
 
       // Priority 2: Single YouTube video
@@ -105,10 +129,17 @@ export const PlaylistImport: React.FC<{ onDone?: () => void }> = ({ onDone }) =>
 
   const handlePlayAllPreview = () => {
     if (!playlistPreview) return;
-    const tracks: RadioTrack[] = playlistPreview.lectures.map((l) =>
-      playlistItemToRadioTrack(l, playlistPreview.channelTitle)
-    );
-    if (tracks.length === 0) return;
+    const rawLectures = playlistPreview.lectures || [];
+    const tracks: RadioTrack[] = rawLectures
+      .filter((l) => l && l.videoId)
+      .map((l) => playlistItemToRadioTrack(l, playlistPreview.channelTitle));
+    if (tracks.length === 0) {
+      setFeedback({
+        type: 'error',
+        message: 'No playable tracks available in this playlist.',
+      });
+      return;
+    }
 
     addTracksToQueue(tracks, true);
     setFeedback({
@@ -121,10 +152,17 @@ export const PlaylistImport: React.FC<{ onDone?: () => void }> = ({ onDone }) =>
 
   const handleQueueAllPreview = () => {
     if (!playlistPreview) return;
-    const tracks: RadioTrack[] = playlistPreview.lectures.map((l) =>
-      playlistItemToRadioTrack(l, playlistPreview.channelTitle)
-    );
-    if (tracks.length === 0) return;
+    const rawLectures = playlistPreview.lectures || [];
+    const tracks: RadioTrack[] = rawLectures
+      .filter((l) => l && l.videoId)
+      .map((l) => playlistItemToRadioTrack(l, playlistPreview.channelTitle));
+    if (tracks.length === 0) {
+      setFeedback({
+        type: 'error',
+        message: 'No playable tracks available in this playlist.',
+      });
+      return;
+    }
 
     addTracksToQueue(tracks, false);
     setFeedback({
@@ -137,12 +175,26 @@ export const PlaylistImport: React.FC<{ onDone?: () => void }> = ({ onDone }) =>
 
   const handleSavePlaylistPreview = () => {
     if (!playlistPreview) return;
-    const tracks: RadioTrack[] = playlistPreview.lectures.map((l) =>
-      playlistItemToRadioTrack(l, playlistPreview.channelTitle)
-    );
-    if (tracks.length === 0) return;
+    const rawLectures = playlistPreview.lectures || [];
+    const tracks: RadioTrack[] = rawLectures
+      .filter((l) => l && l.videoId)
+      .map((l) => playlistItemToRadioTrack(l, playlistPreview.channelTitle));
+    if (tracks.length === 0) {
+      setFeedback({
+        type: 'error',
+        message: 'No playable tracks available to save.',
+      });
+      return;
+    }
 
-    savePlaylistDirectly(playlistPreview.title, tracks);
+    const res = savePlaylistDirectly(playlistPreview.title, tracks);
+    if (res && !res.success) {
+      setFeedback({
+        type: 'error',
+        message: res.error || 'Free slot limit reached (2 playlists max). Upgrade to any TRAKIFY Pass for unlimited custom playlists.',
+      });
+      return;
+    }
     setFeedback({
       type: 'success',
       message: `Saved "${playlistPreview.title}" (${tracks.length} tracks) to your Playlists!`,
@@ -178,7 +230,7 @@ export const PlaylistImport: React.FC<{ onDone?: () => void }> = ({ onDone }) =>
     <div className="space-y-4 text-xs">
       {/* Search & URL Input Form */}
       <form onSubmit={handleImport} className="space-y-2.5">
-        <label className="block text-[11px] font-mono uppercase text-[#A3B899] font-medium">
+        <label className="block text-[11px] font-mono uppercase text-[var(--accent)] font-medium">
           Add YouTube Video or Playlist
         </label>
         <div className="flex gap-2">
@@ -192,13 +244,13 @@ export const PlaylistImport: React.FC<{ onDone?: () => void }> = ({ onDone }) =>
                 if (feedback) setFeedback(null);
               }}
               placeholder="Paste YouTube playlist or video link..."
-              className="w-full pl-9 pr-3 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-100 placeholder-zinc-500 focus:outline-hidden focus:border-[#C8FF45] focus:ring-1 focus:ring-[#C8FF45] text-xs transition"
+              className="w-full pl-9 pr-3 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-100 placeholder-zinc-500 focus:outline-hidden focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)] text-xs transition"
             />
           </div>
           <button
             type="submit"
             disabled={isLoading || !urlInput.trim()}
-            className="px-3.5 py-2 rounded-xl font-bold text-black bg-[#C8FF45] hover:bg-[#b8f533] disabled:opacity-50 disabled:pointer-events-none transition flex items-center gap-1.5 shrink-0 cursor-pointer"
+            className="px-3.5 py-2 rounded-xl font-bold text-[var(--primary-foreground)] bg-[var(--accent)] hover:bg-[var(--accent-dark-resolved)] disabled:opacity-50 disabled:pointer-events-none transition flex items-center gap-1.5 shrink-0 cursor-pointer"
           >
             {isLoading ? (
               <>
@@ -251,7 +303,7 @@ export const PlaylistImport: React.FC<{ onDone?: () => void }> = ({ onDone }) =>
                 </h4>
                 <p className="text-[11px] text-zinc-400 truncate">
                   {playlistPreview.channelTitle && <span>{playlistPreview.channelTitle} · </span>}
-                  <span>{playlistPreview.itemCount} tracks</span>
+                  <span>{(playlistPreview.lectures?.length ?? playlistPreview.itemCount ?? 0)} tracks</span>
                   {playlistPreview.totalDurationSeconds > 0 && (
                     <span> ({formatTotalDuration(playlistPreview.totalDurationSeconds)})</span>
                   )}
@@ -273,7 +325,7 @@ export const PlaylistImport: React.FC<{ onDone?: () => void }> = ({ onDone }) =>
             <button
               type="button"
               onClick={handlePlayAllPreview}
-              className="px-2.5 py-1.5 rounded-xl bg-[#C8FF45] hover:bg-[#b8f533] text-black font-semibold text-[11px] flex items-center gap-1.5 transition cursor-pointer"
+              className="px-2.5 py-1.5 rounded-xl bg-[var(--accent)] hover:bg-[var(--accent-dark-resolved)] text-[var(--primary-foreground)] font-semibold text-[11px] flex items-center gap-1.5 transition cursor-pointer"
             >
               <Play className="w-3 h-3 fill-current" />
               <span>Play All</span>
@@ -293,14 +345,19 @@ export const PlaylistImport: React.FC<{ onDone?: () => void }> = ({ onDone }) =>
               onClick={handleSavePlaylistPreview}
               className="px-2.5 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-750 border border-zinc-700 text-zinc-200 font-medium text-[11px] flex items-center gap-1.5 transition cursor-pointer"
             >
-              <Bookmark className="w-3 h-3 text-[#C8FF45]" />
+              <Bookmark className="w-3 h-3 text-[var(--accent)]" />
               <span>Save Playlist</span>
             </button>
           </div>
 
           {/* Scrollable Individual Videos List */}
           <div className="space-y-1 max-h-44 overflow-y-auto pr-1 scrollbar-thin">
-            {playlistPreview.lectures.map((lecture, idx) => {
+            {(!playlistPreview.lectures || playlistPreview.lectures.length === 0) ? (
+              <div className="py-3 text-center text-zinc-500 text-[11px]">
+                No playable tracks found in this playlist preview.
+              </div>
+            ) : (
+              playlistPreview.lectures.map((lecture, idx) => {
               const track = playlistItemToRadioTrack(lecture, playlistPreview.channelTitle);
               return (
                 <div
@@ -318,7 +375,7 @@ export const PlaylistImport: React.FC<{ onDone?: () => void }> = ({ onDone }) =>
                         className="w-7 h-7 rounded-lg object-cover shrink-0"
                       />
                     )}
-                    <span className="text-[11px] text-zinc-200 truncate group-hover:text-[#C8FF45] transition">
+                    <span className="text-[11px] text-zinc-200 truncate group-hover:text-[var(--accent)] transition">
                       {lecture.title}
                     </span>
                   </div>
@@ -332,7 +389,7 @@ export const PlaylistImport: React.FC<{ onDone?: () => void }> = ({ onDone }) =>
                     <button
                       type="button"
                       onClick={() => handlePlaySingleFromPreview(track)}
-                      className="p-1 rounded-md text-zinc-400 hover:text-[#C8FF45] hover:bg-zinc-700 transition cursor-pointer"
+                      className="p-1 rounded-md text-zinc-400 hover:text-[var(--accent)] hover:bg-zinc-700 transition cursor-pointer"
                       title="Play this track now"
                     >
                       <Play className="w-3 h-3 fill-current" />
@@ -354,7 +411,8 @@ export const PlaylistImport: React.FC<{ onDone?: () => void }> = ({ onDone }) =>
                   </div>
                 </div>
               );
-            })}
+            })
+          )}
           </div>
         </div>
       )}
@@ -362,7 +420,7 @@ export const PlaylistImport: React.FC<{ onDone?: () => void }> = ({ onDone }) =>
       {/* Curated Presets */}
       <div>
         <p className="text-[11px] font-mono uppercase text-zinc-400 mb-2 flex items-center gap-1.5">
-          <Sparkles className="w-3 h-3 text-[#C8FF45]" />
+          <Sparkles className="w-3 h-3 text-[var(--accent)]" />
           <span>Curated Lo-Fi & Focus Streams</span>
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -379,7 +437,7 @@ export const PlaylistImport: React.FC<{ onDone?: () => void }> = ({ onDone }) =>
               className="w-8 h-8 rounded-lg object-cover shrink-0"
             />
             <div className="min-w-0">
-              <p className="font-semibold text-zinc-100 group-hover:text-[#C8FF45] truncate transition text-xs">
+              <p className="font-semibold text-zinc-100 group-hover:text-[var(--accent)] truncate transition text-xs">
                 Lofi Hip Hop Radio
               </p>
               <p className="text-[10px] text-zinc-400 truncate">Lofi Girl · 24/7 Stream</p>
@@ -399,7 +457,7 @@ export const PlaylistImport: React.FC<{ onDone?: () => void }> = ({ onDone }) =>
               className="w-8 h-8 rounded-lg object-cover shrink-0"
             />
             <div className="min-w-0">
-              <p className="font-semibold text-zinc-100 group-hover:text-[#C8FF45] truncate transition text-xs">
+              <p className="font-semibold text-zinc-100 group-hover:text-[var(--accent)] truncate transition text-xs">
                 Synthwave Focus Radio
               </p>
               <p className="text-[10px] text-zinc-400 truncate">Retro Synth · Deep Chill</p>
@@ -419,7 +477,7 @@ export const PlaylistImport: React.FC<{ onDone?: () => void }> = ({ onDone }) =>
               className="w-8 h-8 rounded-lg object-cover shrink-0"
             />
             <div className="min-w-0">
-              <p className="font-semibold text-zinc-100 group-hover:text-[#C8FF45] truncate transition text-xs">
+              <p className="font-semibold text-zinc-100 group-hover:text-[var(--accent)] truncate transition text-xs">
                 Peaceful Piano
               </p>
               <p className="text-[10px] text-zinc-400 truncate">Acoustic Piano · Deep Work</p>
@@ -439,7 +497,7 @@ export const PlaylistImport: React.FC<{ onDone?: () => void }> = ({ onDone }) =>
               className="w-8 h-8 rounded-lg object-cover shrink-0"
             />
             <div className="min-w-0">
-              <p className="font-semibold text-zinc-100 group-hover:text-[#C8FF45] truncate transition text-xs">
+              <p className="font-semibold text-zinc-100 group-hover:text-[var(--accent)] truncate transition text-xs">
                 Deep Brown Noise
               </p>
               <p className="text-[10px] text-zinc-400 truncate">Zero Distraction · 432Hz</p>

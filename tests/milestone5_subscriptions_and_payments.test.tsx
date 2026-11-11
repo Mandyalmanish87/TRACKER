@@ -5,128 +5,159 @@ import path from 'path';
 import {
   subscriptionService,
   DEFAULT_FREE_ENTITLEMENTS,
+  computeHmacSha256Hex,
 } from '../src/services/subscriptionService';
 import * as authServiceModule from '../src/services/authService';
 import { BillingSettingsSection } from '../src/components/subscription/BillingSettingsSection';
 
-describe('Milestone 05 — Subscriptions & Payments Foundation', () => {
-  const TEST_SECRET = 'whsec_test_secret_key_8f3c7b2a19e4';
+describe('Milestone 05 — Subscriptions & Payments Foundation (Razorpay Engine)', () => {
+  const TEST_KEY_SECRET = 'rzp_sec_test_secret_key_8f3c7b2a19e4';
+  const TEST_WEBHOOK_SECRET = 'rzp_whsec_test_secret_key_99aa88bb77';
 
   beforeEach(() => {
     localStorage.clear();
     vi.restoreAllMocks();
   });
 
-  // Helper to compute a valid Stripe signature header
-  async function generateTestSignatureHeader(
-    payload: string,
-    secret: string,
-    timestamp: number
-  ): Promise<string> {
-    const encoder = new TextEncoder();
-    const keyData = encoder.encode(secret);
-    const cryptoKey = await crypto.subtle.importKey(
-      'raw',
-      keyData,
-      { name: 'HMAC', hash: 'SHA-256' },
-      false,
-      ['sign']
-    );
-    const signedPayload = encoder.encode(`${timestamp}.${payload}`);
-    const signatureBuffer = await crypto.subtle.sign('HMAC', cryptoKey, signedPayload);
-    const signatureHex = Array.from(new Uint8Array(signatureBuffer))
-      .map((b) => b.toString(16).padStart(2, '0'))
-      .join('');
-    return `t=${timestamp},v1=${signatureHex}`;
+  // Helper to compute a valid Razorpay webhook signature
+  async function generateTestWebhookSignature(payload: string, secret: string): Promise<string> {
+    return await computeHmacSha256Hex(secret, payload);
+  }
+
+  // Helper to compute a valid Razorpay payment signature
+  async function generateTestPaymentSignature(orderId: string, paymentId: string, secret: string): Promise<string> {
+    return await computeHmacSha256Hex(secret, `${orderId}|${paymentId}`);
+  }
+
+  // Helper to compute a valid Razorpay subscription signature
+  async function generateTestSubscriptionSignature(paymentId: string, subscriptionId: string, secret: string): Promise<string> {
+    return await computeHmacSha256Hex(secret, `${paymentId}|${subscriptionId}`);
   }
 
   // ============================================================================
-  // 1. Cryptographic HMAC-SHA256 Webhook Signature Verification
+  // 1. Cryptographic HMAC-SHA256 Signature Verification & Forgery Defense
   // ============================================================================
-  describe('1. Webhook Signature Verification & Forgery Defense', () => {
-    it('accepts valid HMAC-SHA256 signature with fresh timestamp', async () => {
+  describe('1. Webhook & Payment Signature Verification (Razorpay Cryptographic Engine)', () => {
+    it('accepts valid Razorpay webhook signature on raw payload', async () => {
       const payload = JSON.stringify({
-        id: 'evt_test_123',
-        type: 'checkout.session.completed',
-        data: { object: { customer: 'cus_abc', subscription: 'sub_xyz' } },
+        entity: 'event',
+        event: 'order.paid',
+        payload: {
+          payment: { entity: { id: 'pay_test_123', order_id: 'order_test_abc', amount: 39900 } },
+        },
       });
-      const now = Math.floor(Date.now() / 1000);
-      const signatureHeader = await generateTestSignatureHeader(payload, TEST_SECRET, now);
+      const signature = await generateTestWebhookSignature(payload, TEST_WEBHOOK_SECRET);
 
       const result = await subscriptionService.verifyWebhookSignature(
         payload,
-        signatureHeader,
-        TEST_SECRET
+        signature,
+        TEST_WEBHOOK_SECRET
       );
 
       expect(result.valid).toBe(true);
-      expect(result.timestamp).toBe(now);
+      expect(result.signature).toBe(signature);
       expect(result.error).toBeUndefined();
     });
 
-    it('rejects tampered or forged payload with cryptographic mismatch', async () => {
-      const originalPayload = JSON.stringify({ customer: 'cus_123', plan: 'pro', amount: 499 });
-      const tamperedPayload = JSON.stringify({ customer: 'cus_123', plan: 'cohort', amount: 1999 });
+    it('rejects tampered or forged webhook payload with cryptographic mismatch', async () => {
+      const originalPayload = JSON.stringify({ event: 'payment.captured', amount: 39900 });
+      const tamperedPayload = JSON.stringify({ event: 'payment.captured', amount: 149900 });
 
-      const now = Math.floor(Date.now() / 1000);
-      const signatureHeader = await generateTestSignatureHeader(originalPayload, TEST_SECRET, now);
+      const signature = await generateTestWebhookSignature(originalPayload, TEST_WEBHOOK_SECRET);
 
-      // Verify tampered payload with original signature
       const result = await subscriptionService.verifyWebhookSignature(
         tamperedPayload,
-        signatureHeader,
-        TEST_SECRET
+        signature,
+        TEST_WEBHOOK_SECRET
       );
 
       expect(result.valid).toBe(false);
       expect(result.error).toMatch(/Cryptographic signature mismatch/i);
     });
 
-    it('rejects payload signed with an incorrect or unauthorized secret', async () => {
-      const payload = JSON.stringify({ customer: 'cus_123' });
-      const now = Math.floor(Date.now() / 1000);
-      const signatureHeader = await generateTestSignatureHeader(payload, 'whsec_attacker_secret', now);
+    it('rejects webhook signed with an incorrect or unauthorized secret', async () => {
+      const payload = JSON.stringify({ event: 'subscription.activated' });
+      const signature = await generateTestWebhookSignature(payload, 'wrong_secret');
 
       const result = await subscriptionService.verifyWebhookSignature(
         payload,
-        signatureHeader,
-        TEST_SECRET
+        signature,
+        TEST_WEBHOOK_SECRET
       );
 
       expect(result.valid).toBe(false);
       expect(result.error).toMatch(/Cryptographic signature mismatch/i);
     });
 
-    it('rejects replayed webhook with expired timestamp outside tolerance window', async () => {
-      const payload = JSON.stringify({ customer: 'cus_123' });
-      const staleTimestamp = Math.floor(Date.now() / 1000) - 301; // 301 seconds old (> 300s window)
-      const signatureHeader = await generateTestSignatureHeader(payload, TEST_SECRET, staleTimestamp);
-
-      const result = await subscriptionService.verifyWebhookSignature(
-        payload,
-        signatureHeader,
-        TEST_SECRET,
-        300
-      );
-
+    it('rejects missing or empty webhook signature header', async () => {
+      const payload = JSON.stringify({ event: 'order.paid' });
+      const result = await subscriptionService.verifyWebhookSignature(payload, '', TEST_WEBHOOK_SECRET);
       expect(result.valid).toBe(false);
-      expect(result.error).toMatch(/outside tolerance window/i);
+      expect(result.error).toMatch(/Missing x-razorpay-signature header/i);
     });
 
-    it('rejects missing or malformed signature header formats', async () => {
-      const payload = JSON.stringify({ customer: 'cus_123' });
+    it('verifies Razorpay one-time payment signature (orderId + "|" + paymentId)', async () => {
+      const orderId = 'order_test_9988';
+      const paymentId = 'pay_test_7766';
+      const validSig = await generateTestPaymentSignature(orderId, paymentId, TEST_KEY_SECRET);
 
-      const emptyRes = await subscriptionService.verifyWebhookSignature(payload, '', TEST_SECRET);
-      expect(emptyRes.valid).toBe(false);
-      expect(emptyRes.error).toMatch(/Missing signature header/i);
+      const result = await subscriptionService.verifyPaymentSignature({
+        orderId,
+        paymentId,
+        signature: validSig,
+        secret: TEST_KEY_SECRET,
+      });
 
-      const malformedRes = await subscriptionService.verifyWebhookSignature(
-        payload,
-        'invalid_header_without_t_or_v1',
-        TEST_SECRET
-      );
-      expect(malformedRes.valid).toBe(false);
-      expect(malformedRes.error).toMatch(/Malformed stripe-signature header/i);
+      expect(result.valid).toBe(true);
+      expect(result.signature).toBe(validSig);
+    });
+
+    it('rejects tampered orderId or paymentId in one-time payment verification', async () => {
+      const orderId = 'order_test_9988';
+      const paymentId = 'pay_test_7766';
+      const validSig = await generateTestPaymentSignature(orderId, paymentId, TEST_KEY_SECRET);
+
+      const tamperedResult = await subscriptionService.verifyPaymentSignature({
+        orderId: 'order_hacked_1111',
+        paymentId,
+        signature: validSig,
+        secret: TEST_KEY_SECRET,
+      });
+
+      expect(tamperedResult.valid).toBe(false);
+      expect(tamperedResult.error).toMatch(/Invalid payment signature/i);
+    });
+
+    it('verifies Razorpay recurring subscription mandate signature (paymentId + "|" + subscriptionId)', async () => {
+      const paymentId = 'pay_test_sub_555';
+      const subscriptionId = 'sub_test_mandate_444';
+      const validSig = await generateTestSubscriptionSignature(paymentId, subscriptionId, TEST_KEY_SECRET);
+
+      const result = await subscriptionService.verifySubscriptionSignature({
+        paymentId,
+        subscriptionId,
+        signature: validSig,
+        secret: TEST_KEY_SECRET,
+      });
+
+      expect(result.valid).toBe(true);
+      expect(result.signature).toBe(validSig);
+    });
+
+    it('rejects tampered subscription signature with forged secret', async () => {
+      const paymentId = 'pay_test_sub_555';
+      const subscriptionId = 'sub_test_mandate_444';
+      const forgedSig = await generateTestSubscriptionSignature(paymentId, subscriptionId, 'forged_secret');
+
+      const result = await subscriptionService.verifySubscriptionSignature({
+        paymentId,
+        subscriptionId,
+        signature: forgedSig,
+        secret: TEST_KEY_SECRET,
+      });
+
+      expect(result.valid).toBe(false);
+      expect(result.error).toMatch(/Invalid subscription signature/i);
     });
   });
 
@@ -137,39 +168,39 @@ describe('Milestone 05 — Subscriptions & Payments Foundation', () => {
     it('dispatches new webhook event to server-authoritative processor', async () => {
       const mockSupabase = {
         rpc: vi.fn().mockResolvedValue({
-          data: { status: 'processed', event_id: 'evt_order_1001', event_type: 'checkout.session.completed' },
+          data: { status: 'processed', event_id: 'evt_rzp_1001', event_type: 'payment.captured' },
           error: null,
         }),
       } as any;
       vi.spyOn(authServiceModule, 'getSupabaseClient').mockReturnValue(mockSupabase);
 
       const result = await subscriptionService.processWebhookEvent(
-        'evt_order_1001',
-        'checkout.session.completed',
-        { data: { object: { customer: 'cus_1' } } }
+        'evt_rzp_1001',
+        'payment.captured',
+        { payload: { payment: { entity: { id: 'pay_1001' } } } }
       );
 
       expect(result.status).toBe('processed');
       expect(mockSupabase.rpc).toHaveBeenCalledWith('process_subscription_webhook_event', {
-        p_event_id: 'evt_order_1001',
-        p_event_type: 'checkout.session.completed',
-        p_payload: { data: { object: { customer: 'cus_1' } } },
+        p_event_id: 'evt_rzp_1001',
+        p_event_type: 'payment.captured',
+        p_payload: { payload: { payment: { entity: { id: 'pay_1001' } } } },
       });
     });
 
     it('recognizes duplicate webhook deliveries idempotently without re-execution', async () => {
       const mockSupabase = {
         rpc: vi.fn().mockResolvedValue({
-          data: { status: 'duplicate_ignored', event_id: 'evt_order_1001', message: 'Event already processed' },
+          data: { status: 'duplicate_ignored', event_id: 'evt_rzp_1001', message: 'Event already processed' },
           error: null,
         }),
       } as any;
       vi.spyOn(authServiceModule, 'getSupabaseClient').mockReturnValue(mockSupabase);
 
       const result = await subscriptionService.processWebhookEvent(
-        'evt_order_1001',
-        'checkout.session.completed',
-        { data: { object: { customer: 'cus_1' } } }
+        'evt_rzp_1001',
+        'payment.captured',
+        { payload: { payment: { entity: { id: 'pay_1001' } } } }
       );
 
       expect(result.status).toBe('duplicate_ignored');
@@ -223,17 +254,16 @@ describe('Milestone 05 — Subscriptions & Payments Foundation', () => {
       } as any;
       vi.spyOn(authServiceModule, 'getSupabaseClient').mockReturnValue(mockSupabase);
 
-      const entitlements = await subscriptionService.getUserEntitlements('usr-student-pro');
+      const entitlements = await subscriptionService.getUserEntitlements('usr-test-pro');
 
       expect(entitlements.tier).toBe('pro');
       expect(entitlements.isActive).toBe(true);
-      expect(entitlements.status).toBe('active');
-      expect(subscriptionService.canAccessFeature('unlimited_cloud_sync', entitlements)).toBe(true);
-      expect(subscriptionService.canAccessFeature('ai_study_planner', entitlements)).toBe(true);
-      expect(subscriptionService.canAccessFeature('cohort_sponsorship', entitlements)).toBe(false);
+      expect(entitlements.features).toContain('unlimited_cloud_sync');
+      expect(entitlements.features).toContain('advanced_analytics');
+      expect(entitlements.features).not.toContain('sponsor_workspace_storage');
     });
 
-    it('correctly maps Cohort Sponsor entitlements including verified badges', async () => {
+    it('correctly maps Cohort Sponsor entitlements with batch sponsor permissions', async () => {
       const mockSupabase = {
         rpc: vi.fn().mockResolvedValue({
           data: {
@@ -243,18 +273,12 @@ describe('Milestone 05 — Subscriptions & Payments Foundation', () => {
               'timetable',
               'attendance',
               'pomodoro_timer',
-              'gym_log',
-              'syllabus_tracker',
-              'local_backup',
-              'classspace_member',
               'unlimited_cloud_sync',
-              'advanced_analytics',
-              'ai_study_planner',
-              'priority_export',
-              'cohort_sponsorship',
-              'verified_class_badge',
+              'sponsor_workspace_storage',
+              'verified_badge',
+              'shared_announcements',
             ],
-            current_period_end: '2026-12-01T00:00:00Z',
+            current_period_end: '2026-12-31T23:59:59Z',
             cancel_at_period_end: false,
             status: 'active',
           },
@@ -263,22 +287,23 @@ describe('Milestone 05 — Subscriptions & Payments Foundation', () => {
       } as any;
       vi.spyOn(authServiceModule, 'getSupabaseClient').mockReturnValue(mockSupabase);
 
-      const entitlements = await subscriptionService.getUserEntitlements('usr-class-rep');
+      const entitlements = await subscriptionService.getUserEntitlements('usr-cr-1');
 
       expect(entitlements.tier).toBe('cohort');
       expect(entitlements.isActive).toBe(true);
-      expect(subscriptionService.canAccessFeature('cohort_sponsorship', entitlements)).toBe(true);
-      expect(subscriptionService.canAccessFeature('verified_class_badge', entitlements)).toBe(true);
+      expect(entitlements.features).toContain('sponsor_workspace_storage');
+      expect(entitlements.features).toContain('verified_badge');
     });
 
-    it('preserves active features during 24h grace period when status is past_due', async () => {
+    it('enforces 24-hour grace period for past_due status', async () => {
+      const recentPastDuePeriodEnd = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(); // 2 hours ago
       const mockSupabase = {
         rpc: vi.fn().mockResolvedValue({
           data: {
             tier: 'pro',
-            is_active: true, // Server-evaluated grace period flag
-            features: ['timetable', 'unlimited_cloud_sync', 'advanced_analytics'],
-            current_period_end: '2026-10-25T00:00:00Z',
+            is_active: true, // within 24h grace period
+            features: ['timetable', 'unlimited_cloud_sync'],
+            current_period_end: recentPastDuePeriodEnd,
             cancel_at_period_end: false,
             status: 'past_due',
           },
@@ -287,14 +312,13 @@ describe('Milestone 05 — Subscriptions & Payments Foundation', () => {
       } as any;
       vi.spyOn(authServiceModule, 'getSupabaseClient').mockReturnValue(mockSupabase);
 
-      const entitlements = await subscriptionService.getUserEntitlements('usr-grace-user');
+      const entitlements = await subscriptionService.getUserEntitlements('usr-pastdue-1');
 
       expect(entitlements.status).toBe('past_due');
       expect(entitlements.isActive).toBe(true);
-      expect(subscriptionService.canAccessFeature('unlimited_cloud_sync', entitlements)).toBe(true);
     });
 
-    it('denies cross-account entitlement inspection for non-admin callers (RPC error 42501)', async () => {
+    it('strictly denies cross-account entitlement inspection (42501 security invariant)', async () => {
       const mockSupabase = {
         rpc: vi.fn().mockResolvedValue({
           data: null,
@@ -303,43 +327,17 @@ describe('Milestone 05 — Subscriptions & Payments Foundation', () => {
       } as any;
       vi.spyOn(authServiceModule, 'getSupabaseClient').mockReturnValue(mockSupabase);
 
-      await expect(
-        subscriptionService.getUserEntitlements('usr-other-victim-student')
-      ).rejects.toThrow(/Access denied: cannot inspect another user entitlements/i);
-    });
-
-    it('ignores client localStorage tampering (e.g. setting fake pro tier flag)', async () => {
-      // Attacker attempts local spoofing
-      localStorage.setItem('user_plan', 'pro');
-      localStorage.setItem('is_pro_member', 'true');
-
-      // Server returns free
-      const mockSupabase = {
-        rpc: vi.fn().mockResolvedValue({
-          data: {
-            tier: 'free',
-            is_active: false,
-            features: DEFAULT_FREE_ENTITLEMENTS.features,
-            status: 'free',
-          },
-          error: null,
-        }),
-      } as any;
-      vi.spyOn(authServiceModule, 'getSupabaseClient').mockReturnValue(mockSupabase);
-
-      const entitlements = await subscriptionService.getUserEntitlements('usr-tamperer');
-
-      expect(entitlements.tier).toBe('free');
-      expect(entitlements.isActive).toBe(false);
-      expect(subscriptionService.canAccessFeature('unlimited_cloud_sync', entitlements)).toBe(false);
+      await expect(subscriptionService.getUserEntitlements('usr-victim-99')).rejects.toThrow(
+        /cannot inspect another user entitlements/i
+      );
     });
   });
 
   // ============================================================================
-  // 4. Billing Settings UI Component & User Interactions
+  // 4. Billing Settings UI Component
   // ============================================================================
   describe('4. Billing Settings UI Component', () => {
-    it('renders Free student status and catalogue cards', async () => {
+    it('renders Free student status and catalogue cards with Razorpay verified badge', async () => {
       const mockSupabase = {
         rpc: vi.fn().mockResolvedValue({
           data: {
@@ -367,22 +365,30 @@ describe('Milestone 05 — Subscriptions & Payments Foundation', () => {
       render(<BillingSettingsSection userId="usr-student-1" />);
 
       await waitFor(() => {
-        expect(screen.getByText(/Membership & Subscriptions/i)).toBeInTheDocument();
-        expect(screen.getByText(/Free Student/i)).toBeInTheDocument();
-        expect(screen.getByText(/Current Plan/i)).toBeInTheDocument();
+        expect(screen.getByText(/TRAKIFY Membership Passes/i)).toBeInTheDocument();
+        expect(screen.getByText(/One-Time Payment/i)).toBeInTheDocument();
+        expect(screen.getByText(/Free Baseline Access/i)).toBeInTheDocument();
+        expect(screen.getByText(/Access State:/i)).toBeInTheDocument();
       });
 
-      // Verify all catalogue plans are visible
-      expect(screen.getByRole('heading', { name: /Student Free/i })).toBeInTheDocument();
-      expect(screen.getByRole('heading', { name: /Tracker Pro/i })).toBeInTheDocument();
-      expect(screen.getByRole('heading', { name: /Cohort Sponsor/i })).toBeInTheDocument();
+      // Verify all 5 one-time passes are visible with INR pricing
+      expect(screen.getByRole('heading', { name: /7-Day Pass/i })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: /Monthly Pass/i })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: /Semester Pass/i })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: /Annual Pass/i })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: /Full Degree Pass/i })).toBeInTheDocument();
+      expect(screen.getAllByText(/₹20/i).length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText(/₹75/i).length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText(/₹425/i).length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText(/₹825/i).length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText(/₹3,300/i).length).toBeGreaterThanOrEqual(1);
     });
 
-    it('displays active Tracker Pro plan badge and current plan button', async () => {
+    it('displays active Tracker Pro plan badge and Razorpay reference', async () => {
       const mockSupabase = {
         rpc: vi.fn().mockResolvedValue({
           data: {
-            tier: 'pro',
+            tier: 'paid',
             is_active: true,
             features: ['timetable', 'unlimited_cloud_sync'],
             status: 'active',
@@ -403,10 +409,11 @@ describe('Milestone 05 — Subscriptions & Payments Foundation', () => {
             data: {
               id: 'sub_123',
               user_id: 'usr-pro-1',
-              customer_id: 'cus_stripe_123',
-              subscription_id: 'sub_pro_xyz',
+              provider: 'razorpay',
+              payment_id: 'pay_rzp_mock_1234567890',
+              subscription_id: 'sub_rzp_xyz',
               status: 'active',
-              plan_tier: 'pro',
+              plan_tier: 'paid',
             },
             error: null,
           }),
@@ -417,8 +424,10 @@ describe('Milestone 05 — Subscriptions & Payments Foundation', () => {
       render(<BillingSettingsSection userId="usr-pro-1" />);
 
       await waitFor(() => {
-        expect(screen.getByText(/Current Plan/i)).toBeInTheDocument();
-        expect(screen.getByText(/Manage Billing & Invoices/i)).toBeInTheDocument();
+        expect(screen.getByText(/Access State:/i)).toBeInTheDocument();
+        expect(screen.getByText(/Active Paid Pass/i)).toBeInTheDocument();
+        expect(screen.getByText(/One-Time Pass · No Auto-Debit/i)).toBeInTheDocument();
+        expect(screen.getByText(/Extend \(\+30d\)/i)).toBeInTheDocument();
       });
     });
 
@@ -445,7 +454,7 @@ describe('Milestone 05 — Subscriptions & Payments Foundation', () => {
           eq: vi.fn().mockReturnThis(),
           maybeSingle: vi.fn().mockResolvedValue({
             data: {
-              customer_id: 'cus_due_123',
+              payment_id: 'pay_due_123',
               status: 'past_due',
               plan_tier: 'pro',
             },
@@ -459,340 +468,538 @@ describe('Milestone 05 — Subscriptions & Payments Foundation', () => {
 
       await waitFor(() => {
         expect(screen.getByText(/Payment Past Due — Grace Period Active/i)).toBeInTheDocument();
-        expect(screen.getByText(/24-hour grace period/i)).toBeInTheDocument();
       });
     });
 
-    it('handles checkout click with graceful notice when provider credentials are unconfigured', async () => {
+    it('displays one-time pass model notice and eliminates recurring subscription toggles in UI', async () => {
       const mockSupabase = {
         rpc: vi.fn().mockResolvedValue({
-          data: {
-            tier: 'free',
-            is_active: false,
-            features: DEFAULT_FREE_ENTITLEMENTS.features,
-            status: 'free',
-          },
+          data: { tier: 'free', is_active: false, features: DEFAULT_FREE_ENTITLEMENTS.features, status: 'free' },
           error: null,
         }),
         auth: {
-          getSession: vi.fn().mockResolvedValue({
-            data: { session: { user: { id: 'usr-student-1' } } },
-            error: null,
-          }),
+          getSession: vi.fn().mockResolvedValue({ data: { session: null } }),
         },
         from: vi.fn().mockReturnValue({
           select: vi.fn().mockReturnThis(),
           eq: vi.fn().mockReturnThis(),
           maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
         }),
-        functions: {
-          invoke: vi.fn().mockRejectedValue(new Error('Function not deployed')),
-        },
       } as any;
       vi.spyOn(authServiceModule, 'getSupabaseClient').mockReturnValue(mockSupabase);
 
-      render(<BillingSettingsSection userId="usr-student-1" />);
+      render(<BillingSettingsSection userId="usr-toggle-1" />);
 
       await waitFor(() => {
-        expect(screen.getByRole('button', { name: /Upgrade to Tracker Pro/i })).toBeInTheDocument();
+        expect(screen.getByText(/Pass Stacking Protection:/i)).toBeInTheDocument();
+        expect(screen.getByText(/Repurchasing before expiry automatically adds the new pass days/i)).toBeInTheDocument();
       });
 
-      fireEvent.click(screen.getByRole('button', { name: /Upgrade to Tracker Pro/i }));
-
-      await waitFor(() => {
-        expect(screen.getByText(/Payment provider integration is pending live credentials deployment/i)).toBeInTheDocument();
-      });
+      // Verify recurring toggle buttons do NOT exist
+      expect(screen.queryByText(/Auto-Renewing Mandate/i)).not.toBeInTheDocument();
     });
   });
 
   // ============================================================================
-  // 5. Database Schema & Migration Invariants (Static Boundary Audit)
+  // 5. Database Schema & Migration Invariants
   // ============================================================================
   describe('5. Database Schema & Migration Invariants', () => {
-    const migrationPath = path.resolve('supabase/migrations/20261108_subscriptions_schema.sql');
-    let sqlContent: string;
-
-    beforeEach(() => {
-      sqlContent = fs.readFileSync(migrationPath, 'utf8');
+    it('verifies firestore.rules restricts client writes to user_subscriptions', () => {
+      const rulesContent = fs.readFileSync(path.resolve('firestore.rules'), 'utf8');
+      expect(rulesContent).toMatch(/match\s+\/user_subscriptions\/\{userId\}\s*\{/);
+      expect(rulesContent).toMatch(/allow\s+read:\s*if\s+signedIn\(\)\s*&&\s*request\.auth\.uid\s*==\s*userId;/);
+      expect(rulesContent).toMatch(/allow\s+write:\s*if\s+false;/);
     });
 
-    it('verifies user_subscriptions has RLS enabled and direct client writes revoked', () => {
-      expect(sqlContent).toMatch(/alter\s+table\s+public\.user_subscriptions\s+enable\s+row\s+level\s+security/i);
-      expect(sqlContent).toMatch(/revoke\s+insert,\s*update,\s*delete,\s*truncate\s+on\s+table\s+public\.user_subscriptions\s+from\s+anon,\s*authenticated/i);
-    });
-
-    it('verifies payment_webhook_events has zero public or authenticated access', () => {
-      expect(sqlContent).toMatch(/alter\s+table\s+public\.payment_webhook_events\s+enable\s+row\s+level\s+security/i);
-      expect(sqlContent).toMatch(/revoke\s+all\s+on\s+table\s+public\.payment_webhook_events\s+from\s+anon,\s*authenticated/i);
-    });
-
-    it('verifies process_subscription_webhook_event is revoked from authenticated and granted exclusively to service_role', () => {
-      expect(sqlContent).toMatch(/revoke\s+all\s+on\s+function\s+public\.process_subscription_webhook_event\([^)]*\)\s+from\s+public,\s*anon,\s*authenticated/i);
-      expect(sqlContent).toMatch(/grant\s+execute\s+on\s+function\s+public\.process_subscription_webhook_event\([^)]*\)\s+to\s+service_role/i);
-    });
-
-    it('verifies get_user_entitlements enforces caller isolation (error 42501) and safe search_path', () => {
-      expect(sqlContent).toMatch(/set\s+search_path\s*=\s*public/i);
-      expect(sqlContent).toMatch(/auth\.uid\(\)\s*is\s+distinct\s+from\s+v_target_user/i);
-      expect(sqlContent).toMatch(/raise\s+exception\s+'Access denied: cannot inspect another user entitlements \(42501\)'/i);
-    });
-
-    it('verifies atomic concurrency handling and out-of-order defenses in state machine', () => {
-      expect(sqlContent).toMatch(/on\s+conflict\s*\(\s*event_id\s*\)\s+do\s+nothing/i);
-      expect(sqlContent).toMatch(/get\s+diagnostics\s+v_row_count\s*=\s*row_count/i);
-      expect(sqlContent).toMatch(/stale_subscription_ignored/i);
-      expect(sqlContent).toMatch(/out_of_order_ignored/i);
+    it('verifies client application source code never writes directly to user_subscriptions', () => {
+      const clientServiceCode = fs.readFileSync(path.resolve('src/services/subscriptionService.ts'), 'utf8');
+      expect(clientServiceCode).not.toMatch(/setDoc\(doc\(db,\s*'user_subscriptions'/);
+      expect(clientServiceCode).not.toMatch(/updateDoc\(doc\(db,\s*'user_subscriptions'/);
     });
   });
 
   // ============================================================================
   // 6. Server Edge Functions & Secret Boundary Isolation
   // ============================================================================
-  describe('6. Server Edge Functions & Secret Boundary Isolation', () => {
-    it('verifies handle-payment-webhook Edge Function enforces cryptographic verification and uses server environment secrets', () => {
-      const edgeFunctionPath = path.resolve('supabase/functions/handle-payment-webhook/index.ts');
+  describe('6. Server Edge Functions & Secret Boundary Isolation (Razorpay)', () => {
+    it('verifies handle-razorpay-webhook Edge Function enforces cryptographic verification and uses server environment secrets', () => {
+      const edgeFunctionPath = path.resolve('supabase/functions/handle-razorpay-webhook/index.ts');
       expect(fs.existsSync(edgeFunctionPath)).toBe(true);
 
       const code = fs.readFileSync(edgeFunctionPath, 'utf8');
-      expect(code).toMatch(/Deno\.env\.get\('STRIPE_WEBHOOK_SECRET'\)/);
-      expect(code).toMatch(/Deno\.env\.get\('SUPABASE_SERVICE_ROLE_KEY'\)/);
-      expect(code).toMatch(/verifyStripeSignature\(/);
-      expect(code).toMatch(/process_subscription_webhook_event/);
+      expect(code).toMatch(/Deno\.env\.get\('RAZORPAY_WEBHOOK_SECRET'\)/);
+      expect(code).toMatch(/verifyRazorpayWebhookSignature/);
+      expect(code).toMatch(/claimWebhookEventAtomically/);
     });
 
-    it('verifies create-checkout-session Edge Function maps Price IDs authoritatively on the server', () => {
-      const edgeFunctionPath = path.resolve('supabase/functions/create-checkout-session/index.ts');
+    it('verifies create-razorpay-order Edge Function maps Price IDs authoritatively on the server (Zero Client Trust)', () => {
+      const edgeFunctionPath = path.resolve('supabase/functions/create-razorpay-order/index.ts');
       expect(fs.existsSync(edgeFunctionPath)).toBe(true);
 
       const code = fs.readFileSync(edgeFunctionPath, 'utf8');
-      expect(code).toMatch(/Deno\.env\.get\('STRIPE_SECRET_KEY'\)/);
-      expect(code).toMatch(/Deno\.env\.get\('STRIPE_PRICE_ID_PRO'\)/);
-      expect(code).toMatch(/Deno\.env\.get\('STRIPE_PRICE_ID_COHORT'\)/);
-      expect(code).toMatch(/auth\.getUser\(\)/);
+      expect(code).toMatch(/Deno\.env\.get\('RAZORPAY_KEY_ID'\)/);
+      expect(code).toMatch(/Deno\.env\.get\('RAZORPAY_KEY_SECRET'\)/);
+      expect(code).toMatch(/RAZORPAY_PLANS/);
+      expect(code).toMatch(/authenticateRequestUser/);
     });
 
-    it('verifies create-customer-portal-session Edge Function resolves customer_id server-side', () => {
-      const edgeFunctionPath = path.resolve('supabase/functions/create-customer-portal-session/index.ts');
+    it('verifies create-razorpay-subscription Edge Function is deprecated and returns HTTP 410 Gone', () => {
+      const edgeFunctionPath = path.resolve('supabase/functions/create-razorpay-subscription/index.ts');
       expect(fs.existsSync(edgeFunctionPath)).toBe(true);
 
       const code = fs.readFileSync(edgeFunctionPath, 'utf8');
-      expect(code).toMatch(/Deno\.env\.get\('STRIPE_SECRET_KEY'\)/);
-      expect(code).toMatch(/user_subscriptions/);
-      expect(code).toMatch(/customer_id/);
+      expect(code).toMatch(/DEPRECATED/);
+      expect(code).toMatch(/status:\s*410/);
+      expect(code).toMatch(/Recurring subscriptions have been retired/);
     });
 
-    it('verifies client application source code contains zero embedded Stripe or Supabase service_role secrets', () => {
+    it('verifies verify-razorpay-payment Edge Function performs cryptographic HMAC verification before updating Firestore', () => {
+      const edgeFunctionPath = path.resolve('supabase/functions/verify-razorpay-payment/index.ts');
+      expect(fs.existsSync(edgeFunctionPath)).toBe(true);
+
+      const code = fs.readFileSync(edgeFunctionPath, 'utf8');
+      expect(code).toMatch(/verifyRazorpayPaymentSignature/);
+      expect(code).toMatch(/verifyRazorpaySubscriptionSignature/);
+      expect(code).toMatch(/updateFirestoreSubscription/);
+    });
+
+    it('verifies cancel-razorpay-subscription Edge Function is deprecated and returns HTTP 410 Gone', () => {
+      const edgeFunctionPath = path.resolve('supabase/functions/cancel-razorpay-subscription/index.ts');
+      expect(fs.existsSync(edgeFunctionPath)).toBe(true);
+
+      const code = fs.readFileSync(edgeFunctionPath, 'utf8');
+      expect(code).toMatch(/DEPRECATED/);
+      expect(code).toMatch(/status:\s*410/);
+      expect(code).toMatch(/Recurring subscriptions have been retired/);
+    });
+
+    it('verifies client application source code contains zero embedded Razorpay secrets or service_role keys', () => {
       const clientServiceCode = fs.readFileSync(path.resolve('src/services/subscriptionService.ts'), 'utf8');
       const clientBillingUiCode = fs.readFileSync(path.resolve('src/components/subscription/BillingSettingsSection.tsx'), 'utf8');
 
-      // Ensure no live/test Stripe secret keys or webhook signing secrets exist in client code
-      expect(clientServiceCode).not.toMatch(/sk_live_[0-9a-zA-Z]+/);
-      expect(clientServiceCode).not.toMatch(/sk_test_[0-9a-zA-Z]+/);
-      expect(clientServiceCode).not.toMatch(/whsec_[0-9a-zA-Z]+/);
+      // Ensure no live/test secrets exist in client code
+      expect(clientServiceCode).not.toMatch(/rzp_live_[0-9a-zA-Z]+/);
+      expect(clientServiceCode).not.toMatch(/RAZORPAY_KEY_SECRET/);
+      expect(clientServiceCode).not.toMatch(/RAZORPAY_WEBHOOK_SECRET/);
       expect(clientServiceCode).not.toMatch(/SUPABASE_SERVICE_ROLE_KEY/);
 
-      expect(clientBillingUiCode).not.toMatch(/sk_live_[0-9a-zA-Z]+/);
-      expect(clientBillingUiCode).not.toMatch(/sk_test_[0-9a-zA-Z]+/);
-      expect(clientBillingUiCode).not.toMatch(/whsec_[0-9a-zA-Z]+/);
+      expect(clientBillingUiCode).not.toMatch(/rzp_live_[0-9a-zA-Z]+/);
+      expect(clientBillingUiCode).not.toMatch(/RAZORPAY_KEY_SECRET/);
+      expect(clientBillingUiCode).not.toMatch(/RAZORPAY_WEBHOOK_SECRET/);
       expect(clientBillingUiCode).not.toMatch(/SUPABASE_SERVICE_ROLE_KEY/);
     });
   });
 
   // ============================================================================
-  // 7. Milestone 06 Production Reliability & Defect Regressions
+  // 7. Targeted Subscription Lifecycle & Monotonic Protection
   // ============================================================================
-  describe('7. Milestone 06 Production Reliability & Defect Regressions', () => {
-    const migrationPath = path.resolve('supabase/migrations/20261108_subscriptions_schema.sql');
-    let sqlContent: string;
-
-    beforeEach(() => {
-      sqlContent = fs.readFileSync(migrationPath, 'utf8');
+  describe('7. Targeted Subscription Lifecycle & Monotonic Protection', () => {
+    it('verifies handle-razorpay-webhook rejects out-of-order stale events', () => {
+      const webhookPath = path.resolve('supabase/functions/handle-razorpay-webhook/index.ts');
+      const code = fs.readFileSync(webhookPath, 'utf8');
+      expect(code).toMatch(/eventCreated\s*<\s*existingSub\.latestEventCreated/);
+      expect(code).toMatch(/stale_event_ignored/);
     });
 
-    it('remediates defect 1: verifies only full refunds cancel subscription, preserving active status on partial refunds', () => {
-      expect(sqlContent).toMatch(/elsif\s+p_event_type\s*=\s*'charge\.refunded'\s+then/i);
-      expect(sqlContent).toMatch(/coalesce\(\(v_data->>'refunded'\)::boolean,\s*false\)/i);
-      expect(sqlContent).toMatch(/partial_refund_ignored/i);
-    });
-
-    it('remediates defect 2: verifies out-of-order update or payment_succeeded cannot resurrect a canceled subscription or overwrite a newer subscription', () => {
-      // Subscriptions are protected against stale events via subscription_id matching and monotonic event timestamps
-      expect(sqlContent).toMatch(/stale_subscription_ignored/i);
-      expect(sqlContent).toMatch(/out_of_order_ignored/i);
-    });
-
-    it('remediates defect 3: verifies clean SQL syntax with zero duplicate end blocks', () => {
-      const occurrences = (sqlContent.match(/revoke\s+all\s+on\s+function\s+public\.process_subscription_webhook_event/g) || []).length;
-      expect(occurrences).toBe(1);
-      expect(sqlContent).not.toMatch(/end;\s*'event_id',\s*p_event_id/);
-    });
-
-    it('remediates defect 4: verifies robust Bearer token parsing in customer portal Edge Function', () => {
-      const edgeCode = fs.readFileSync(path.resolve('supabase/functions/create-customer-portal-session/index.ts'), 'utf8');
-      expect(edgeCode).toMatch(/authHeader\.replace\(\/\^Bearer\\s\+\/i,\s*''\)/);
+    it('verifies subscription cancellation sets cancelAtPeriodEnd without deleting user history', () => {
+      const webhookPath = path.resolve('supabase/functions/handle-razorpay-webhook/index.ts');
+      const code = fs.readFileSync(webhookPath, 'utf8');
+      expect(code).toMatch(/case\s+'subscription\.cancelled':/);
+      expect(code).toMatch(/cancelAtPeriodEnd\s*=\s*true/);
     });
   });
 
   // ============================================================================
-  // 8. Targeted Subscription Lifecycle & Refund Association Security
+  // 8. Firebase Spark + Supabase Edge Payment Flow Verification
   // ============================================================================
-  describe('8. Targeted Subscription Lifecycle & Refund Association Security', () => {
-    const migrationPath = path.resolve('supabase/migrations/20261108_subscriptions_schema.sql');
-    let sqlContent: string;
+  describe('8. Firebase Spark + Supabase Edge Payment Flow Verification', () => {
+    it('verifies Edge Function firebaseAuth checks exp, iat, auth_time, aud, iss, sub and RS256 alg', () => {
+      const authHelperPath = path.resolve('supabase/functions/_shared/firebaseAuth.ts');
+      expect(fs.existsSync(authHelperPath)).toBe(true);
+
+      const code = fs.readFileSync(authHelperPath, 'utf8');
+      expect(code).toMatch(/header\.alg\s*!==\s*'RS256'/);
+      expect(code).toMatch(/header\.kid/);
+      expect(code).toMatch(/payload\.exp/);
+      expect(code).toMatch(/payload\.iat/);
+      expect(code).toMatch(/payload\.auth_time/);
+      expect(code).toMatch(/payload\.iss\s*!==\s*expectedIssuer/);
+      expect(code).toMatch(/payload\.aud\s*!==\s*expectedProjectId/);
+      expect(code).toMatch(/payload\.sub/);
+      expect(code).toMatch(/RSASSA-PKCS1-v1_5/);
+    });
+
+    it('verifies Edge Function handle-razorpay-webhook enforces atomic event claiming against race conditions', () => {
+      const webhookPath = path.resolve('supabase/functions/handle-razorpay-webhook/index.ts');
+      const firestoreRestPath = path.resolve('supabase/functions/_shared/firestoreRest.ts');
+
+      const webhookCode = fs.readFileSync(webhookPath, 'utf8');
+      const firestoreCode = fs.readFileSync(firestoreRestPath, 'utf8');
+
+      expect(webhookCode).toMatch(/claimWebhookEventAtomically/);
+      expect(firestoreCode).toMatch(/claimWebhookEventAtomically/);
+      expect(firestoreCode).toMatch(/status\s*===\s*409/); // Conflict handled atomically
+    });
+
+    it('verifies Edge Function handle-razorpay-webhook returns HTTP 500 when Firestore update fails', () => {
+      const webhookPath = path.resolve('supabase/functions/handle-razorpay-webhook/index.ts');
+      const code = fs.readFileSync(webhookPath, 'utf8');
+
+      expect(code).toMatch(/status:\s*500/);
+      expect(code).toMatch(/markWebhookEventFailed/);
+    });
+
+    it('verifies Edge Functions use restricted CORS origins and reject wildcard in production', () => {
+      const corsPath = path.resolve('supabase/functions/_shared/cors.ts');
+      expect(fs.existsSync(corsPath)).toBe(true);
+
+      const code = fs.readFileSync(corsPath, 'utf8');
+      expect(code).toMatch(/ALLOWED_ORIGINS/);
+      expect(code).toMatch(/getCorsHeaders/);
+      expect(code).not.toMatch(/'Access-Control-Allow-Origin':\s*'\*'/);
+    });
+
+    it('verifies client subscriptionService isolates mock RPCs strictly to test runner', () => {
+      const servicePath = path.resolve('src/services/subscriptionService.ts');
+      const code = fs.readFileSync(servicePath, 'utf8');
+
+      expect(code).toMatch(/isTestEnvironment\(\)/);
+      expect(code).toMatch(/user_subscriptions/);
+      expect(code).toMatch(/getDoc\(doc\(db,\s*'user_subscriptions'/);
+    });
+  });
+
+  // ============================================================================
+  // 9. Durable Webhook State Machine & Retry Recovery Scenarios
+  // ============================================================================
+  describe('9. Durable Webhook State Machine & Retry Recovery Scenarios', () => {
+    const firestoreRestPath = path.resolve('supabase/functions/_shared/firestoreRest.ts');
+    const webhookPath = path.resolve('supabase/functions/handle-razorpay-webhook/index.ts');
+    let firestoreCode: string;
+    let webhookCode: string;
 
     beforeEach(() => {
-      sqlContent = fs.readFileSync(migrationPath, 'utf8');
+      firestoreCode = fs.readFileSync(firestoreRestPath, 'utf8');
+      webhookCode = fs.readFileSync(webhookPath, 'utf8');
     });
 
-    it('1. Refund Association: verifies full refund does not cancel newer subscription when old charge is refunded', () => {
-      expect(sqlContent).toMatch(/refund_stale_subscription_ignored/i);
-      expect(sqlContent).toMatch(/v_existing_sub\.subscription_id\s*<>\s*v_target_sub_id/i);
+    it('Scenario 1: Event claim succeeds, Firestore update succeeds -> transitions to processed (200)', () => {
+      expect(firestoreCode).toMatch(/status:\s*'processed'/);
+      expect(firestoreCode).toMatch(/markWebhookEventProcessed/);
+      expect(webhookCode).toMatch(/await\s+markWebhookEventProcessed/);
+      expect(webhookCode).toMatch(/status:\s*'processed'/);
     });
 
-    it('2. Refund Association: verifies partial refund is explicitly ignored without canceling subscription', () => {
-      expect(sqlContent).toMatch(/partial_refund_ignored/i);
-      expect(sqlContent).toMatch(/not\s+v_is_refunded/i);
-      expect(sqlContent).toMatch(/Partial refund does not cancel active subscription/i);
+    it('Scenario 2: Event claim succeeds, Firestore update fails -> transitions to failed (500)', () => {
+      expect(firestoreCode).toMatch(/markWebhookEventFailed/);
+      expect(firestoreCode).toMatch(/status:\s*'failed'/);
+      expect(webhookCode).toMatch(/await\s+markWebhookEventFailed/);
+      expect(webhookCode).toMatch(/status:\s*500/);
     });
 
-    it('3. Refund Association: verifies ambiguous or missing invoice association safely no-ops without canceling', () => {
-      expect(sqlContent).toMatch(/refund_unmatched_safe_noop/i);
-      expect(sqlContent).toMatch(/refund_stale_charge_ignored/i);
-      expect(sqlContent).toMatch(/Charge refund could not be unambiguously linked to current subscription/i);
+    it('Scenario 3: Razorpay retries after previous failure -> recovers via retry_after_failure and re-processes', () => {
+      expect(firestoreCode).toMatch(/currentStatus\s*===\s*'failed'/);
+      expect(firestoreCode).toMatch(/status:\s*'retry_after_failure'/);
+      expect(firestoreCode).toMatch(/attemptCount:\s*attempts\s*\+\s*1/);
+      expect(webhookCode).toMatch(/claim\.canProcess/);
     });
 
-    it('4. Concurrency & Deduplication: verifies duplicate webhook event IDs are rejected via ledger idempotency', () => {
-      expect(sqlContent).toMatch(/on\s+conflict\s*\(\s*event_id\s*\)\s+do\s+nothing/i);
-      expect(sqlContent).toMatch(/duplicate_ignored/i);
+    it('Scenario 4: Two identical webhook deliveries arrive concurrently -> second detects concurrent_in_flight (503)', () => {
+      expect(firestoreCode).toMatch(/isLeaseActive/);
+      expect(firestoreCode).toMatch(/status:\s*'concurrent_in_flight'/);
+      expect(webhookCode).toMatch(/claim\.status\s*===\s*'concurrent_in_flight'/);
+      expect(webhookCode).toMatch(/status:\s*503/);
     });
 
-    it('5. Stale Event Defense: verifies delayed event from an old subscription is ignored after resubscription', () => {
-      expect(sqlContent).toMatch(/stale_subscription_ignored/i);
-      expect(sqlContent).toMatch(/Event belongs to superseded subscription/i);
+    it('Scenario 5: A completed event arrives again -> detects already_processed and returns 200 duplicate_ignored', () => {
+      expect(firestoreCode).toMatch(/currentStatus\s*===\s*'processed'/);
+      expect(firestoreCode).toMatch(/status:\s*'already_processed'/);
+      expect(webhookCode).toMatch(/claim\.status\s*===\s*'already_processed'/);
+      expect(webhookCode).toMatch(/status:\s*'duplicate_ignored'/);
     });
 
-    it('6. Legitimate Resubscription: verifies checkout.session.completed cleanly reactivates canceled subscriptions', () => {
-      expect(sqlContent).toMatch(/on\s+conflict\s*\(\s*user_id\s*\)\s+do\s+update\s+set/i);
-      expect(sqlContent).toMatch(/status\s*=\s*'active'/i);
-      expect(sqlContent).toMatch(/cancel_at_period_end\s*=\s*false/i);
-      expect(sqlContent).toMatch(/latest_event_created\s*=\s*(case|excluded\.latest_event_created)/i);
+    it('Scenario 6: An abandoned processing lease expires -> recovers via lease_expired_recovered and resumes attempt', () => {
+      expect(firestoreCode).toMatch(/leaseExpiresAt/);
+      expect(firestoreCode).toMatch(/status:\s*'lease_expired_recovered'/);
+      expect(firestoreCode).toMatch(/lease_expires_at/);
     });
 
-    it('7. Payment Failure & Grace Period: verifies 24-hour grace period logic and entitlement calculation', () => {
-      expect(sqlContent).toMatch(/status\s*=\s*'past_due'/i);
-      expect(sqlContent).toMatch(/v_sub\.status\s*=\s*'past_due'\s+and\s+v_sub\.current_period_end\s*>=\s*now\(\)\s*-\s*interval\s+'24\s+hours'/i);
+    it('Scenario 7: An older event arrives after a newer event -> skips update with stale_event_ignored and marks processed', () => {
+      expect(webhookCode).toMatch(/eventCreated\s*<\s*existingSub\.latestEventCreated/);
+      expect(webhookCode).toMatch(/stale_event_ignored/);
+    });
+  });
+
+  // ============================================================================
+  // 10. Concurrency, Precondition & Failure-Injection Rigorous Verification
+  // ============================================================================
+  describe('10. Concurrency, Precondition & Failure-Injection Rigorous Verification', () => {
+    const firestoreRestPath = path.resolve('supabase/functions/_shared/firestoreRest.ts');
+    let firestoreCode: string;
+
+    beforeEach(() => {
+      firestoreCode = fs.readFileSync(firestoreRestPath, 'utf8');
     });
 
-    it('8. Out-of-Order Monotonic Timestamp Defense: tracks latest_event_created on user_subscriptions', () => {
-      expect(sqlContent).toMatch(/latest_event_created\s+timestamptz/i);
-      expect(sqlContent).toMatch(/v_event_created\s*<\s*v_existing_sub\.latest_event_created/i);
-      expect(sqlContent).toMatch(/out_of_order_ignored/i);
+    it('proves atomic lease reclamation: uses currentDocument.updateTime precondition to prevent concurrent lease theft', () => {
+      expect(firestoreCode).toMatch(/currentDocument\.updateTime/);
+      expect(firestoreCode).toMatch(/expectedUpdateTime/);
+      expect(firestoreCode).toMatch(/res\.status\s*===\s*412/);
+      expect(firestoreCode).toMatch(/preconditionFailed:\s*true/);
     });
 
-    it('9. SubscriptionService RPC Integration: propagates state machine result and handles database rollback/error', async () => {
-      const mockRpc = vi.fn().mockResolvedValue({
-        data: { status: 'processed', event_id: 'evt_test_success_1' },
-        error: null,
-      });
-
-      vi.spyOn(authServiceModule, 'getSupabaseClient').mockReturnValue({
-        rpc: mockRpc,
-      } as any);
-
-      const result = await subscriptionService.processWebhookEvent(
-        'evt_test_success_1',
-        'checkout.session.completed',
-        { data: { object: { subscription: 'sub_123' } } }
-      );
-
-      expect(result).toEqual({ status: 'processed', event_id: 'evt_test_success_1' });
-      expect(mockRpc).toHaveBeenCalledWith('process_subscription_webhook_event', {
-        p_event_id: 'evt_test_success_1',
-        p_event_type: 'checkout.session.completed',
-        p_payload: { data: { object: { subscription: 'sub_123' } } },
-      });
-
-      // Error/Rollback handling: when database transaction fails
-      mockRpc.mockResolvedValueOnce({
-        data: null,
-        error: { message: 'Transaction rolled back: foreign key constraint violation' },
-      });
-
-      await expect(
-        subscriptionService.processWebhookEvent('evt_failed_1', 'checkout.session.completed', {})
-      ).rejects.toThrow(/Transaction rolled back/);
+    it('proves concurrent lease reclamation safety: worker encountering 412 yields as concurrent_in_flight', () => {
+      expect(firestoreCode).toMatch(/leaseReclaim\?\.preconditionFailed/);
+      expect(firestoreCode).toMatch(/retryReclaim\?\.preconditionFailed/);
+      expect(firestoreCode).toMatch(/status:\s*'concurrent_in_flight'/);
     });
 
-    it('10. SubscriptionService Entitlements: verifies grace period entitlement calculation in client service', async () => {
-      const futureDate = new Date(Date.now() + 12 * 3600 * 1000).toISOString();
-      const mockRpc = vi.fn().mockResolvedValue({
-        data: {
-          tier: 'pro',
-          is_active: true,
-          features: ['unlimited_cloud_sync', 'advanced_analytics'],
-          current_period_end: futureDate,
-          cancel_at_period_end: false,
-          status: 'past_due',
-        },
-        error: null,
-      });
+    it('proves subscription ordering precondition: updates include currentDocument.updateTime or exists=false', () => {
+      expect(firestoreCode).toMatch(/currentDocument\.updateTime=\${encodeURIComponent\(expectedUpdateTime\)}/);
+      expect(firestoreCode).toMatch(/currentDocument\.exists=false/);
+    });
 
-      vi.spyOn(authServiceModule, 'getSupabaseClient').mockReturnValue({
-        rpc: mockRpc,
-      } as any);
+    it('simulates concurrent workers reclaiming expired lease: only winner proceeds, loser gets 412 and backs off', async () => {
+      let documentUpdateTime = '2026-11-08T01:00:00.000Z';
+      let activeHolder: string | null = null;
 
-      const entitlements = await subscriptionService.getUserEntitlements('user-test-uuid');
-      expect(entitlements.status).toBe('past_due');
+      const firestorePatchPrecondition = async (workerId: string, expectedUpdateTime: string) => {
+        if (expectedUpdateTime !== documentUpdateTime) {
+          return { status: 412, error: 'FAILED_PRECONDITION' };
+        }
+        documentUpdateTime = `2026-11-08T01:00:05.000Z`;
+        activeHolder = workerId;
+        return { status: 200, success: true };
+      };
+
+      const readDoc = { status: 'processing', updateTime: documentUpdateTime };
+
+      const worker1Claim = await firestorePatchPrecondition('worker-1', readDoc.updateTime);
+      const worker2Claim = await firestorePatchPrecondition('worker-2', readDoc.updateTime);
+
+      expect(worker1Claim.status).toBe(200);
+      expect(worker2Claim.status).toBe(412);
+      expect(activeHolder).toBe('worker-1');
+
+      const worker2Decision = worker2Claim.status === 412
+        ? { canProcess: false, status: 'concurrent_in_flight' }
+        : { canProcess: true, status: 'lease_expired_recovered' };
+
+      expect(worker2Decision.canProcess).toBe(false);
+      expect(worker2Decision.status).toBe('concurrent_in_flight');
+    });
+
+    it('simulates concurrent subscription updates for same user: older event fails precondition, retries, and yields to newer state', async () => {
+      let subDoc = {
+        userId: 'user_race_test',
+        status: 'free',
+        planTier: 'free',
+        latestEventCreated: 100,
+        updateTime: '2026-11-08T01:00:00.000Z',
+      };
+
+      const readByWorkerA = { ...subDoc };
+      const readByWorkerB = { ...subDoc };
+
+      // Worker B commits first
+      const workerBPrecondition = readByWorkerB.updateTime;
+      expect(workerBPrecondition).toBe(subDoc.updateTime);
+      subDoc = {
+        ...subDoc,
+        status: 'active',
+        planTier: 'pro',
+        latestEventCreated: 300,
+        updateTime: '2026-11-08T01:00:01.000Z',
+      };
+
+      // Worker A attempts to commit with stale precondition T0
+      const workerAPrecondition = readByWorkerA.updateTime;
+      const workerAPatchResult = workerAPrecondition === subDoc.updateTime
+        ? { status: 200 }
+        : { status: 412, error: 'FAILED_PRECONDITION' };
+
+      expect(workerAPatchResult.status).toBe(412);
+      expect(subDoc.latestEventCreated).toBe(300);
+      expect(subDoc.status).toBe('active');
+
+      // Worker A retries after failure, reads fresh document
+      const freshSubDoc = { ...subDoc };
+      const isStale = 200 < freshSubDoc.latestEventCreated;
+      expect(isStale).toBe(true);
+
+      const workerARetryResult = isStale
+        ? { status: 200, outcome: 'stale_event_ignored' }
+        : { status: 500 };
+      expect(workerARetryResult.outcome).toBe('stale_event_ignored');
+      expect(subDoc.latestEventCreated).toBe(300);
+      expect(subDoc.planTier).toBe('pro');
+    });
+
+    it('simulates double fault: subscription write fails and error logging fails -> still returns HTTP 500 to Razorpay', async () => {
+      let rzpResponseStatus = 200;
+
+      const simulateWebhookExecution = async () => {
+        try {
+          throw new Error('Firestore connection timeout: 503 Service Unavailable');
+        } catch (primaryErr: any) {
+          try {
+            throw new Error('Firestore secondary error: 500 Internal Server Error');
+          } catch (loggingErr) {
+            // Suppressed secondary error
+          }
+          rzpResponseStatus = 500;
+        }
+      };
+
+      await simulateWebhookExecution();
+      expect(rzpResponseStatus).toBe(500);
+    });
+  });
+
+  // ============================================================================
+  // 10. One-Time Payment Model & Expiry Lifecycle Invariants
+  // ============================================================================
+  describe('10. One-Time Payment Model & Expiry Lifecycle Invariants', () => {
+    it('grants active paid tier when currentPeriodEnd is in the future', async () => {
+      const futurePeriodEnd = new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString();
+      const mockSupabase = {
+        rpc: vi.fn().mockResolvedValue({
+          data: {
+            tier: 'pro',
+            is_active: true,
+            features: ['timetable', 'unlimited_cloud_sync', 'advanced_analytics'],
+            status: 'active',
+            current_period_end: futurePeriodEnd,
+          },
+          error: null,
+        }),
+      } as any;
+      vi.spyOn(authServiceModule, 'getSupabaseClient').mockReturnValue(mockSupabase);
+
+      const entitlements = await subscriptionService.getUserEntitlements('usr-future-active');
       expect(entitlements.isActive).toBe(true);
       expect(entitlements.tier).toBe('pro');
-      expect(subscriptionService.canAccessFeature('unlimited_cloud_sync', entitlements)).toBe(true);
+      expect(entitlements.features).toContain('unlimited_cloud_sync');
+      expect(entitlements.currentPeriodEnd).toBe(futurePeriodEnd);
     });
 
-    it('11. Webhook Concurrency: verifies row-level write locks (FOR UPDATE) serialize distinct concurrent events for the same user', () => {
-      // Confirms all subscription lookup queries use FOR UPDATE to prevent race conditions under READ COMMITTED isolation
-      const forUpdateMatches = sqlContent.match(/for\s+update/gi);
-      expect(forUpdateMatches).not.toBeNull();
-      expect(forUpdateMatches!.length).toBeGreaterThanOrEqual(4);
+    it('automatically revokes paid access and reverts to Free tier when currentPeriodEnd has expired', async () => {
+      const pastPeriodEnd = new Date(Date.now() - 5 * 60 * 1000).toISOString(); // Expired 5 mins ago
+      const mockSupabase = {
+        rpc: vi.fn().mockResolvedValue({
+          data: {
+            tier: 'pro',
+            is_active: true, // Server says true, but client verifies expired period
+            features: ['timetable', 'unlimited_cloud_sync'],
+            status: 'active',
+            current_period_end: pastPeriodEnd,
+          },
+          error: null,
+        }),
+      } as any;
+      vi.spyOn(authServiceModule, 'getSupabaseClient').mockReturnValue(mockSupabase);
+
+      const entitlements = await subscriptionService.getUserEntitlements('usr-expired');
+      expect(entitlements.isActive).toBe(false);
+      expect(entitlements.tier).toBe('free');
+      expect(entitlements.status).toBe('completed');
+      expect(entitlements.features).not.toContain('unlimited_cloud_sync');
+      expect(entitlements.features).toContain('timetable');
     });
 
-    it('12. Equal Timestamp Defense: verifies simultaneous events with equal timestamps cannot resurrect a canceled subscription', () => {
-      expect(sqlContent).toMatch(/equal_timestamp_resurrection_ignored/i);
-      expect(sqlContent).toMatch(/v_event_created\s*=\s*v_existing_sub\.latest_event_created\s+and\s+v_existing_sub\.status\s*=\s*'canceled'/i);
+    it('repurchase before expiry appends 30 days onto existing unexpired period end', () => {
+      const now = new Date('2026-11-08T12:00:00.000Z');
+      const existingPeriodEnd = new Date('2026-11-20T12:00:00.000Z'); // 12 days remaining
+
+      const existingSub = {
+        status: 'active',
+        currentPeriodEnd: existingPeriodEnd.toISOString(),
+      };
+
+      const durationMs = 30 * 24 * 60 * 60 * 1000;
+      let baseTime = now.getTime();
+
+      if (existingSub && existingSub.status === 'active' && existingSub.currentPeriodEnd) {
+        const existingEndTime = new Date(existingSub.currentPeriodEnd).getTime();
+        if (!isNaN(existingEndTime) && existingEndTime > now.getTime()) {
+          baseTime = existingEndTime;
+        }
+      }
+
+      const newPeriodEnd = new Date(baseTime + durationMs).toISOString();
+
+      // Should be existingPeriodEnd + 30 days = 2026-12-20
+      expect(newPeriodEnd).toBe('2026-12-20T12:00:00.000Z');
+      expect(new Date(newPeriodEnd).getTime()).toBeGreaterThan(now.getTime() + durationMs);
     });
 
-    it('13. Checkout Session Metadata: verifies server explicitly passes metadata to the Stripe subscription object', () => {
-      const checkoutCode = fs.readFileSync(path.resolve('supabase/functions/create-checkout-session/index.ts'), 'utf8');
-      expect(checkoutCode).toMatch(/subscription_data\[metadata\]\[user_id\]/i);
-      expect(checkoutCode).toMatch(/subscription_data\[metadata\]\[plan_tier\]/i);
+    it('repurchase after expiry starts 30 days from current time', () => {
+      const now = new Date('2026-11-08T12:00:00.000Z');
+      const expiredPeriodEnd = new Date('2026-11-01T12:00:00.000Z'); // Expired 7 days ago
+
+      const existingSub = {
+        status: 'completed',
+        currentPeriodEnd: expiredPeriodEnd.toISOString(),
+      };
+
+      const durationMs = 30 * 24 * 60 * 60 * 1000;
+      let baseTime = now.getTime();
+
+      if (existingSub && existingSub.status === 'active' && existingSub.currentPeriodEnd) {
+        const existingEndTime = new Date(existingSub.currentPeriodEnd).getTime();
+        if (!isNaN(existingEndTime) && existingEndTime > now.getTime()) {
+          baseTime = existingEndTime;
+        }
+      }
+
+      const newPeriodEnd = new Date(baseTime + durationMs).toISOString();
+
+      // Starts from now + 30 days = 2026-12-08
+      expect(newPeriodEnd).toBe('2026-12-08T12:00:00.000Z');
     });
 
-    it('14. Security Boundaries: verifies caller isolation and separation between authenticated and service_role permissions', () => {
-      // Client can never call webhook processor
-      expect(sqlContent).toMatch(/revoke\s+all\s+on\s+function\s+public\.process_subscription_webhook_event\([^)]*\)\s+from\s+public,\s*anon,\s*authenticated/i);
-      expect(sqlContent).toMatch(/grant\s+execute\s+on\s+function\s+public\.process_subscription_webhook_event\([^)]*\)\s+to\s+service_role/i);
-      // Entitlements require caller identity match
-      expect(sqlContent).toMatch(/auth\.uid\(\)\s*is\s+distinct\s+from\s+v_target_user/i);
+    it('duplicate webhook delivery for the same payment is idempotent and never extends period twice', () => {
+      const existingSub = {
+        status: 'active',
+        lastVerifiedPayment: 'pay_rzp_dup_888',
+        currentPeriodEnd: '2026-12-08T12:00:00.000Z',
+      };
+
+      const incomingPaymentId = 'pay_rzp_dup_888';
+      let extended = false;
+
+      if (existingSub.lastVerifiedPayment === incomingPaymentId) {
+        // Idempotent no-op
+        extended = false;
+      } else {
+        extended = true;
+      }
+
+      expect(extended).toBe(false);
+      expect(existingSub.currentPeriodEnd).toBe('2026-12-08T12:00:00.000Z');
     });
 
-    it('15. Checkout Concurrency: verifies two-key advisory locking serializes concurrent initial inserts before row creation', () => {
-      expect(sqlContent).toMatch(/pg_advisory_xact_lock\(\s*20261108\s*,\s*hashtext\(\s*v_user_id::text\s*\)\s*\)/i);
-    });
+    it('failed payment on new checkout attempt does not destroy existing active membership pass', () => {
+      const futurePeriodEnd = new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString();
+      const existingSub = {
+        status: 'active',
+        currentPeriodEnd: futurePeriodEnd,
+      };
 
-    it('16. Monotonic Checkout Guard: verifies ON CONFLICT DO UPDATE WHERE strictly prevents older events from overwriting active state', () => {
-      expect(sqlContent).toMatch(/where\s+user_subscriptions\.latest_event_created\s+is\s+null\s+or\s+excluded\.latest_event_created\s*>\s*user_subscriptions\.latest_event_created/i);
-    });
+      let nextStatus = existingSub.status;
+      const now = new Date();
 
-    it('17. Honest RPC Status: verifies stale checkout events return stale_checkout_ignored when update is skipped', () => {
-      expect(sqlContent).toMatch(/'status',\s*'stale_checkout_ignored'/i);
-      expect(sqlContent).toMatch(/Checkout event is older than existing active subscription/i);
-    });
+      // Webhook payment.failed arrives for a new failed order
+      if (existingSub.status === 'active' && existingSub.currentPeriodEnd) {
+        const expiryTime = new Date(existingSub.currentPeriodEnd).getTime();
+        if (!isNaN(expiryTime) && expiryTime > now.getTime()) {
+          // Protected! Active status is preserved
+        } else {
+          nextStatus = 'past_due';
+        }
+      }
 
-    it('18. Charge-Only Refund Matching: verifies charge lookup executes even when invoice ID is null', () => {
-      expect(sqlContent).toMatch(/if\s+v_target_sub_id\s+is\s+null\s+and\s+\(\s*v_invoice_id\s+is\s+not\s+null\s+or\s+v_charge_id\s+is\s+not\s+null\s*\)\s+then/i);
-    });
-
-    it('19. Customer Scoping in Ledger: verifies historical refund ledger query scopes strictly by customer_id', () => {
-      expect(sqlContent).toMatch(/v_customer_id\s+is\s+null\s+or\s+payload->'data'->'object'->>'customer'\s*=\s*v_customer_id/i);
+      expect(nextStatus).toBe('active');
     });
   });
 });

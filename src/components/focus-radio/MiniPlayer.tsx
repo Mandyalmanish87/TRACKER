@@ -66,12 +66,12 @@ export const MiniPlayer: React.FC = () => {
     return (
       <button
         onClick={() => setMiniPlayerOpen(true)}
-        className="fixed bottom-4 right-4 z-40 px-3.5 py-2.5 rounded-full bg-[#0D0F0E] border border-zinc-800 text-[#C8FF45] font-mono text-xs flex items-center gap-2 shadow-2xl hover:scale-105 active:scale-95 transition cursor-pointer"
+        className="focus-radio-reopen fixed bottom-4 right-4 z-40 px-3.5 py-2.5 rounded-full bg-[var(--surface)] border border-zinc-800 text-[var(--accent)] font-mono text-xs flex items-center gap-2 shadow-2xl hover:scale-105 active:scale-95 transition cursor-pointer"
         title="Open Focus Radio"
       >
-        <Radio className="w-4 h-4 text-[#C8FF45] animate-pulse" />
+        <Radio className="w-4 h-4 text-[var(--accent)] animate-pulse" />
         <span className="font-semibold text-white">Focus Radio</span>
-        {isPlaying && <span className="w-2 h-2 rounded-full bg-[#C8FF45] animate-ping" />}
+        {isPlaying && <span className="w-2 h-2 rounded-full bg-[var(--accent)] animate-ping" />}
       </button>
     );
   }
@@ -79,14 +79,11 @@ export const MiniPlayer: React.FC = () => {
   return (
     <>
       <div
-        className={`fixed z-40 transition-all duration-300 ${
+        className={`focus-radio-mini-player fixed z-40 transition-all duration-300 ${
           isMiniPlayerCollapsed
             ? 'bottom-4 right-4 w-72 sm:w-80'
             : 'bottom-4 right-4 w-[calc(100vw-2rem)] max-w-sm sm:max-w-md'
-        } rounded-2xl bg-[#0D0F0E]/95 backdrop-blur-xl border border-zinc-800 shadow-2xl overflow-hidden`}
-        style={{
-          boxShadow: '0 20px 40px -15px rgba(0,0,0,0.8), 0 0 20px -5px rgba(200,255,69,0.15)',
-        }}
+        } rounded-2xl bg-[var(--surface)]/95 backdrop-blur-xl border border-zinc-800 shadow-2xl overflow-hidden`}
       >
         {/* Error notification bar */}
         {errorMessage && (
@@ -101,8 +98,8 @@ export const MiniPlayer: React.FC = () => {
         {/* Top Control Bar: Title & Window Controls */}
         <div className="flex items-center justify-between px-3 py-2 border-b border-zinc-800/80 bg-zinc-950/60">
           <div className="flex items-center gap-2 min-w-0">
-            <div className="w-2 h-2 rounded-full bg-[#C8FF45] animate-pulse shrink-0" />
-            <span className="font-mono text-[10px] uppercase font-bold tracking-wider text-[#C8FF45] truncate">
+            <div className="w-2 h-2 rounded-full bg-[var(--accent)] animate-pulse shrink-0" />
+            <span className="font-mono text-[10px] uppercase font-bold tracking-wider text-[var(--accent)] truncate">
               Focus Radio 2.0
             </span>
           </div>
@@ -147,7 +144,7 @@ export const MiniPlayer: React.FC = () => {
               )}
               {isBuffering && (
                 <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
-                  <span className="w-4 h-4 border-2 border-[#C8FF45] border-t-transparent rounded-full animate-spin" />
+                  <span className="w-4 h-4 border-2 border-[var(--accent)] border-t-transparent rounded-full animate-spin" />
                 </div>
               )}
             </div>
@@ -166,7 +163,7 @@ export const MiniPlayer: React.FC = () => {
             <div className="flex items-center gap-1 shrink-0">
               <button
                 onClick={togglePlay}
-                className="w-9 h-9 rounded-full bg-[#C8FF45] hover:bg-[#b8f533] text-black flex items-center justify-center transition shadow-md active:scale-95 cursor-pointer"
+                className="w-9 h-9 rounded-full bg-[var(--accent)] hover:bg-[var(--accent-dark-resolved)] text-[var(--primary-foreground)] flex items-center justify-center transition shadow-md active:scale-95 cursor-pointer"
                 title={isPlaying ? 'Pause' : 'Play'}
               >
                 {isPlaying ? (
@@ -192,7 +189,7 @@ export const MiniPlayer: React.FC = () => {
               {savedPlaybackPosition > 5 && !isPlaying && (
                 <button
                   onClick={resumeFromSavedPosition}
-                  className="w-full py-1.5 px-3 rounded-xl bg-[#C8FF45]/15 border border-[#C8FF45]/30 text-[#C8FF45] text-xs font-mono flex items-center justify-center gap-1.5 hover:bg-[#C8FF45]/25 transition cursor-pointer"
+                  className="w-full py-1.5 px-3 rounded-xl bg-[var(--accent)]/15 border border-[var(--accent)]/30 text-[var(--accent)] text-xs font-mono flex items-center justify-center gap-1.5 hover:bg-[var(--accent)]/25 transition cursor-pointer"
                 >
                   <Play className="w-3.5 h-3.5 fill-current" />
                   <span>Resume from {formatRadioTime(savedPlaybackPosition)}</span>
@@ -208,7 +205,7 @@ export const MiniPlayer: React.FC = () => {
                   step={1}
                   value={currentTime}
                   onChange={(e) => seekTo(Number(e.target.value))}
-                  className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-[#C8FF45]"
+                  className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-[var(--accent)]"
                   title="Seek playback position"
                 />
                 <div className="flex justify-between text-[10px] font-mono text-zinc-400">
@@ -219,7 +216,7 @@ export const MiniPlayer: React.FC = () => {
 
               {/* Simulated Ambient Visualizer */}
               <div className="bg-zinc-950/70 rounded-xl p-2 border border-zinc-900 flex items-center justify-between">
-                <Visualizer isPlaying={isPlaying} color="#C8FF45" className="flex-1" />
+                <Visualizer isPlaying={isPlaying} color="var(--accent)" className="flex-1" />
                 <span className="text-[9px] font-mono text-zinc-500 uppercase px-2">
                   Ambient Pulse
                 </span>
@@ -240,7 +237,7 @@ export const MiniPlayer: React.FC = () => {
                     onClick={() => setShuffle(!shuffle)}
                     className={`p-1.5 rounded-lg transition cursor-pointer ${
                       shuffle
-                        ? 'text-[#C8FF45] bg-[#C8FF45]/15'
+                        ? 'text-[var(--accent)] bg-[var(--accent)]/15'
                         : 'text-zinc-500 hover:text-zinc-200'
                     }`}
                     title={shuffle ? 'Shuffle On' : 'Shuffle Off'}
@@ -255,7 +252,7 @@ export const MiniPlayer: React.FC = () => {
                     }}
                     className={`p-1.5 rounded-lg transition cursor-pointer ${
                       repeatMode !== 'off'
-                        ? 'text-[#C8FF45] bg-[#C8FF45]/15'
+                        ? 'text-[var(--accent)] bg-[var(--accent)]/15'
                         : 'text-zinc-500 hover:text-zinc-200'
                     }`}
                     title={`Repeat: ${repeatMode}`}
@@ -287,7 +284,7 @@ export const MiniPlayer: React.FC = () => {
                     max="100"
                     value={isMuted ? 0 : volume}
                     onChange={(e) => setVolume(Number(e.target.value))}
-                    className="w-20 accent-[#C8FF45] h-1.5 rounded-lg bg-zinc-800 cursor-pointer"
+                    className="w-20 accent-[var(--accent)] h-1.5 rounded-lg bg-zinc-800 cursor-pointer"
                   />
                 </div>
               </div>
@@ -299,7 +296,7 @@ export const MiniPlayer: React.FC = () => {
                     onClick={() => setActiveTab(activeTab === 'queue' ? 'none' : 'queue')}
                     className={`px-2.5 py-1 rounded-lg text-[11px] font-mono transition flex items-center gap-1 cursor-pointer ${
                       activeTab === 'queue'
-                        ? 'bg-[#C8FF45] text-black font-semibold'
+                        ? 'bg-[var(--accent)] text-[var(--primary-foreground)] font-semibold'
                         : 'bg-zinc-900 text-zinc-300 hover:text-white'
                     }`}
                   >
@@ -311,7 +308,7 @@ export const MiniPlayer: React.FC = () => {
                     onClick={() => setActiveTab(activeTab === 'add' ? 'none' : 'add')}
                     className={`px-2.5 py-1 rounded-lg text-[11px] font-mono transition flex items-center gap-1 cursor-pointer ${
                       activeTab === 'add'
-                        ? 'bg-[#C8FF45] text-black font-semibold'
+                        ? 'bg-[var(--accent)] text-[var(--primary-foreground)] font-semibold'
                         : 'bg-zinc-900 text-zinc-300 hover:text-white'
                     }`}
                   >
@@ -326,7 +323,7 @@ export const MiniPlayer: React.FC = () => {
                   title="Saved Playlists"
                   aria-label="View Playlists"
                 >
-                  <Bookmark className="w-3 h-3 text-[#C8FF45]" />
+                  <Bookmark className="w-3 h-3 text-[var(--accent)]" />
                   <span>Playlists</span>
                 </button>
               </div>

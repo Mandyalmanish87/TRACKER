@@ -56,6 +56,20 @@ npm run dev
 ```
 The application will launch at: **`http://localhost:5173/`**
 
+## Firebase backend
+
+Firebase is the only active cloud provider. Google sign-in uses Firebase Authentication and personal app data syncs to Cloud Firestore. Photo uploads and paid server features are paused; progress photos stay on the current device.
+
+Copy `.env.example` to `.env.local` and fill in the Firebase web app settings. Enable Google as a sign-in provider in Firebase Authentication, then deploy the Firebase resources from the project root:
+
+```bash
+firebase deploy --only firestore:rules,storage,functions
+```
+
+Cloud Functions require a paid Firebase plan and are not part of the free setup. See [Firebase backend setup](docs/FIREBASE_BACKEND.md).
+
+The old SQL migrations and Edge Functions are retained under `docs/archive/legacy-supabase` as historical reference only; the application does not load or call them.
+
 ### 4. Run Test Suite
 ```bash
 npm test

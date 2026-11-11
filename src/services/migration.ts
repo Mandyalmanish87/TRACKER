@@ -48,7 +48,13 @@ export function migrateV1ToV2(raw: unknown): AppStateData {
   const defaultSettings: AppSettings = {
     themeMode: v1.settings?.themeMode ?? 'system',
     accentColor: v1.settings?.accentColor ?? 'terracotta',
+    customAccentColor: typeof v1.settings?.customAccentColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(v1.settings.customAccentColor) ? v1.settings.customAccentColor : undefined,
+    savedAccentColors: Array.isArray(v1.settings?.savedAccentColors) ? v1.settings.savedAccentColors.filter((color: unknown) => typeof color === 'string' && /^#[0-9a-fA-F]{6}$/.test(color)).slice(0, 12) : [],
     backgroundStyle: v1.settings?.backgroundStyle ?? 'minimal',
+    backgroundEffect: v1.settings?.backgroundEffect ?? 'static',
+    backgroundEffectSpeed: v1.settings?.backgroundEffectSpeed ?? 2,
+    backgroundEffectIntensity: v1.settings?.backgroundEffectIntensity ?? 0.22,
+    accentEdgeGlow: typeof v1.settings?.accentEdgeGlow === 'boolean' ? v1.settings.accentEdgeGlow : true,
     customBackgroundUrl: v1.settings?.customBackgroundUrl,
     studyDayRolloverHour: typeof v1.settings?.studyDayRolloverHour === 'number' ? v1.settings.studyDayRolloverHour : 0,
     showExamCountdown: typeof v1.settings?.showExamCountdown === 'boolean' ? v1.settings.showExamCountdown : true,
@@ -58,9 +64,14 @@ export function migrateV1ToV2(raw: unknown): AppStateData {
     dashboardLayoutMode: v1.settings?.dashboardLayoutMode || 'bento',
     dashboardDensity: v1.settings?.dashboardDensity || 'compact',
     userMode: v1.settings?.userMode === 'class_based' ? 'class_based' : 'individual',
+    gender: v1.settings?.gender === 'female' || (!v1.settings?.gender && v1.settings?.bodyModelPreference === 'female') ? 'female' : 'male',
+    bodyModelPreference: v1.settings?.gender === 'female' || v1.settings?.bodyModelPreference === 'female' ? 'female' : 'male',
+    bloomEnabled: v1.settings?.gender === 'female' || v1.settings?.bodyModelPreference === 'female' ? Boolean(v1.settings?.bloomEnabled) : false,
   };
 
   return {
+    // Preserve app fields introduced after this migrator was written.
+    ...v1,
     // Existing v1 fields
     hasSampleData: Boolean(v1.hasSampleData),
     subjects,
@@ -71,8 +82,8 @@ export function migrateV1ToV2(raw: unknown): AppStateData {
     reminders,
     // New v2 fields
     schemaVersion: 2,
-    profile: defaultProfile,
-    settings: defaultSettings,
+    profile: { ...v1.profile, ...defaultProfile },
+    settings: { ...v1.settings, ...defaultSettings },
     syllabusSubjects: Array.isArray(v1.syllabusSubjects) ? v1.syllabusSubjects : [],
     occurrenceOverrides: Array.isArray(v1.occurrenceOverrides) ? v1.occurrenceOverrides : [],
     extraClasses: Array.isArray(v1.extraClasses) ? v1.extraClasses : [],

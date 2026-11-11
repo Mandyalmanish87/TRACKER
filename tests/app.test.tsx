@@ -13,7 +13,7 @@ describe('TRACKER App Component & Milestone 1 Verification', () => {
     render(<App />);
     expect(screen.getByText('TRACKER')).toBeInTheDocument();
     expect(screen.getByText('Personal Daily Operating System')).toBeInTheDocument();
-    expect(screen.getByText('Today')).toBeInTheDocument();
+    expect(screen.getAllByText('Today').length).toBeGreaterThan(0);
     expect(screen.getByText('Timetable')).toBeInTheDocument();
     expect(screen.getAllByText('Attendance').length).toBeGreaterThan(0);
   });

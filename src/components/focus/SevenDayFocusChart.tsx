@@ -7,6 +7,7 @@ interface SevenDayFocusChartProps {
 
 export const SevenDayFocusChart: React.FC<SevenDayFocusChartProps> = ({ data }) => {
   const [hoveredDay, setHoveredDay] = useState<DayFocusMetric | null>(null);
+  const formatMinutes = (minutes: number) => Number(minutes.toFixed(2)).toString();
 
   const maxMinutes = Math.max(60, ...data.map((d) => d.minutes));
 
@@ -14,7 +15,7 @@ export const SevenDayFocusChart: React.FC<SevenDayFocusChartProps> = ({ data }) 
   const barAreaHeight = 110;
 
   return (
-    <div className="w-full bg-white dark:bg-espresso-850 rounded-2xl border border-ivory-300 dark:border-espresso-750 p-5 shadow-subtle">
+    <div className="focus-analytics-card w-full bg-white dark:bg-espresso-850 rounded-2xl border border-ivory-300 dark:border-espresso-750 p-5 shadow-subtle">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
         <div>
           <h3 className="font-serif text-base font-bold text-espresso-950 dark:text-ivory-50">
@@ -30,7 +31,7 @@ export const SevenDayFocusChart: React.FC<SevenDayFocusChartProps> = ({ data }) 
           {hoveredDay ? (
             <span>
               {hoveredDay.dayName} ({hoveredDay.dateStr}):{' '}
-              <strong style={{ color: 'var(--accent)' }}>{hoveredDay.minutes} min</strong> (
+              <strong style={{ color: 'var(--accent)' }}>{formatMinutes(hoveredDay.minutes)} min</strong> (
               {hoveredDay.completedCount} completed)
             </span>
           ) : (
@@ -134,7 +135,7 @@ export const SevenDayFocusChart: React.FC<SevenDayFocusChartProps> = ({ data }) 
                     textAnchor="middle"
                     className="text-[11px] font-mono font-bold fill-espresso-800 dark:fill-ivory-100"
                   >
-                    {day.minutes}m
+                    {formatMinutes(day.minutes)}m
                   </text>
                 )}
 

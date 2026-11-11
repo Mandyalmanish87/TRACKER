@@ -216,7 +216,9 @@ export function importCourseFromPlaylist(
     playlistId: preview.playlistId,
     playlistUrl: preview.playlistUrl,
     lastSyncedAt: new Date().toISOString(),
-    lectures: preview.lectures.map((item, idx) => ({
+    lectures: (preview.lectures || [])
+      .filter((item) => item && typeof item.videoId === 'string' && /^[a-zA-Z0-9_-]{11}$/.test(item.videoId.trim()))
+      .map((item, idx) => ({
       id: `lec_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 6)}`,
       title: item.title,
       youtubeUrl: `https://www.youtube.com/watch?v=${item.videoId}`,
@@ -258,7 +260,9 @@ export function syncCourseWithPlaylist(courseId: string, preview: YouTubePlaylis
     existingLectureMap.set(l.videoId, l);
   });
 
-  const mergedLectures: EduHubLecture[] = preview.lectures.map((item, idx) => {
+  const mergedLectures: EduHubLecture[] = (preview.lectures || [])
+    .filter((item) => item && typeof item.videoId === 'string' && /^[a-zA-Z0-9_-]{11}$/.test(item.videoId.trim()))
+    .map((item, idx) => {
     const existing = existingLectureMap.get(item.videoId);
     if (existing) {
       return {

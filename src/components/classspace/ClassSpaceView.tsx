@@ -7,6 +7,7 @@ import {
   LogIn,
   Building,
 } from 'lucide-react';
+import { ConfirmModal } from '../common/ConfirmModal';
 import { useClassSpace } from '../../context/ClassSpaceContext';
 import { ClassSpaceHeader } from './ClassSpaceHeader';
 import { ClassCommunityTab } from './ClassCommunityTab';
@@ -35,12 +36,16 @@ export const ClassSpaceView: React.FC<ClassSpaceViewProps> = ({ onNavigateToSett
     members,
     joinRequests,
     isCR,
+    isOwner,
+    deleteWorkspace,
   } = useClassSpace();
 
   const [activeTab, setActiveTab] = useState<ClassSpaceSubTab>('community');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showJoinModal, setShowJoinModal] = useState(false);
   const [showNotificationDrawer, setShowNotificationDrawer] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [workspaceActionError, setWorkspaceActionError] = useState<string | null>(null);
 
   const pendingCount = isCR ? joinRequests.length : 0;
 
@@ -148,17 +153,25 @@ export const ClassSpaceView: React.FC<ClassSpaceViewProps> = ({ onNavigateToSett
   }
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-200 pb-16">
+    <div className="classspace-page space-y-6 animate-in fade-in duration-200 pb-16">
       {/* 1. Header with Workspace Switcher & Actions */}
       <ClassSpaceHeader
         onCreateClick={() => setShowCreateModal(true)}
         onJoinClick={() => setShowJoinModal(true)}
         onToggleNotifications={() => setShowNotificationDrawer(true)}
         onPendingRequestsClick={() => setActiveTab('members')}
+        onDeleteClick={() => {
+          setWorkspaceActionError(null);
+          setShowDeleteConfirm(true);
+        }}
       />
 
+      {workspaceActionError && (
+        <div role="alert" className="classspace-action-error">{workspaceActionError}</div>
+      )}
+
       {/* 2. Sub-tab Navigation */}
-      <div className="border-b border-border flex items-center justify-between">
+      <div className="classspace-tabs border-b border-border flex items-center justify-between">
         <nav className="flex items-center space-x-1 sm:space-x-2 overflow-x-auto pb-px" aria-label="ClassSpace Tabs">
           {tabs.map((tab) => {
             const Icon = tab.icon;
@@ -204,7 +217,7 @@ export const ClassSpaceView: React.FC<ClassSpaceViewProps> = ({ onNavigateToSett
       </div>
 
       {/* 3. Sub-tab Views */}
-      <main className="min-h-[500px]">
+      <main className="classspace-main min-h-[500px]">
         {activeTab === 'community' && <ClassCommunityTab />}
         {activeTab === 'members' && <ClassMembersTab />}
       </main>
@@ -228,6 +241,21 @@ export const ClassSpaceView: React.FC<ClassSpaceViewProps> = ({ onNavigateToSett
           setShowNotificationDrawer(false);
         }}
       />
+      {isOwner && (
+        <ConfirmModal
+          isOpen={showDeleteConfirm}
+          title="Delete this ClassSpace?"
+          message={`Permanently delete ${activeWorkspace?.name || 'this ClassSpace'}, including its shared channels, messages, and timetable. This cannot be undone.`}
+          confirmLabel="Delete ClassSpace"
+          variant="danger"
+          onConfirm={async () => {
+            const result = await deleteWorkspace();
+            setShowDeleteConfirm(false);
+            if (result.error) setWorkspaceActionError(result.error);
+          }}
+          onCancel={() => setShowDeleteConfirm(false)}
+        />
+      )}
     </div>
   );
 };

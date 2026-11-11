@@ -146,6 +146,10 @@ describe('Milestone 2: Profile, Personalization, Appearance & Persistence', () =
     // Greeting and header badge must reflect the saved name
     expect(screen.getAllByText(/Aarav Sharma/i).length).toBeGreaterThanOrEqual(1);
 
+    // Switch to Today / Dashboard to inspect the countdown widget
+    const todayTab = screen.getByRole('button', { name: /^today$/i });
+    fireEvent.click(todayTab);
+
     // Countdown widget must show the custom target and remaining days
     expect(screen.getByText(/Unit Test Series 2/i)).toBeInTheDocument();
     expect(screen.getAllByText(/remaining/i).length).toBeGreaterThanOrEqual(1);

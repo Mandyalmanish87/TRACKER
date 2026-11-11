@@ -1,0 +1,4577 @@
+[
+  {
+    "id": "ex-barbell-bench-press",
+    "name": "Barbell Bench Press",
+    "category": "strength",
+    "primaryMuscle": "chest",
+    "secondaryMuscles": [
+      "front_delts",
+      "triceps"
+    ],
+    "equipment": "barbell",
+    "difficulty": "intermediate",
+    "instructions": [
+      "Lie flat on the bench with eyes under the bar.",
+      "Grip the bar slightly wider than shoulder-width with wrists straight.",
+      "Unrack the bar and pull shoulder blades back and down into the bench.",
+      "Lower bar with control to lower-mid sternum, elbows angled ~45 degrees.",
+      "Press explosively back up to lockout without flaring elbows."
+    ],
+    "coachingCues": [
+      "Bend the bar in half",
+      "Drive feet through the floor",
+      "Bar touches chest softly"
+    ],
+    "commonMistakes": [
+      "Bouncing bar off ribs",
+      "Flaring elbows at 90 degrees",
+      "Butt lifting off bench"
+    ],
+    "recommendedRepRange": {
+      "min": 5,
+      "max": 8
+    },
+    "defaultRestSeconds": 180,
+    "alternativeExerciseIds": [
+      "ex-dumbbell-bench-press",
+      "ex-machine-chest-press"
+    ]
+  },
+  {
+    "id": "ex-incline-dumbbell-press",
+    "name": "Incline Dumbbell Press",
+    "category": "hypertrophy",
+    "primaryMuscle": "chest",
+    "secondaryMuscles": [
+      "front_delts",
+      "triceps"
+    ],
+    "equipment": "dumbbell",
+    "difficulty": "intermediate",
+    "instructions": [
+      "Set bench to 30-45 degree incline.",
+      "Kick dumbbells to chest as you lie back.",
+      "Press dumbbells overhead without clinking them together at the top.",
+      "Lower under control until elbows are slightly below chest level."
+    ],
+    "coachingCues": [
+      "Chest high",
+      "Slow 3-second descent",
+      "Tuck elbows slightly"
+    ],
+    "commonMistakes": [
+      "Incline too steep (>45 degrees becomes shoulder press)",
+      "Partial range of motion"
+    ],
+    "recommendedRepRange": {
+      "min": 8,
+      "max": 12
+    },
+    "defaultRestSeconds": 120,
+    "alternativeExerciseIds": [
+      "ex-incline-barbell-bench-press",
+      "ex-incline-machine-press"
+    ]
+  },
+  {
+    "id": "ex-incline-barbell-bench-press",
+    "name": "Incline Barbell Bench Press",
+    "category": "hypertrophy",
+    "primaryMuscle": "chest",
+    "secondaryMuscles": [
+      "front_delts",
+      "triceps"
+    ],
+    "equipment": "barbell",
+    "difficulty": "intermediate",
+    "instructions": [
+      "Set bench to 30 degree incline.",
+      "Lower bar to upper chest clavicle region.",
+      "Press upward locking out over eye line."
+    ],
+    "coachingCues": [
+      "Proud chest",
+      "Dig heels into floor"
+    ],
+    "commonMistakes": [
+      "Bouncing on clavicle",
+      "Arching excessively"
+    ],
+    "recommendedRepRange": {
+      "min": 6,
+      "max": 10
+    },
+    "defaultRestSeconds": 150,
+    "alternativeExerciseIds": [
+      "ex-incline-dumbbell-press"
+    ]
+  },
+  {
+    "id": "ex-dumbbell-bench-press",
+    "name": "Dumbbell Bench Press",
+    "category": "hypertrophy",
+    "primaryMuscle": "chest",
+    "secondaryMuscles": [
+      "front_delts",
+      "triceps"
+    ],
+    "equipment": "dumbbell",
+    "difficulty": "beginner",
+    "instructions": [
+      "Lie on flat bench with dumbbells over chest.",
+      "Lower dumbbells with a deep stretch at bottom.",
+      "Press upward converging gently at top."
+    ],
+    "coachingCues": [
+      "Squeeze chest at peak",
+      "Feel the stretch across pecs"
+    ],
+    "commonMistakes": [
+      "Dumbbells drifting over face",
+      "Rushing descent"
+    ],
+    "recommendedRepRange": {
+      "min": 8,
+      "max": 12
+    },
+    "defaultRestSeconds": 120,
+    "alternativeExerciseIds": [
+      "ex-barbell-bench-press"
+    ]
+  },
+  {
+    "id": "ex-dips-chest-focus",
+    "name": "Chest Dips",
+    "category": "calisthenics",
+    "primaryMuscle": "chest",
+    "secondaryMuscles": [
+      "front_delts",
+      "triceps"
+    ],
+    "equipment": "bodyweight",
+    "difficulty": "intermediate",
+    "instructions": [
+      "Grip parallel bars and jump to top support.",
+      "Lean torso forward 30 degrees to bias lower chest.",
+      "Lower until shoulders are below elbows.",
+      "Press back up while maintaining forward lean."
+    ],
+    "coachingCues": [
+      "Tuck chin to chest",
+      "Keep forward lean constant"
+    ],
+    "commonMistakes": [
+      "Staying completely upright (shifts tension to triceps)",
+      "Excessive shoulder dip"
+    ],
+    "recommendedRepRange": {
+      "min": 8,
+      "max": 15
+    },
+    "defaultRestSeconds": 120,
+    "alternativeExerciseIds": [
+      "ex-decline-barbell-press",
+      "ex-pushups"
+    ]
+  },
+  {
+    "id": "ex-cable-crossover-high-to-low",
+    "name": "High-to-Low Cable Fly",
+    "category": "hypertrophy",
+    "primaryMuscle": "chest",
+    "secondaryMuscles": [
+      "front_delts"
+    ],
+    "equipment": "cable",
+    "difficulty": "beginner",
+    "instructions": [
+      "Set cable pulleys above head height with D-handles.",
+      "Take a small step forward into staggered stance.",
+      "Bring hands downward and together in an arcing hugging motion.",
+      "Pause and squeeze lower chest peak contraction."
+    ],
+    "coachingCues": [
+      "Hug a giant tree",
+      "Soft bend in elbows"
+    ],
+    "commonMistakes": [
+      "Turning fly into a press",
+      "Swinging with momentum"
+    ],
+    "recommendedRepRange": {
+      "min": 12,
+      "max": 15
+    },
+    "defaultRestSeconds": 90,
+    "alternativeExerciseIds": [
+      "ex-pec-deck-fly"
+    ]
+  },
+  {
+    "id": "ex-cable-fly-low-to-high",
+    "name": "Low-to-High Cable Fly",
+    "category": "hypertrophy",
+    "primaryMuscle": "chest",
+    "secondaryMuscles": [
+      "front_delts"
+    ],
+    "equipment": "cable",
+    "difficulty": "beginner",
+    "instructions": [
+      "Set pulleys to bottom floor level.",
+      "Pull upward and inward toward upper chest.",
+      "Hold contraction at eye level."
+    ],
+    "coachingCues": [
+      "Scoop upward",
+      "Feel clavicular head firing"
+    ],
+    "commonMistakes": [
+      "Jerking with lower back"
+    ],
+    "recommendedRepRange": {
+      "min": 12,
+      "max": 15
+    },
+    "defaultRestSeconds": 90,
+    "alternativeExerciseIds": [
+      "ex-incline-dumbbell-fly"
+    ]
+  },
+  {
+    "id": "ex-pec-deck-fly",
+    "name": "Machine Pec Deck Fly",
+    "category": "hypertrophy",
+    "primaryMuscle": "chest",
+    "secondaryMuscles": [
+      "front_delts"
+    ],
+    "equipment": "machine",
+    "difficulty": "beginner",
+    "instructions": [
+      "Adjust seat so handles align with mid-chest.",
+      "Keep elbows softly bent and shoulders retracted.",
+      "Bring handles together and squeeze pecs hard for 1 second.",
+      "Return slowly to a deep comfortable stretch."
+    ],
+    "coachingCues": [
+      "Lead with elbows",
+      "Squeeze chest at midline"
+    ],
+    "commonMistakes": [
+      "Shrugging shoulders up",
+      "Letting weights slam"
+    ],
+    "recommendedRepRange": {
+      "min": 10,
+      "max": 15
+    },
+    "defaultRestSeconds": 90,
+    "alternativeExerciseIds": [
+      "ex-dumbbell-fly"
+    ]
+  },
+  {
+    "id": "ex-pushups",
+    "name": "Standard Push-Up",
+    "category": "calisthenics",
+    "primaryMuscle": "chest",
+    "secondaryMuscles": [
+      "triceps",
+      "front_delts",
+      "abs"
+    ],
+    "equipment": "bodyweight",
+    "difficulty": "beginner",
+    "instructions": [
+      "Plank position with hands slightly outside shoulders.",
+      "Brace glutes and abs in straight line.",
+      "Lower chest until 1 inch from floor.",
+      "Push floor away to full protraction."
+    ],
+    "coachingCues": [
+      "Tight core like a plank",
+      "Elbows at 45 degree arrow"
+    ],
+    "commonMistakes": [
+      "Sagging hips",
+      "Flared elbows"
+    ],
+    "recommendedRepRange": {
+      "min": 12,
+      "max": 25
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-decline-pushups",
+      "ex-dumbbell-bench-press"
+    ]
+  },
+  {
+    "id": "ex-decline-pushups",
+    "name": "Decline Push-Up",
+    "category": "calisthenics",
+    "primaryMuscle": "chest",
+    "secondaryMuscles": [
+      "front_delts",
+      "triceps"
+    ],
+    "equipment": "bodyweight",
+    "difficulty": "intermediate",
+    "instructions": [
+      "Place feet on bench or elevated surface, hands on floor.",
+      "Lower chest to ground emphasizing clavicular head.",
+      "Press upward to top plank."
+    ],
+    "coachingCues": [
+      "Keep neck neutral",
+      "Control the descent"
+    ],
+    "commonMistakes": [
+      "Arching lower back"
+    ],
+    "recommendedRepRange": {
+      "min": 10,
+      "max": 20
+    },
+    "defaultRestSeconds": 90,
+    "alternativeExerciseIds": [
+      "ex-incline-dumbbell-press"
+    ]
+  },
+  {
+    "id": "ex-machine-chest-press",
+    "name": "Machine Chest Press",
+    "category": "hypertrophy",
+    "primaryMuscle": "chest",
+    "secondaryMuscles": [
+      "front_delts",
+      "triceps"
+    ],
+    "equipment": "machine",
+    "difficulty": "beginner",
+    "instructions": [
+      "Sit with back firmly against pad.",
+      "Grip handles at mid-chest height.",
+      "Press forward to full extension without locking elbows violently.",
+      "Resist on the eccentric phase."
+    ],
+    "coachingCues": [
+      "Drive through base of palms",
+      "Keep shoulder blades back"
+    ],
+    "commonMistakes": [
+      "Shoulders rolling forward at extension"
+    ],
+    "recommendedRepRange": {
+      "min": 8,
+      "max": 12
+    },
+    "defaultRestSeconds": 90,
+    "alternativeExerciseIds": [
+      "ex-barbell-bench-press"
+    ]
+  },
+  {
+    "id": "ex-dumbbell-fly",
+    "name": "Flat Dumbbell Fly",
+    "category": "hypertrophy",
+    "primaryMuscle": "chest",
+    "secondaryMuscles": [
+      "front_delts"
+    ],
+    "equipment": "dumbbell",
+    "difficulty": "intermediate",
+    "instructions": [
+      "Lie on flat bench holding dumbbells with neutral grip.",
+      "Lower weights in wide arc maintaining slight bend at elbows.",
+      "Feel deep chest stretch, then contract pecs to return."
+    ],
+    "coachingCues": [
+      "Slight elbow bend locked in place",
+      "Stop when elbows align with bench"
+    ],
+    "commonMistakes": [
+      "Turning into a press",
+      "Over-stretching shoulder capsule"
+    ],
+    "recommendedRepRange": {
+      "min": 10,
+      "max": 14
+    },
+    "defaultRestSeconds": 90,
+    "alternativeExerciseIds": [
+      "ex-pec-deck-fly"
+    ]
+  },
+  {
+    "id": "ex-incline-dumbbell-fly",
+    "name": "Incline Dumbbell Fly",
+    "category": "hypertrophy",
+    "primaryMuscle": "chest",
+    "secondaryMuscles": [
+      "front_delts"
+    ],
+    "equipment": "dumbbell",
+    "difficulty": "intermediate",
+    "instructions": [
+      "Set bench to 30 degree incline.",
+      "Open arms in wide arc until deep chest stretch.",
+      "Bring dumbbells together over upper chest."
+    ],
+    "coachingCues": [
+      "Focus on upper chest contraction",
+      "Controlled tempo"
+    ],
+    "commonMistakes": [
+      "Excessive weight causing form breakdown"
+    ],
+    "recommendedRepRange": {
+      "min": 10,
+      "max": 14
+    },
+    "defaultRestSeconds": 90,
+    "alternativeExerciseIds": [
+      "ex-cable-fly-low-to-high"
+    ]
+  },
+  {
+    "id": "ex-decline-barbell-press",
+    "name": "Decline Barbell Bench Press",
+    "category": "hypertrophy",
+    "primaryMuscle": "chest",
+    "secondaryMuscles": [
+      "triceps"
+    ],
+    "equipment": "barbell",
+    "difficulty": "intermediate",
+    "instructions": [
+      "Lock shins under decline bench pads.",
+      "Unrack bar and lower with control to lower chest.",
+      "Press upward vertically."
+    ],
+    "coachingCues": [
+      "Firm grip",
+      "Smooth bar path"
+    ],
+    "commonMistakes": [
+      "Head rushing with blood (avoid holding breath)"
+    ],
+    "recommendedRepRange": {
+      "min": 8,
+      "max": 12
+    },
+    "defaultRestSeconds": 120,
+    "alternativeExerciseIds": [
+      "ex-dips-chest-focus"
+    ]
+  },
+  {
+    "id": "ex-landmine-press",
+    "name": "Standing Landmine Press",
+    "category": "strength",
+    "primaryMuscle": "chest",
+    "secondaryMuscles": [
+      "front_delts",
+      "triceps",
+      "obliques"
+    ],
+    "equipment": "barbell",
+    "difficulty": "intermediate",
+    "instructions": [
+      "Hold tip of landmine barbell at shoulder.",
+      "Press upward at 45 degree angle with full reach.",
+      "Lower under control to clavicle."
+    ],
+    "coachingCues": [
+      "Brace core",
+      "Reach at top to engage serratus"
+    ],
+    "commonMistakes": [
+      "Twisting spine excessively"
+    ],
+    "recommendedRepRange": {
+      "min": 8,
+      "max": 12
+    },
+    "defaultRestSeconds": 90,
+    "alternativeExerciseIds": [
+      "ex-incline-dumbbell-press"
+    ]
+  },
+  {
+    "id": "ex-cable-press-flat",
+    "name": "Standing Cable Chest Press",
+    "category": "hypertrophy",
+    "primaryMuscle": "chest",
+    "secondaryMuscles": [
+      "front_delts",
+      "abs"
+    ],
+    "equipment": "cable",
+    "difficulty": "beginner",
+    "instructions": [
+      "Step forward between cable pulleys at chest height.",
+      "Press handles together forward in straight line.",
+      "Slowly allow handles back for full stretch."
+    ],
+    "coachingCues": [
+      "Staggered athletic stance",
+      "Continuous cable tension"
+    ],
+    "commonMistakes": [
+      "Leaning too far forward"
+    ],
+    "recommendedRepRange": {
+      "min": 10,
+      "max": 15
+    },
+    "defaultRestSeconds": 90,
+    "alternativeExerciseIds": [
+      "ex-machine-chest-press"
+    ]
+  },
+  {
+    "id": "ex-svend-press",
+    "name": "Plate Pinch Svend Press",
+    "category": "hypertrophy",
+    "primaryMuscle": "chest",
+    "secondaryMuscles": [
+      "front_delts"
+    ],
+    "equipment": "other",
+    "difficulty": "beginner",
+    "instructions": [
+      "Pinch two 5kg plates together between flat palms at chest.",
+      "Extend arms straight out while squeezing plates together hard.",
+      "Bring back to chest maintaining inward pressure."
+    ],
+    "coachingCues": [
+      "Crush plates together with chest",
+      "Feel inner chest burn"
+    ],
+    "commonMistakes": [
+      "Fingers curling around plate edges"
+    ],
+    "recommendedRepRange": {
+      "min": 12,
+      "max": 18
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-pec-deck-fly"
+    ]
+  },
+  {
+    "id": "ex-smith-machine-incline-press",
+    "name": "Smith Machine Incline Press",
+    "category": "hypertrophy",
+    "primaryMuscle": "chest",
+    "secondaryMuscles": [
+      "front_delts",
+      "triceps"
+    ],
+    "equipment": "machine",
+    "difficulty": "beginner",
+    "instructions": [
+      "Align incline bench so bar touches upper chest.",
+      "Unrack hooks with wrist rotation.",
+      "Lower to 1 inch above chest, press forcefully."
+    ],
+    "coachingCues": [
+      "Fixed track allows max chest isolation",
+      "Drive straight up"
+    ],
+    "commonMistakes": [
+      "Positioning bench too far back or forward"
+    ],
+    "recommendedRepRange": {
+      "min": 8,
+      "max": 12
+    },
+    "defaultRestSeconds": 120,
+    "alternativeExerciseIds": [
+      "ex-incline-barbell-bench-press"
+    ]
+  },
+  {
+    "id": "ex-barbell-deadlift",
+    "name": "Conventional Barbell Deadlift",
+    "category": "strength",
+    "primaryMuscle": "lower_back",
+    "secondaryMuscles": [
+      "lats",
+      "glutes",
+      "hamstrings",
+      "traps",
+      "forearms"
+    ],
+    "equipment": "barbell",
+    "difficulty": "advanced",
+    "instructions": [
+      "Stand with mid-foot under barbell, feet hip-width.",
+      "Hinge hips back and grip bar just outside knees.",
+      "Pull chest up, engage lats like putting shoulder blades in back pockets.",
+      "Drive floor away through heels, locking hips and knees together at top.",
+      "Hinge back down with bar skimming thighs."
+    ],
+    "coachingCues": [
+      "Push the earth away",
+      "Bar stays glued to shins",
+      "Protect spine by bracing core"
+    ],
+    "commonMistakes": [
+      "Rounding lower back",
+      "Hyperextending at lockout",
+      "Squatting the weight instead of hinging"
+    ],
+    "recommendedRepRange": {
+      "min": 3,
+      "max": 6
+    },
+    "defaultRestSeconds": 240,
+    "alternativeExerciseIds": [
+      "ex-trap-bar-deadlift",
+      "ex-romanian-deadlift"
+    ]
+  },
+  {
+    "id": "ex-trap-bar-deadlift",
+    "name": "Trap Bar Deadlift",
+    "category": "strength",
+    "primaryMuscle": "quads",
+    "secondaryMuscles": [
+      "glutes",
+      "hamstrings",
+      "lower_back",
+      "traps"
+    ],
+    "equipment": "barbell",
+    "difficulty": "intermediate",
+    "instructions": [
+      "Step inside hex bar, feet hip-width.",
+      "Grip neutral handles, chest tall.",
+      "Drive upward standing tall."
+    ],
+    "coachingCues": [
+      "Push floor away",
+      "Neutral spine"
+    ],
+    "commonMistakes": [
+      "Looking up straining neck"
+    ],
+    "recommendedRepRange": {
+      "min": 5,
+      "max": 8
+    },
+    "defaultRestSeconds": 180,
+    "alternativeExerciseIds": [
+      "ex-barbell-deadlift"
+    ]
+  },
+  {
+    "id": "ex-barbell-bent-over-row",
+    "name": "Barbell Bent-Over Row",
+    "category": "hypertrophy",
+    "primaryMuscle": "upper_back",
+    "secondaryMuscles": [
+      "lats",
+      "biceps",
+      "rear_delts",
+      "lower_back"
+    ],
+    "equipment": "barbell",
+    "difficulty": "intermediate",
+    "instructions": [
+      "Hinge torso forward to ~45 degrees with flat back.",
+      "Grip bar slightly wider than shoulder width.",
+      "Pull bar to lower sternum/belly button driving elbows back.",
+      "Lower with control feeling lats stretch."
+    ],
+    "coachingCues": [
+      "Pull with elbows, not hands",
+      "Keep torso steady"
+    ],
+    "commonMistakes": [
+      "Standing upright and shrugging",
+      "Using hip momentum"
+    ],
+    "recommendedRepRange": {
+      "min": 6,
+      "max": 10
+    },
+    "defaultRestSeconds": 150,
+    "alternativeExerciseIds": [
+      "ex-t-bar-row",
+      "ex-dumbbell-row-single-arm"
+    ]
+  },
+  {
+    "id": "ex-pullups",
+    "name": "Bodyweight Pull-Up",
+    "category": "calisthenics",
+    "primaryMuscle": "lats",
+    "secondaryMuscles": [
+      "upper_back",
+      "biceps",
+      "forearms"
+    ],
+    "equipment": "bodyweight",
+    "difficulty": "intermediate",
+    "instructions": [
+      "Hang with overhand grip wider than shoulders.",
+      "Depress scapulae and pull chest toward bar.",
+      "Chin clears bar at top.",
+      "Lower all the way to dead hang."
+    ],
+    "coachingCues": [
+      "Drive elbows down to hips",
+      "Full dead hang every rep"
+    ],
+    "commonMistakes": [
+      "Kicking legs / kipping",
+      "Half reps avoiding dead hang"
+    ],
+    "recommendedRepRange": {
+      "min": 6,
+      "max": 12
+    },
+    "defaultRestSeconds": 150,
+    "alternativeExerciseIds": [
+      "ex-lat-pulldown-wide-grip",
+      "ex-chinups"
+    ]
+  },
+  {
+    "id": "ex-chinups",
+    "name": "Bodyweight Chin-Up",
+    "category": "calisthenics",
+    "primaryMuscle": "lats",
+    "secondaryMuscles": [
+      "biceps",
+      "forearms"
+    ],
+    "equipment": "bodyweight",
+    "difficulty": "intermediate",
+    "instructions": [
+      "Underhand supinated grip shoulder width.",
+      "Pull chest up until chin clears bar.",
+      "Lower with control to full extension."
+    ],
+    "coachingCues": [
+      "Squeeze biceps at top",
+      "Controlled negative"
+    ],
+    "commonMistakes": [
+      "Swinging body"
+    ],
+    "recommendedRepRange": {
+      "min": 6,
+      "max": 12
+    },
+    "defaultRestSeconds": 120,
+    "alternativeExerciseIds": [
+      "ex-pullups",
+      "ex-lat-pulldown-close-grip"
+    ]
+  },
+  {
+    "id": "ex-lat-pulldown-wide-grip",
+    "name": "Wide-Grip Lat Pulldown",
+    "category": "hypertrophy",
+    "primaryMuscle": "lats",
+    "secondaryMuscles": [
+      "biceps",
+      "upper_back"
+    ],
+    "equipment": "cable",
+    "difficulty": "beginner",
+    "instructions": [
+      "Lock thighs under pads on machine.",
+      "Grip wide bar on outer angles.",
+      "Lean back slightly and pull bar to upper chest.",
+      "Return with control letting lats stretch upward."
+    ],
+    "coachingCues": [
+      "Pull with elbows",
+      "Proud chest"
+    ],
+    "commonMistakes": [
+      "Pulling behind the neck (dangerous)",
+      "Excessive swinging backward"
+    ],
+    "recommendedRepRange": {
+      "min": 8,
+      "max": 12
+    },
+    "defaultRestSeconds": 90,
+    "alternativeExerciseIds": [
+      "ex-pullups"
+    ]
+  },
+  {
+    "id": "ex-lat-pulldown-close-grip",
+    "name": "Close-Grip V-Bar Lat Pulldown",
+    "category": "hypertrophy",
+    "primaryMuscle": "lats",
+    "secondaryMuscles": [
+      "biceps",
+      "upper_back"
+    ],
+    "equipment": "cable",
+    "difficulty": "beginner",
+    "instructions": [
+      "Attach V-bar handle to pulldown cable.",
+      "Pull straight down to upper chest, elbows tucked.",
+      "Squeeze lower lats at bottom."
+    ],
+    "coachingCues": [
+      "Tuck elbows to ribs",
+      "Deep stretch at top"
+    ],
+    "commonMistakes": [
+      "Jerking weight"
+    ],
+    "recommendedRepRange": {
+      "min": 8,
+      "max": 12
+    },
+    "defaultRestSeconds": 90,
+    "alternativeExerciseIds": [
+      "ex-lat-pulldown-wide-grip"
+    ]
+  },
+  {
+    "id": "ex-dumbbell-row-single-arm",
+    "name": "Single-Arm Dumbbell Row",
+    "category": "hypertrophy",
+    "primaryMuscle": "lats",
+    "secondaryMuscles": [
+      "upper_back",
+      "biceps",
+      "rear_delts"
+    ],
+    "equipment": "dumbbell",
+    "difficulty": "beginner",
+    "instructions": [
+      "One knee and hand on flat bench, back parallel to floor.",
+      "Hang dumbbell in opposite arm with neutral grip.",
+      "Row dumbbell up toward hip crease.",
+      "Lower under control to full lat stretch."
+    ],
+    "coachingCues": [
+      "Pull elbow to hip pocket",
+      "Keep torso stationary"
+    ],
+    "commonMistakes": [
+      "Twisting torso aggressively",
+      "Pulling dumbbell to shoulder instead of hip"
+    ],
+    "recommendedRepRange": {
+      "min": 8,
+      "max": 12
+    },
+    "defaultRestSeconds": 90,
+    "alternativeExerciseIds": [
+      "ex-chest-supported-row"
+    ]
+  },
+  {
+    "id": "ex-seated-cable-row",
+    "name": "Seated Cable Row (Neutral Grip)",
+    "category": "hypertrophy",
+    "primaryMuscle": "upper_back",
+    "secondaryMuscles": [
+      "lats",
+      "biceps",
+      "rear_delts"
+    ],
+    "equipment": "cable",
+    "difficulty": "beginner",
+    "instructions": [
+      "Sit with knees slightly bent, feet on footplates.",
+      "Grip double-D handle, back upright.",
+      "Pull handle to navel driving elbows back and pinching scapulae.",
+      "Extend arms fully feeling stretch."
+    ],
+    "coachingCues": [
+      "Pinch shoulder blades",
+      "Sit tall like a soldier"
+    ],
+    "commonMistakes": [
+      "Leaning forward and backward violently"
+    ],
+    "recommendedRepRange": {
+      "min": 8,
+      "max": 12
+    },
+    "defaultRestSeconds": 90,
+    "alternativeExerciseIds": [
+      "ex-chest-supported-row"
+    ]
+  },
+  {
+    "id": "ex-t-bar-row",
+    "name": "Chest-Supported T-Bar Row",
+    "category": "hypertrophy",
+    "primaryMuscle": "upper_back",
+    "secondaryMuscles": [
+      "lats",
+      "traps",
+      "rear_delts"
+    ],
+    "equipment": "machine",
+    "difficulty": "intermediate",
+    "instructions": [
+      "Lie face down on pad with chest supported.",
+      "Grip handles and pull elbows high and back.",
+      "Squeeze rhomboids and middle traps at top."
+    ],
+    "coachingCues": [
+      "Zero lower back strain",
+      "Squeeze blades hard"
+    ],
+    "commonMistakes": [
+      "Lifting chest off pad"
+    ],
+    "recommendedRepRange": {
+      "min": 8,
+      "max": 12
+    },
+    "defaultRestSeconds": 120,
+    "alternativeExerciseIds": [
+      "ex-barbell-bent-over-row"
+    ]
+  },
+  {
+    "id": "ex-chest-supported-row",
+    "name": "Chest-Supported Incline Dumbbell Row",
+    "category": "hypertrophy",
+    "primaryMuscle": "upper_back",
+    "secondaryMuscles": [
+      "rear_delts",
+      "biceps"
+    ],
+    "equipment": "dumbbell",
+    "difficulty": "beginner",
+    "instructions": [
+      "Set bench to 30-45 degree incline, lie chest down.",
+      "Row dumbbells up with flared elbows (~60 deg) for upper back.",
+      "Lower with full stretch."
+    ],
+    "coachingCues": [
+      "Isolate upper back",
+      "No body English"
+    ],
+    "commonMistakes": [
+      "Rushing reps"
+    ],
+    "recommendedRepRange": {
+      "min": 10,
+      "max": 14
+    },
+    "defaultRestSeconds": 90,
+    "alternativeExerciseIds": [
+      "ex-seated-cable-row"
+    ]
+  },
+  {
+    "id": "ex-straight-arm-lat-pulldown",
+    "name": "Straight-Arm Cable Pulldown",
+    "category": "hypertrophy",
+    "primaryMuscle": "lats",
+    "secondaryMuscles": [
+      "triceps",
+      "abs"
+    ],
+    "equipment": "cable",
+    "difficulty": "beginner",
+    "instructions": [
+      "Stand facing high cable with straight bar or rope.",
+      "Keep arms straight with tiny elbow bend.",
+      "Push bar down in arc toward thighs using lats.",
+      "Squeeze lats at bottom and control back up."
+    ],
+    "coachingCues": [
+      "Lock elbow angle",
+      "Think about pushing down, not pulling"
+    ],
+    "commonMistakes": [
+      "Bending elbows turning into triceps pushdown"
+    ],
+    "recommendedRepRange": {
+      "min": 12,
+      "max": 15
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-dumbbell-pullover"
+    ]
+  },
+  {
+    "id": "ex-dumbbell-pullover",
+    "name": "Dumbbell Pullover",
+    "category": "hypertrophy",
+    "primaryMuscle": "lats",
+    "secondaryMuscles": [
+      "chest",
+      "triceps"
+    ],
+    "equipment": "dumbbell",
+    "difficulty": "intermediate",
+    "instructions": [
+      "Lie perpendicular across bench supporting upper back.",
+      "Hold dumbbell with both hands diamond grip over chest.",
+      "Lower dumbbell back over head in arc until deep lat stretch.",
+      "Pull back over chest using lats."
+    ],
+    "coachingCues": [
+      "Keep hips low",
+      "Feel deep stretch in armpits"
+    ],
+    "commonMistakes": [
+      "Bending elbows excessively"
+    ],
+    "recommendedRepRange": {
+      "min": 10,
+      "max": 12
+    },
+    "defaultRestSeconds": 90,
+    "alternativeExerciseIds": [
+      "ex-straight-arm-lat-pulldown"
+    ]
+  },
+  {
+    "id": "ex-meadows-row",
+    "name": "Landmine Meadows Row",
+    "category": "hypertrophy",
+    "primaryMuscle": "lats",
+    "secondaryMuscles": [
+      "upper_back",
+      "rear_delts"
+    ],
+    "equipment": "barbell",
+    "difficulty": "advanced",
+    "instructions": [
+      "Stand perpendicular to landmine bar.",
+      "Overhand grip on thick collar of barbell.",
+      "Row elbow up and back flared out."
+    ],
+    "coachingCues": [
+      "Feel outer lat stretch",
+      "Use straps if grip slips"
+    ],
+    "commonMistakes": [
+      "Standing too tall"
+    ],
+    "recommendedRepRange": {
+      "min": 8,
+      "max": 12
+    },
+    "defaultRestSeconds": 90,
+    "alternativeExerciseIds": [
+      "ex-dumbbell-row-single-arm"
+    ]
+  },
+  {
+    "id": "ex-incline-dumbbell-shrug",
+    "name": "Incline Dumbbell Shrug",
+    "category": "hypertrophy",
+    "primaryMuscle": "traps",
+    "secondaryMuscles": [
+      "upper_back"
+    ],
+    "equipment": "dumbbell",
+    "difficulty": "beginner",
+    "instructions": [
+      "Lie face down on 45 degree incline bench holding dumbbells.",
+      "Shrug shoulder blades upward and backward toward ears.",
+      "Hold 1 second contraction at top."
+    ],
+    "coachingCues": [
+      "Target mid and upper traps",
+      "No head movement"
+    ],
+    "commonMistakes": [
+      "Rolling shoulders forward"
+    ],
+    "recommendedRepRange": {
+      "min": 12,
+      "max": 15
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-barbell-shrug"
+    ]
+  },
+  {
+    "id": "ex-barbell-shrug",
+    "name": "Standing Barbell Shrug",
+    "category": "hypertrophy",
+    "primaryMuscle": "traps",
+    "secondaryMuscles": [
+      "forearms"
+    ],
+    "equipment": "barbell",
+    "difficulty": "beginner",
+    "instructions": [
+      "Hold barbell in front of thighs shoulder-width.",
+      "Elevate shoulders straight up toward ears.",
+      "Pause 1 sec at top and lower under control."
+    ],
+    "coachingCues": [
+      "Straight up and down",
+      "Never roll shoulders"
+    ],
+    "commonMistakes": [
+      "Rolling shoulders (wears rotator cuff)"
+    ],
+    "recommendedRepRange": {
+      "min": 10,
+      "max": 15
+    },
+    "defaultRestSeconds": 90,
+    "alternativeExerciseIds": [
+      "ex-dumbbell-shrug"
+    ]
+  },
+  {
+    "id": "ex-dumbbell-shrug",
+    "name": "Dumbbell Shrug",
+    "category": "hypertrophy",
+    "primaryMuscle": "traps",
+    "secondaryMuscles": [
+      "forearms"
+    ],
+    "equipment": "dumbbell",
+    "difficulty": "beginner",
+    "instructions": [
+      "Hold heavy dumbbells at sides.",
+      "Elevate shoulders vertically.",
+      "Hold peak squeeze."
+    ],
+    "coachingCues": [
+      "Ears to shoulders",
+      "Pause at apex"
+    ],
+    "commonMistakes": [
+      "Bending elbows"
+    ],
+    "recommendedRepRange": {
+      "min": 12,
+      "max": 15
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-barbell-shrug"
+    ]
+  },
+  {
+    "id": "ex-hyperextensions-back",
+    "name": "Back Extension (Hyperextension)",
+    "category": "hypertrophy",
+    "primaryMuscle": "lower_back",
+    "secondaryMuscles": [
+      "glutes",
+      "hamstrings"
+    ],
+    "equipment": "bench",
+    "difficulty": "beginner",
+    "instructions": [
+      "Position hips on 45-degree hyperextension bench.",
+      "Cross arms or hold plate at chest.",
+      "Lower torso down hinging at hips, then extend back to neutral spine."
+    ],
+    "coachingCues": [
+      "Do not hyperextend at top",
+      "Squeeze glutes and lower back"
+    ],
+    "commonMistakes": [
+      "Violent arching at top of rep"
+    ],
+    "recommendedRepRange": {
+      "min": 12,
+      "max": 15
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-good-mornings"
+    ]
+  },
+  {
+    "id": "ex-good-mornings",
+    "name": "Barbell Good Morning",
+    "category": "strength",
+    "primaryMuscle": "lower_back",
+    "secondaryMuscles": [
+      "hamstrings",
+      "glutes"
+    ],
+    "equipment": "barbell",
+    "difficulty": "advanced",
+    "instructions": [
+      "Barbell across upper back as in a squat.",
+      "Soft bend in knees, hinge hips back until torso reaches ~60 degrees.",
+      "Drive hips forward to return to standing."
+    ],
+    "coachingCues": [
+      "Feel deep hamstring and erector tension",
+      "Back stays flat as a table"
+    ],
+    "commonMistakes": [
+      "Rounding spine under load",
+      "Bending knees into a squat"
+    ],
+    "recommendedRepRange": {
+      "min": 8,
+      "max": 10
+    },
+    "defaultRestSeconds": 120,
+    "alternativeExerciseIds": [
+      "ex-romanian-deadlift"
+    ]
+  },
+  {
+    "id": "ex-inverted-row",
+    "name": "Inverted Bodyweight Row",
+    "category": "calisthenics",
+    "primaryMuscle": "upper_back",
+    "secondaryMuscles": [
+      "lats",
+      "biceps",
+      "rear_delts"
+    ],
+    "equipment": "bodyweight",
+    "difficulty": "beginner",
+    "instructions": [
+      "Hang underneath bar racked at waist height, heels on floor.",
+      "Pull chest up to touch bar keeping body rigid as a plank.",
+      "Lower slowly."
+    ],
+    "coachingCues": [
+      "Pinch shoulder blades at top",
+      "Body in straight line"
+    ],
+    "commonMistakes": [
+      "Sagging hips"
+    ],
+    "recommendedRepRange": {
+      "min": 10,
+      "max": 15
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-seated-cable-row"
+    ]
+  },
+  {
+    "id": "ex-overhead-press",
+    "name": "Barbell Overhead Press (OHP)",
+    "category": "strength",
+    "primaryMuscle": "front_delts",
+    "secondaryMuscles": [
+      "side_delts",
+      "triceps",
+      "upper_back"
+    ],
+    "equipment": "barbell",
+    "difficulty": "intermediate",
+    "instructions": [
+      "Bar on collarbones, press straight overhead locking out over crown."
+    ],
+    "coachingCues": [
+      "Squeeze glutes",
+      "Pull head back then push through window"
+    ],
+    "commonMistakes": [
+      "Over-arching lower back"
+    ],
+    "recommendedRepRange": {
+      "min": 5,
+      "max": 8
+    },
+    "defaultRestSeconds": 180,
+    "alternativeExerciseIds": [
+      "ex-seated-dumbbell-shoulder-press"
+    ]
+  },
+  {
+    "id": "ex-seated-dumbbell-shoulder-press",
+    "name": "Seated Dumbbell Shoulder Press",
+    "category": "hypertrophy",
+    "primaryMuscle": "front_delts",
+    "secondaryMuscles": [
+      "side_delts",
+      "triceps"
+    ],
+    "equipment": "dumbbell",
+    "difficulty": "beginner",
+    "instructions": [
+      "Press dumbbells from ear height to overhead lockout."
+    ],
+    "coachingCues": [
+      "Keep elbows slightly forward of body line"
+    ],
+    "commonMistakes": [
+      "Banging weights at top"
+    ],
+    "recommendedRepRange": {
+      "min": 8,
+      "max": 12
+    },
+    "defaultRestSeconds": 120,
+    "alternativeExerciseIds": [
+      "ex-overhead-press"
+    ]
+  },
+  {
+    "id": "ex-dumbbell-lateral-raise",
+    "name": "Dumbbell Lateral Raise",
+    "category": "hypertrophy",
+    "primaryMuscle": "side_delts",
+    "secondaryMuscles": [
+      "traps"
+    ],
+    "equipment": "dumbbell",
+    "difficulty": "beginner",
+    "instructions": [
+      "Raise dumbbells out to sides until parallel with floor, pinkies slightly elevated."
+    ],
+    "coachingCues": [
+      "Pour out a pitcher of water",
+      "Lead with elbows"
+    ],
+    "commonMistakes": [
+      "Using heavy weights and swinging hips"
+    ],
+    "recommendedRepRange": {
+      "min": 12,
+      "max": 15
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-cable-lateral-raise"
+    ]
+  },
+  {
+    "id": "ex-cable-lateral-raise",
+    "name": "Cable Lateral Raise",
+    "category": "hypertrophy",
+    "primaryMuscle": "side_delts",
+    "secondaryMuscles": [
+      "traps"
+    ],
+    "equipment": "cable",
+    "difficulty": "beginner",
+    "instructions": [
+      "Set pulley to hip height, raise across body to shoulder level."
+    ],
+    "coachingCues": [
+      "Constant tension throughout arc"
+    ],
+    "commonMistakes": [
+      "Leaning into cable"
+    ],
+    "recommendedRepRange": {
+      "min": 12,
+      "max": 20
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-dumbbell-lateral-raise"
+    ]
+  },
+  {
+    "id": "ex-cable-face-pull",
+    "name": "Cable Face Pull",
+    "category": "hypertrophy",
+    "primaryMuscle": "rear_delts",
+    "secondaryMuscles": [
+      "upper_back",
+      "traps"
+    ],
+    "equipment": "cable",
+    "difficulty": "beginner",
+    "instructions": [
+      "Attach rope to eye level, pull handles toward ears while rotating thumbs back."
+    ],
+    "coachingCues": [
+      "Pull rope apart",
+      "Double bicep flex pose at end"
+    ],
+    "commonMistakes": [
+      "Turning into upright row"
+    ],
+    "recommendedRepRange": {
+      "min": 12,
+      "max": 18
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-reverse-pec-deck"
+    ]
+  },
+  {
+    "id": "ex-reverse-pec-deck",
+    "name": "Machine Reverse Pec Deck Fly",
+    "category": "hypertrophy",
+    "primaryMuscle": "rear_delts",
+    "secondaryMuscles": [
+      "upper_back"
+    ],
+    "equipment": "machine",
+    "difficulty": "beginner",
+    "instructions": [
+      "Sit chest to pad, pull handles back horizontally focusing on posterior delts."
+    ],
+    "coachingCues": [
+      "Keep wrists neutral",
+      "Drive elbows back"
+    ],
+    "commonMistakes": [
+      "Pinching traps instead of isolating rear delts"
+    ],
+    "recommendedRepRange": {
+      "min": 12,
+      "max": 15
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-cable-face-pull"
+    ]
+  },
+  {
+    "id": "ex-dumbbell-rear-delt-fly",
+    "name": "Bent-Over Dumbbell Rear Delt Fly",
+    "category": "hypertrophy",
+    "primaryMuscle": "rear_delts",
+    "secondaryMuscles": [
+      "upper_back"
+    ],
+    "equipment": "dumbbell",
+    "difficulty": "beginner",
+    "instructions": [
+      "Hinge forward, raise dumbbells out to sides."
+    ],
+    "coachingCues": [
+      "Light weight",
+      "Feel back of shoulders"
+    ],
+    "commonMistakes": [
+      "Traps taking over"
+    ],
+    "recommendedRepRange": {
+      "min": 12,
+      "max": 15
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-reverse-pec-deck"
+    ]
+  },
+  {
+    "id": "ex-arnold-press",
+    "name": "Arnold Dumbbell Press",
+    "category": "hypertrophy",
+    "primaryMuscle": "front_delts",
+    "secondaryMuscles": [
+      "side_delts",
+      "triceps"
+    ],
+    "equipment": "dumbbell",
+    "difficulty": "intermediate",
+    "instructions": [
+      "Start palms facing you at chest, rotate outward as you press overhead."
+    ],
+    "coachingCues": [
+      "Smooth continuous rotation"
+    ],
+    "commonMistakes": [
+      "Jerking weight"
+    ],
+    "recommendedRepRange": {
+      "min": 8,
+      "max": 12
+    },
+    "defaultRestSeconds": 90,
+    "alternativeExerciseIds": [
+      "ex-seated-dumbbell-shoulder-press"
+    ]
+  },
+  {
+    "id": "ex-barbell-front-raise",
+    "name": "Barbell Front Raise",
+    "category": "hypertrophy",
+    "primaryMuscle": "front_delts",
+    "secondaryMuscles": [
+      "traps"
+    ],
+    "equipment": "barbell",
+    "difficulty": "beginner",
+    "instructions": [
+      "Raise bar forward to shoulder height with straight arms."
+    ],
+    "coachingCues": [
+      "Stop at eye level"
+    ],
+    "commonMistakes": [
+      "Swinging torso"
+    ],
+    "recommendedRepRange": {
+      "min": 12,
+      "max": 15
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-dumbbell-front-raise"
+    ]
+  },
+  {
+    "id": "ex-dumbbell-front-raise",
+    "name": "Dumbbell Front Raise (Alternating)",
+    "category": "hypertrophy",
+    "primaryMuscle": "front_delts",
+    "secondaryMuscles": [
+      "traps"
+    ],
+    "equipment": "dumbbell",
+    "difficulty": "beginner",
+    "instructions": [
+      "Raise dumbbell forward alternating hands."
+    ],
+    "coachingCues": [
+      "Control negative"
+    ],
+    "commonMistakes": [
+      "Excessive arch"
+    ],
+    "recommendedRepRange": {
+      "min": 10,
+      "max": 14
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-barbell-front-raise"
+    ]
+  },
+  {
+    "id": "ex-lu-raises",
+    "name": "Lu Xiaojun Full Lateral Raise",
+    "category": "hypertrophy",
+    "primaryMuscle": "side_delts",
+    "secondaryMuscles": [
+      "traps"
+    ],
+    "equipment": "dumbbell",
+    "difficulty": "intermediate",
+    "instructions": [
+      "Raise dumbbells all the way overhead in circular arc."
+    ],
+    "coachingCues": [
+      "Light plates only",
+      "Controlled mobility"
+    ],
+    "commonMistakes": [
+      "Heavy weights"
+    ],
+    "recommendedRepRange": {
+      "min": 12,
+      "max": 15
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-dumbbell-lateral-raise"
+    ]
+  },
+  {
+    "id": "ex-machine-shoulder-press",
+    "name": "Machine Overhead Press",
+    "category": "hypertrophy",
+    "primaryMuscle": "front_delts",
+    "secondaryMuscles": [
+      "triceps"
+    ],
+    "equipment": "machine",
+    "difficulty": "beginner",
+    "instructions": [
+      "Press handles overhead with back firmly supported."
+    ],
+    "coachingCues": [
+      "Constant tension"
+    ],
+    "commonMistakes": [
+      "Elbows hyperextending"
+    ],
+    "recommendedRepRange": {
+      "min": 8,
+      "max": 12
+    },
+    "defaultRestSeconds": 90,
+    "alternativeExerciseIds": [
+      "ex-overhead-press"
+    ]
+  },
+  {
+    "id": "ex-upright-row-cable",
+    "name": "Cable Upright Row",
+    "category": "hypertrophy",
+    "primaryMuscle": "side_delts",
+    "secondaryMuscles": [
+      "traps",
+      "biceps"
+    ],
+    "equipment": "cable",
+    "difficulty": "intermediate",
+    "instructions": [
+      "Pull cable bar up along chest with wide grip."
+    ],
+    "coachingCues": [
+      "Wide grip protects shoulder impingement"
+    ],
+    "commonMistakes": [
+      "Grip too narrow"
+    ],
+    "recommendedRepRange": {
+      "min": 10,
+      "max": 12
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-dumbbell-lateral-raise"
+    ]
+  },
+  {
+    "id": "ex-behind-neck-press-smith",
+    "name": "Smith Behind-the-Neck Press",
+    "category": "hypertrophy",
+    "primaryMuscle": "side_delts",
+    "secondaryMuscles": [
+      "upper_back",
+      "triceps"
+    ],
+    "equipment": "machine",
+    "difficulty": "advanced",
+    "instructions": [
+      "Lower bar to ear level behind head on Smith track."
+    ],
+    "coachingCues": [
+      "Only if mobility permits"
+    ],
+    "commonMistakes": [
+      "Excessive depth"
+    ],
+    "recommendedRepRange": {
+      "min": 8,
+      "max": 12
+    },
+    "defaultRestSeconds": 90,
+    "alternativeExerciseIds": [
+      "ex-overhead-press"
+    ]
+  },
+  {
+    "id": "ex-handstand-pushups",
+    "name": "Wall Handstand Push-Up",
+    "category": "calisthenics",
+    "primaryMuscle": "front_delts",
+    "secondaryMuscles": [
+      "triceps",
+      "traps"
+    ],
+    "equipment": "bodyweight",
+    "difficulty": "advanced",
+    "instructions": [
+      "Handstand against wall, lower head to mat, press up."
+    ],
+    "coachingCues": [
+      "Elbows at 45 deg",
+      "Tight core"
+    ],
+    "commonMistakes": [
+      "Flaring elbows"
+    ],
+    "recommendedRepRange": {
+      "min": 5,
+      "max": 10
+    },
+    "defaultRestSeconds": 180,
+    "alternativeExerciseIds": [
+      "ex-pike-pushups"
+    ]
+  },
+  {
+    "id": "ex-pike-pushups",
+    "name": "Pike Push-Up",
+    "category": "calisthenics",
+    "primaryMuscle": "front_delts",
+    "secondaryMuscles": [
+      "triceps"
+    ],
+    "equipment": "bodyweight",
+    "difficulty": "intermediate",
+    "instructions": [
+      "Feet on floor, hips pushed high in V-shape, press head toward floor."
+    ],
+    "coachingCues": [
+      "Look between feet",
+      "Push through shoulders"
+    ],
+    "commonMistakes": [
+      "Flattening into regular pushup"
+    ],
+    "recommendedRepRange": {
+      "min": 8,
+      "max": 15
+    },
+    "defaultRestSeconds": 90,
+    "alternativeExerciseIds": [
+      "ex-handstand-pushups"
+    ]
+  },
+  {
+    "id": "ex-cable-y-raise",
+    "name": "Cable Y-Raise",
+    "category": "hypertrophy",
+    "primaryMuscle": "side_delts",
+    "secondaryMuscles": [
+      "traps"
+    ],
+    "equipment": "cable",
+    "difficulty": "intermediate",
+    "instructions": [
+      "Cross cables, raise arms up and out in Y formation."
+    ],
+    "coachingCues": [
+      "Focus on lower traps and side delts"
+    ],
+    "commonMistakes": [
+      "Momentum"
+    ],
+    "recommendedRepRange": {
+      "min": 12,
+      "max": 15
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-cable-lateral-raise"
+    ]
+  },
+  {
+    "id": "ex-rear-delt-cable-crossover",
+    "name": "Cable Rear Delt Fly (Cross-Over)",
+    "category": "hypertrophy",
+    "primaryMuscle": "rear_delts",
+    "secondaryMuscles": [
+      "upper_back"
+    ],
+    "equipment": "cable",
+    "difficulty": "beginner",
+    "instructions": [
+      "Cross cables without handles, pull outward at eye height."
+    ],
+    "coachingCues": [
+      "Feel rear delt pinch"
+    ],
+    "commonMistakes": [
+      "Bending elbows"
+    ],
+    "recommendedRepRange": {
+      "min": 12,
+      "max": 18
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-reverse-pec-deck"
+    ]
+  },
+  {
+    "id": "ex-barbell-back-squat",
+    "name": "Barbell Back Squat",
+    "category": "strength",
+    "primaryMuscle": "quads",
+    "secondaryMuscles": [
+      "glutes",
+      "hamstrings",
+      "lower_back",
+      "abs"
+    ],
+    "equipment": "barbell",
+    "difficulty": "intermediate",
+    "instructions": [
+      "Bar on upper traps, feet shoulder-width, squat down until hip crease breaks knee line."
+    ],
+    "coachingCues": [
+      "Knees track over toes",
+      "Chest up",
+      "Breathe into belly"
+    ],
+    "commonMistakes": [
+      "Knees caving inward",
+      "Rising on toes"
+    ],
+    "recommendedRepRange": {
+      "min": 5,
+      "max": 8
+    },
+    "defaultRestSeconds": 180,
+    "alternativeExerciseIds": [
+      "ex-leg-press",
+      "ex-goblet-squat"
+    ]
+  },
+  {
+    "id": "ex-front-squat",
+    "name": "Barbell Front Squat",
+    "category": "strength",
+    "primaryMuscle": "quads",
+    "secondaryMuscles": [
+      "glutes",
+      "abs",
+      "upper_back"
+    ],
+    "equipment": "barbell",
+    "difficulty": "advanced",
+    "instructions": [
+      "Clean grip or cross-arm rack bar across front deltoids, squat with upright torso."
+    ],
+    "coachingCues": [
+      "Elbows high as a shelf",
+      "Stay tall"
+    ],
+    "commonMistakes": [
+      "Elbows dropping dumping bar"
+    ],
+    "recommendedRepRange": {
+      "min": 5,
+      "max": 8
+    },
+    "defaultRestSeconds": 180,
+    "alternativeExerciseIds": [
+      "ex-barbell-back-squat"
+    ]
+  },
+  {
+    "id": "ex-leg-press",
+    "name": "45-Degree Leg Press",
+    "category": "hypertrophy",
+    "primaryMuscle": "quads",
+    "secondaryMuscles": [
+      "glutes"
+    ],
+    "equipment": "machine",
+    "difficulty": "beginner",
+    "instructions": [
+      "Sit in sled, place feet mid-plate, lower sled to 90 degree knee bend, press back up."
+    ],
+    "coachingCues": [
+      "Lower back glued to pad",
+      "Never lock knees violently"
+    ],
+    "commonMistakes": [
+      "Butt curling off pad at bottom",
+      "Knees snapping straight"
+    ],
+    "recommendedRepRange": {
+      "min": 10,
+      "max": 15
+    },
+    "defaultRestSeconds": 120,
+    "alternativeExerciseIds": [
+      "ex-barbell-back-squat",
+      "ex-hack-squat"
+    ]
+  },
+  {
+    "id": "ex-hack-squat",
+    "name": "Machine Hack Squat",
+    "category": "hypertrophy",
+    "primaryMuscle": "quads",
+    "secondaryMuscles": [
+      "glutes"
+    ],
+    "equipment": "machine",
+    "difficulty": "intermediate",
+    "instructions": [
+      "Shoulders under pads, feet low and narrow on platform for max quad isolation."
+    ],
+    "coachingCues": [
+      "Full depth",
+      "Drive through mid-foot"
+    ],
+    "commonMistakes": [
+      "Partial depth"
+    ],
+    "recommendedRepRange": {
+      "min": 8,
+      "max": 12
+    },
+    "defaultRestSeconds": 150,
+    "alternativeExerciseIds": [
+      "ex-leg-press"
+    ]
+  },
+  {
+    "id": "ex-bulgarian-split-squat",
+    "name": "Bulgarian Split Squat",
+    "category": "hypertrophy",
+    "primaryMuscle": "quads",
+    "secondaryMuscles": [
+      "glutes",
+      "hamstrings"
+    ],
+    "equipment": "dumbbell",
+    "difficulty": "intermediate",
+    "instructions": [
+      "Rear foot elevated on bench, squat down on lead leg until back knee touches floor."
+    ],
+    "coachingCues": [
+      "Drop straight down like an elevator",
+      "Drive through front heel"
+    ],
+    "commonMistakes": [
+      "Front foot placed too close to bench"
+    ],
+    "recommendedRepRange": {
+      "min": 8,
+      "max": 12
+    },
+    "defaultRestSeconds": 90,
+    "alternativeExerciseIds": [
+      "ex-walking-lunges"
+    ]
+  },
+  {
+    "id": "ex-goblet-squat",
+    "name": "Dumbbell / Kettlebell Goblet Squat",
+    "category": "hypertrophy",
+    "primaryMuscle": "quads",
+    "secondaryMuscles": [
+      "glutes",
+      "abs"
+    ],
+    "equipment": "dumbbell",
+    "difficulty": "beginner",
+    "instructions": [
+      "Hold dumbbell vertically against chest, squat deep between knees."
+    ],
+    "coachingCues": [
+      "Elbows inside knees at bottom",
+      "Torso upright"
+    ],
+    "commonMistakes": [
+      "Tipping forward"
+    ],
+    "recommendedRepRange": {
+      "min": 10,
+      "max": 15
+    },
+    "defaultRestSeconds": 90,
+    "alternativeExerciseIds": [
+      "ex-barbell-back-squat"
+    ]
+  },
+  {
+    "id": "ex-walking-lunges",
+    "name": "Dumbbell Walking Lunge",
+    "category": "hypertrophy",
+    "primaryMuscle": "glutes",
+    "secondaryMuscles": [
+      "quads",
+      "hamstrings"
+    ],
+    "equipment": "dumbbell",
+    "difficulty": "intermediate",
+    "instructions": [
+      "Step forward into deep lunge, drive off front heel to step into next lunge."
+    ],
+    "coachingCues": [
+      "90 degree angles in both knees",
+      "Chest tall"
+    ],
+    "commonMistakes": [
+      "Banging back knee on floor"
+    ],
+    "recommendedRepRange": {
+      "min": 10,
+      "max": 14
+    },
+    "defaultRestSeconds": 90,
+    "alternativeExerciseIds": [
+      "ex-bulgarian-split-squat"
+    ]
+  },
+  {
+    "id": "ex-leg-extension",
+    "name": "Leg Extension Machine",
+    "category": "hypertrophy",
+    "primaryMuscle": "quads",
+    "secondaryMuscles": [],
+    "equipment": "machine",
+    "difficulty": "beginner",
+    "instructions": [
+      "Sit with pad against lower shins, extend knees to full contraction."
+    ],
+    "coachingCues": [
+      "Pause 1 second at top lock",
+      "Slow eccentric"
+    ],
+    "commonMistakes": [
+      "Kicking with momentum"
+    ],
+    "recommendedRepRange": {
+      "min": 12,
+      "max": 18
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-sissy-squat"
+    ]
+  },
+  {
+    "id": "ex-sissy-squat",
+    "name": "Bodyweight Sissy Squat",
+    "category": "hypertrophy",
+    "primaryMuscle": "quads",
+    "secondaryMuscles": [
+      "abs"
+    ],
+    "equipment": "bodyweight",
+    "difficulty": "advanced",
+    "instructions": [
+      "Lean torso back as knees travel forward over toes."
+    ],
+    "coachingCues": [
+      "Deep quad stretch",
+      "Hold onto support if needed"
+    ],
+    "commonMistakes": [
+      "Over-stressing cold knees"
+    ],
+    "recommendedRepRange": {
+      "min": 8,
+      "max": 12
+    },
+    "defaultRestSeconds": 90,
+    "alternativeExerciseIds": [
+      "ex-leg-extension"
+    ]
+  },
+  {
+    "id": "ex-romanian-deadlift",
+    "name": "Barbell Romanian Deadlift (RDL)",
+    "category": "hypertrophy",
+    "primaryMuscle": "hamstrings",
+    "secondaryMuscles": [
+      "glutes",
+      "lower_back"
+    ],
+    "equipment": "barbell",
+    "difficulty": "intermediate",
+    "instructions": [
+      "Hold bar at thighs, push hips back with soft knees until deep hamstring stretch."
+    ],
+    "coachingCues": [
+      "Shaving shins with the bar",
+      "Push hips to the back wall"
+    ],
+    "commonMistakes": [
+      "Bending knees into a squat",
+      "Rounding lower back"
+    ],
+    "recommendedRepRange": {
+      "min": 8,
+      "max": 12
+    },
+    "defaultRestSeconds": 150,
+    "alternativeExerciseIds": [
+      "ex-dumbbell-rdl"
+    ]
+  },
+  {
+    "id": "ex-dumbbell-rdl",
+    "name": "Dumbbell Romanian Deadlift",
+    "category": "hypertrophy",
+    "primaryMuscle": "hamstrings",
+    "secondaryMuscles": [
+      "glutes"
+    ],
+    "equipment": "dumbbell",
+    "difficulty": "beginner",
+    "instructions": [
+      "Hold dumbbells against thighs, hinge hips back until hamstrings are taut."
+    ],
+    "coachingCues": [
+      "Hips back",
+      "Squeeze glutes to stand"
+    ],
+    "commonMistakes": [
+      "Lowering dumbbells too far past mid-shin"
+    ],
+    "recommendedRepRange": {
+      "min": 10,
+      "max": 14
+    },
+    "defaultRestSeconds": 90,
+    "alternativeExerciseIds": [
+      "ex-romanian-deadlift"
+    ]
+  },
+  {
+    "id": "ex-lying-leg-curl",
+    "name": "Lying Hamstring Leg Curl",
+    "category": "hypertrophy",
+    "primaryMuscle": "hamstrings",
+    "secondaryMuscles": [
+      "calves"
+    ],
+    "equipment": "machine",
+    "difficulty": "beginner",
+    "instructions": [
+      "Lie face down, pad above heels, curl heels to glutes."
+    ],
+    "coachingCues": [
+      "Keep hips pressed down into pad",
+      "Full contraction"
+    ],
+    "commonMistakes": [
+      "Hips lifting off bench to cheat"
+    ],
+    "recommendedRepRange": {
+      "min": 10,
+      "max": 15
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-seated-leg-curl"
+    ]
+  },
+  {
+    "id": "ex-seated-leg-curl",
+    "name": "Seated Hamstring Leg Curl",
+    "category": "hypertrophy",
+    "primaryMuscle": "hamstrings",
+    "secondaryMuscles": [],
+    "equipment": "machine",
+    "difficulty": "beginner",
+    "instructions": [
+      "Thigh pad secure, curl heels under seat."
+    ],
+    "coachingCues": [
+      "Toe points forward",
+      "Slow 3-second release"
+    ],
+    "commonMistakes": [
+      "Slouching forward"
+    ],
+    "recommendedRepRange": {
+      "min": 10,
+      "max": 15
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-lying-leg-curl"
+    ]
+  },
+  {
+    "id": "ex-barbell-hip-thrust",
+    "name": "Barbell Hip Thrust",
+    "category": "hypertrophy",
+    "primaryMuscle": "glutes",
+    "secondaryMuscles": [
+      "hamstrings",
+      "quads"
+    ],
+    "equipment": "barbell",
+    "difficulty": "intermediate",
+    "instructions": [
+      "Upper back on bench, barbell cushioned over hip crease, drive hips to ceiling."
+    ],
+    "coachingCues": [
+      "Shin vertical at top",
+      "Tuck chin and ribs",
+      "Pinch glutes hard"
+    ],
+    "commonMistakes": [
+      "Arching lower back instead of hip extension"
+    ],
+    "recommendedRepRange": {
+      "min": 8,
+      "max": 12
+    },
+    "defaultRestSeconds": 120,
+    "alternativeExerciseIds": [
+      "ex-dumbbell-hip-thrust",
+      "ex-cable-glute-kickback"
+    ]
+  },
+  {
+    "id": "ex-dumbbell-hip-thrust",
+    "name": "Dumbbell Glute Bridge",
+    "category": "hypertrophy",
+    "primaryMuscle": "glutes",
+    "secondaryMuscles": [
+      "hamstrings"
+    ],
+    "equipment": "dumbbell",
+    "difficulty": "beginner",
+    "instructions": [
+      "Back on floor or bench, dumbbell on hips, drive hips up."
+    ],
+    "coachingCues": [
+      "Squeeze at peak"
+    ],
+    "commonMistakes": [
+      "Incomplete lockout"
+    ],
+    "recommendedRepRange": {
+      "min": 12,
+      "max": 18
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-barbell-hip-thrust"
+    ]
+  },
+  {
+    "id": "ex-cable-glute-kickback",
+    "name": "Cable Glute Kickback",
+    "category": "hypertrophy",
+    "primaryMuscle": "glutes",
+    "secondaryMuscles": [
+      "hamstrings"
+    ],
+    "equipment": "cable",
+    "difficulty": "beginner",
+    "instructions": [
+      "Ankle strap attached, kick leg backward squeezing glute."
+    ],
+    "coachingCues": [
+      "Lock torso",
+      "Pure glute squeeze"
+    ],
+    "commonMistakes": [
+      "Arching lower back"
+    ],
+    "recommendedRepRange": {
+      "min": 12,
+      "max": 18
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-barbell-hip-thrust"
+    ]
+  },
+  {
+    "id": "ex-standing-calf-raise",
+    "name": "Standing Calf Raise",
+    "category": "hypertrophy",
+    "primaryMuscle": "calves",
+    "secondaryMuscles": [],
+    "equipment": "machine",
+    "difficulty": "beginner",
+    "instructions": [
+      "Balls of feet on block, lower heels into deep stretch, press high on big toes."
+    ],
+    "coachingCues": [
+      "2 second pause at bottom stretch",
+      "Explosive rise"
+    ],
+    "commonMistakes": [
+      "Bouncing rapidly without stretching"
+    ],
+    "recommendedRepRange": {
+      "min": 12,
+      "max": 20
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-seated-calf-raise"
+    ]
+  },
+  {
+    "id": "ex-seated-calf-raise",
+    "name": "Seated Calf Raise (Soleus Focus)",
+    "category": "hypertrophy",
+    "primaryMuscle": "calves",
+    "secondaryMuscles": [],
+    "equipment": "machine",
+    "difficulty": "beginner",
+    "instructions": [
+      "Sit with pad on thighs, full ankle range of motion."
+    ],
+    "coachingCues": [
+      "Soleus requires bent knee"
+    ],
+    "commonMistakes": [
+      "Short range of motion"
+    ],
+    "recommendedRepRange": {
+      "min": 15,
+      "max": 25
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-standing-calf-raise"
+    ]
+  },
+  {
+    "id": "ex-donkey-calf-raise",
+    "name": "Donkey Calf Raise",
+    "category": "hypertrophy",
+    "primaryMuscle": "calves",
+    "secondaryMuscles": [],
+    "equipment": "machine",
+    "difficulty": "intermediate",
+    "instructions": [
+      "Hinge at waist, weight on lower back/hips, raise up on toes."
+    ],
+    "coachingCues": [
+      "Deep gastrocnemius stretch"
+    ],
+    "commonMistakes": [
+      "Bending knees"
+    ],
+    "recommendedRepRange": {
+      "min": 15,
+      "max": 20
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-standing-calf-raise"
+    ]
+  },
+  {
+    "id": "ex-adductor-machine",
+    "name": "Seated Hip Adductor Machine",
+    "category": "hypertrophy",
+    "primaryMuscle": "quads",
+    "secondaryMuscles": [
+      "glutes"
+    ],
+    "equipment": "machine",
+    "difficulty": "beginner",
+    "instructions": [
+      "Squeeze thighs together against pads, slow eccentric."
+    ],
+    "coachingCues": [
+      "Strengthens inner thighs and groin"
+    ],
+    "commonMistakes": [
+      "Letting weight snap open"
+    ],
+    "recommendedRepRange": {
+      "min": 12,
+      "max": 20
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-sumo-squat"
+    ]
+  },
+  {
+    "id": "ex-abductor-machine",
+    "name": "Seated Hip Abductor Machine",
+    "category": "hypertrophy",
+    "primaryMuscle": "glutes",
+    "secondaryMuscles": [],
+    "equipment": "machine",
+    "difficulty": "beginner",
+    "instructions": [
+      "Press thighs outward against outer pads."
+    ],
+    "coachingCues": [
+      "Lean slightly forward for upper glute recruitment"
+    ],
+    "commonMistakes": [
+      "Half reps"
+    ],
+    "recommendedRepRange": {
+      "min": 15,
+      "max": 20
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-cable-glute-kickback"
+    ]
+  },
+  {
+    "id": "ex-sumo-deadlift",
+    "name": "Sumo Barbell Deadlift",
+    "category": "strength",
+    "primaryMuscle": "glutes",
+    "secondaryMuscles": [
+      "quads",
+      "hamstrings",
+      "lower_back"
+    ],
+    "equipment": "barbell",
+    "difficulty": "advanced",
+    "instructions": [
+      "Wide stance, toes pointed out, hands inside knees, press floor away."
+    ],
+    "coachingCues": [
+      "Spread the floor",
+      "Hips close to bar"
+    ],
+    "commonMistakes": [
+      "Hips shooting up first"
+    ],
+    "recommendedRepRange": {
+      "min": 3,
+      "max": 6
+    },
+    "defaultRestSeconds": 240,
+    "alternativeExerciseIds": [
+      "ex-barbell-deadlift"
+    ]
+  },
+  {
+    "id": "ex-sumo-squat",
+    "name": "Dumbbell Sumo Squat",
+    "category": "hypertrophy",
+    "primaryMuscle": "glutes",
+    "secondaryMuscles": [
+      "quads"
+    ],
+    "equipment": "dumbbell",
+    "difficulty": "beginner",
+    "instructions": [
+      "Wide stance, hold dumbbell between legs, squat deep."
+    ],
+    "coachingCues": [
+      "Knees push wide over toes"
+    ],
+    "commonMistakes": [
+      "Leaning forward"
+    ],
+    "recommendedRepRange": {
+      "min": 10,
+      "max": 15
+    },
+    "defaultRestSeconds": 90,
+    "alternativeExerciseIds": [
+      "ex-barbell-back-squat"
+    ]
+  },
+  {
+    "id": "ex-nordic-hamstring-curl",
+    "name": "Nordic Hamstring Curl",
+    "category": "calisthenics",
+    "primaryMuscle": "hamstrings",
+    "secondaryMuscles": [
+      "glutes"
+    ],
+    "equipment": "bodyweight",
+    "difficulty": "advanced",
+    "instructions": [
+      "Ankles anchored, lower torso slowly toward floor resisting with hamstrings."
+    ],
+    "coachingCues": [
+      "Brake as hard as possible",
+      "Hands catch at bottom"
+    ],
+    "commonMistakes": [
+      "Bending at hips"
+    ],
+    "recommendedRepRange": {
+      "min": 5,
+      "max": 8
+    },
+    "defaultRestSeconds": 150,
+    "alternativeExerciseIds": [
+      "ex-lying-leg-curl"
+    ]
+  },
+  {
+    "id": "ex-step-ups",
+    "name": "Dumbbell Box Step-Up",
+    "category": "hypertrophy",
+    "primaryMuscle": "glutes",
+    "secondaryMuscles": [
+      "quads"
+    ],
+    "equipment": "dumbbell",
+    "difficulty": "beginner",
+    "instructions": [
+      "Step onto box, drive through lead heel without jumping off rear foot."
+    ],
+    "coachingCues": [
+      "Zero push from rear toe"
+    ],
+    "commonMistakes": [
+      "Pounding trailing leg"
+    ],
+    "recommendedRepRange": {
+      "min": 10,
+      "max": 14
+    },
+    "defaultRestSeconds": 90,
+    "alternativeExerciseIds": [
+      "ex-bulgarian-split-squat"
+    ]
+  },
+  {
+    "id": "ex-barbell-curl",
+    "name": "Standing Barbell Bicep Curl",
+    "category": "hypertrophy",
+    "primaryMuscle": "biceps",
+    "secondaryMuscles": [
+      "forearms"
+    ],
+    "equipment": "barbell",
+    "difficulty": "beginner",
+    "instructions": [
+      "Shoulder-width underhand grip, curl bar to collarbones keeping elbows locked at sides."
+    ],
+    "coachingCues": [
+      "Elbows pinned",
+      "Do not rock hips"
+    ],
+    "commonMistakes": [
+      "Swinging torso back to initiate rep"
+    ],
+    "recommendedRepRange": {
+      "min": 8,
+      "max": 12
+    },
+    "defaultRestSeconds": 90,
+    "alternativeExerciseIds": [
+      "ex-ez-bar-curl",
+      "ex-dumbbell-curl"
+    ]
+  },
+  {
+    "id": "ex-ez-bar-curl",
+    "name": "EZ-Bar Bicep Curl",
+    "category": "hypertrophy",
+    "primaryMuscle": "biceps",
+    "secondaryMuscles": [
+      "forearms"
+    ],
+    "equipment": "barbell",
+    "difficulty": "beginner",
+    "instructions": [
+      "Hold angled grips on EZ bar, curl upward with joint comfort."
+    ],
+    "coachingCues": [
+      "Squeeze bicep peaks"
+    ],
+    "commonMistakes": [
+      "Dropping bar fast"
+    ],
+    "recommendedRepRange": {
+      "min": 8,
+      "max": 12
+    },
+    "defaultRestSeconds": 90,
+    "alternativeExerciseIds": [
+      "ex-barbell-curl"
+    ]
+  },
+  {
+    "id": "ex-dumbbell-curl",
+    "name": "Standing Dumbbell Curl (Supinating)",
+    "category": "hypertrophy",
+    "primaryMuscle": "biceps",
+    "secondaryMuscles": [
+      "forearms"
+    ],
+    "equipment": "dumbbell",
+    "difficulty": "beginner",
+    "instructions": [
+      "Curl dumbbells rotating pinky up at top of movement."
+    ],
+    "coachingCues": [
+      "Full supination for max peak contraction"
+    ],
+    "commonMistakes": [
+      "Elbows drifting forward"
+    ],
+    "recommendedRepRange": {
+      "min": 10,
+      "max": 14
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-incline-dumbbell-curl"
+    ]
+  },
+  {
+    "id": "ex-incline-dumbbell-curl",
+    "name": "Incline Bench Dumbbell Curl",
+    "category": "hypertrophy",
+    "primaryMuscle": "biceps",
+    "secondaryMuscles": [
+      "forearms"
+    ],
+    "equipment": "dumbbell",
+    "difficulty": "intermediate",
+    "instructions": [
+      "Sit on 45-60 degree incline, arms hanging straight down for extreme bicep stretch."
+    ],
+    "coachingCues": [
+      "Feel deep bicep stretch at bottom",
+      "Pin elbows back"
+    ],
+    "commonMistakes": [
+      "Cheating elbows forward"
+    ],
+    "recommendedRepRange": {
+      "min": 10,
+      "max": 12
+    },
+    "defaultRestSeconds": 90,
+    "alternativeExerciseIds": [
+      "ex-dumbbell-curl"
+    ]
+  },
+  {
+    "id": "ex-hammer-curl",
+    "name": "Neutral-Grip Hammer Curl",
+    "category": "hypertrophy",
+    "primaryMuscle": "biceps",
+    "secondaryMuscles": [
+      "forearms"
+    ],
+    "equipment": "dumbbell",
+    "difficulty": "beginner",
+    "instructions": [
+      "Palms facing inward neutral grip, curl dumbbells up targeting brachialis and brachioradialis."
+    ],
+    "coachingCues": [
+      "Thumbs lead the way"
+    ],
+    "commonMistakes": [
+      "Flaring elbows out"
+    ],
+    "recommendedRepRange": {
+      "min": 8,
+      "max": 12
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-rope-cable-curl"
+    ]
+  },
+  {
+    "id": "ex-preacher-curl",
+    "name": "Preacher Bench Curl (Machine or Barbell)",
+    "category": "hypertrophy",
+    "primaryMuscle": "biceps",
+    "secondaryMuscles": [],
+    "equipment": "bench",
+    "difficulty": "intermediate",
+    "instructions": [
+      "Arms over angled preacher pad, curl up without lifting armpits off pad."
+    ],
+    "coachingCues": [
+      "Strict isolation, no body swing"
+    ],
+    "commonMistakes": [
+      "Hyperextending elbows violently at bottom"
+    ],
+    "recommendedRepRange": {
+      "min": 10,
+      "max": 12
+    },
+    "defaultRestSeconds": 90,
+    "alternativeExerciseIds": [
+      "ex-concentration-curl"
+    ]
+  },
+  {
+    "id": "ex-concentration-curl",
+    "name": "Seated Concentration Curl",
+    "category": "hypertrophy",
+    "primaryMuscle": "biceps",
+    "secondaryMuscles": [],
+    "equipment": "dumbbell",
+    "difficulty": "beginner",
+    "instructions": [
+      "Sit on bench, elbow braced inside thigh, curl dumbbell up to chin."
+    ],
+    "coachingCues": [
+      "Pure peak contraction"
+    ],
+    "commonMistakes": [
+      "Shoulder moving"
+    ],
+    "recommendedRepRange": {
+      "min": 10,
+      "max": 14
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-preacher-curl"
+    ]
+  },
+  {
+    "id": "ex-cable-bicep-curl",
+    "name": "Straight-Bar Cable Curl",
+    "category": "hypertrophy",
+    "primaryMuscle": "biceps",
+    "secondaryMuscles": [
+      "forearms"
+    ],
+    "equipment": "cable",
+    "difficulty": "beginner",
+    "instructions": [
+      "Low pulley cable curl with constant tension at peak."
+    ],
+    "coachingCues": [
+      "Constant tension on muscles"
+    ],
+    "commonMistakes": [
+      "Leaning backward"
+    ],
+    "recommendedRepRange": {
+      "min": 10,
+      "max": 15
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-barbell-curl"
+    ]
+  },
+  {
+    "id": "ex-rope-cable-curl",
+    "name": "Rope Cable Hammer Curl",
+    "category": "hypertrophy",
+    "primaryMuscle": "biceps",
+    "secondaryMuscles": [
+      "forearms"
+    ],
+    "equipment": "cable",
+    "difficulty": "beginner",
+    "instructions": [
+      "Low cable with rope, pull upward splitting rope at top."
+    ],
+    "coachingCues": [
+      "Split rope at the chest"
+    ],
+    "commonMistakes": [
+      "Swinging shoulders"
+    ],
+    "recommendedRepRange": {
+      "min": 12,
+      "max": 15
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-hammer-curl"
+    ]
+  },
+  {
+    "id": "ex-spider-curl",
+    "name": "Prone Incline Spider Curl",
+    "category": "hypertrophy",
+    "primaryMuscle": "biceps",
+    "secondaryMuscles": [],
+    "equipment": "bench",
+    "difficulty": "intermediate",
+    "instructions": [
+      "Lie chest down on steep incline, curl bar hanging straight down."
+    ],
+    "coachingCues": [
+      "Extreme peak contraction"
+    ],
+    "commonMistakes": [
+      "Elbows swinging"
+    ],
+    "recommendedRepRange": {
+      "min": 10,
+      "max": 14
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-preacher-curl"
+    ]
+  },
+  {
+    "id": "ex-tricep-pushdown-rope",
+    "name": "Cable Tricep Rope Pushdown",
+    "category": "hypertrophy",
+    "primaryMuscle": "triceps",
+    "secondaryMuscles": [],
+    "equipment": "cable",
+    "difficulty": "beginner",
+    "instructions": [
+      "High pulley with rope, push down extending elbows and spreading rope at bottom."
+    ],
+    "coachingCues": [
+      "Lock elbows at sides",
+      "Spread rope wide at lockout"
+    ],
+    "commonMistakes": [
+      "Elbows drifting up and down like wings"
+    ],
+    "recommendedRepRange": {
+      "min": 10,
+      "max": 15
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-tricep-pushdown-straight-bar"
+    ]
+  },
+  {
+    "id": "ex-tricep-pushdown-straight-bar",
+    "name": "Cable Tricep Straight-Bar Pushdown",
+    "category": "hypertrophy",
+    "primaryMuscle": "triceps",
+    "secondaryMuscles": [],
+    "equipment": "cable",
+    "difficulty": "beginner",
+    "instructions": [
+      "Overhand grip on bar, press down to full tricep lockout."
+    ],
+    "coachingCues": [
+      "Drive through heels of hands"
+    ],
+    "commonMistakes": [
+      "Leaning over bar using bodyweight"
+    ],
+    "recommendedRepRange": {
+      "min": 8,
+      "max": 12
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-tricep-pushdown-rope"
+    ]
+  },
+  {
+    "id": "ex-skull-crushers",
+    "name": "Barbell / EZ-Bar Skull Crusher (Lying Extension)",
+    "category": "hypertrophy",
+    "primaryMuscle": "triceps",
+    "secondaryMuscles": [],
+    "equipment": "barbell",
+    "difficulty": "intermediate",
+    "instructions": [
+      "Lie on bench, arms vertical over chest, bend elbows lowering bar to forehead/crown."
+    ],
+    "coachingCues": [
+      "Keep upper arms angled back slightly",
+      "Extend through triceps"
+    ],
+    "commonMistakes": [
+      "Elbows flaring wide",
+      "Dropping bar on head"
+    ],
+    "recommendedRepRange": {
+      "min": 8,
+      "max": 12
+    },
+    "defaultRestSeconds": 90,
+    "alternativeExerciseIds": [
+      "ex-overhead-dumbbell-tricep-extension"
+    ]
+  },
+  {
+    "id": "ex-overhead-dumbbell-tricep-extension",
+    "name": "Seated Overhead Dumbbell Tricep Extension",
+    "category": "hypertrophy",
+    "primaryMuscle": "triceps",
+    "secondaryMuscles": [],
+    "equipment": "dumbbell",
+    "difficulty": "beginner",
+    "instructions": [
+      "Hold heavy dumbbell overhead with two hands, lower behind head for deep long-head stretch."
+    ],
+    "coachingCues": [
+      "Keep elbows tucked",
+      "Deep tricep stretch at bottom"
+    ],
+    "commonMistakes": [
+      "Elbows pointing outward"
+    ],
+    "recommendedRepRange": {
+      "min": 10,
+      "max": 14
+    },
+    "defaultRestSeconds": 90,
+    "alternativeExerciseIds": [
+      "ex-overhead-cable-tricep-extension"
+    ]
+  },
+  {
+    "id": "ex-overhead-cable-tricep-extension",
+    "name": "Cable Overhead Tricep Extension (Rope)",
+    "category": "hypertrophy",
+    "primaryMuscle": "triceps",
+    "secondaryMuscles": [],
+    "equipment": "cable",
+    "difficulty": "beginner",
+    "instructions": [
+      "Turn away from cable, extend rope forward and overhead."
+    ],
+    "coachingCues": [
+      "Constant stretch and tension on long head"
+    ],
+    "commonMistakes": [
+      "Arching back"
+    ],
+    "recommendedRepRange": {
+      "min": 12,
+      "max": 15
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-overhead-dumbbell-tricep-extension"
+    ]
+  },
+  {
+    "id": "ex-close-grip-bench-press",
+    "name": "Close-Grip Barbell Bench Press",
+    "category": "strength",
+    "primaryMuscle": "triceps",
+    "secondaryMuscles": [
+      "chest",
+      "front_delts"
+    ],
+    "equipment": "barbell",
+    "difficulty": "intermediate",
+    "instructions": [
+      "Hands shoulder-width apart (not too close), lower to lower chest and press."
+    ],
+    "coachingCues": [
+      "Tuck elbows tight to sides",
+      "Squeeze triceps at top"
+    ],
+    "commonMistakes": [
+      "Hands too close together (<6 inches causes wrist pain)"
+    ],
+    "recommendedRepRange": {
+      "min": 6,
+      "max": 10
+    },
+    "defaultRestSeconds": 150,
+    "alternativeExerciseIds": [
+      "ex-dips-tricep-focus"
+    ]
+  },
+  {
+    "id": "ex-dips-tricep-focus",
+    "name": "Tricep Parallel Bar Dips",
+    "category": "calisthenics",
+    "primaryMuscle": "triceps",
+    "secondaryMuscles": [
+      "chest",
+      "front_delts"
+    ],
+    "equipment": "bodyweight",
+    "difficulty": "intermediate",
+    "instructions": [
+      "Stay upright with torso vertical, lower until elbows are at 90 degrees and push."
+    ],
+    "coachingCues": [
+      "Keep body straight",
+      "Lock elbows at top"
+    ],
+    "commonMistakes": [
+      "Leaning forward (shifts to chest)"
+    ],
+    "recommendedRepRange": {
+      "min": 8,
+      "max": 15
+    },
+    "defaultRestSeconds": 90,
+    "alternativeExerciseIds": [
+      "ex-close-grip-bench-press"
+    ]
+  },
+  {
+    "id": "ex-cable-kickback-triceps",
+    "name": "Single-Arm Cable Tricep Kickback",
+    "category": "hypertrophy",
+    "primaryMuscle": "triceps",
+    "secondaryMuscles": [],
+    "equipment": "cable",
+    "difficulty": "beginner",
+    "instructions": [
+      "Bend forward, upper arm parallel to floor, extend forearm back straight."
+    ],
+    "coachingCues": [
+      "Lock upper arm in space"
+    ],
+    "commonMistakes": [
+      "Swinging whole arm"
+    ],
+    "recommendedRepRange": {
+      "min": 12,
+      "max": 16
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-tricep-pushdown-rope"
+    ]
+  },
+  {
+    "id": "ex-wrist-curls-barbell",
+    "name": "Seated Barbell Wrist Curl",
+    "category": "hypertrophy",
+    "primaryMuscle": "forearms",
+    "secondaryMuscles": [],
+    "equipment": "barbell",
+    "difficulty": "beginner",
+    "instructions": [
+      "Forearms rested on thighs, curl wrists upward."
+    ],
+    "coachingCues": [
+      "Controlled cadence",
+      "Feel forearm pump"
+    ],
+    "commonMistakes": [
+      "Too heavy"
+    ],
+    "recommendedRepRange": {
+      "min": 15,
+      "max": 20
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-reverse-wrist-curls"
+    ]
+  },
+  {
+    "id": "ex-reverse-wrist-curls",
+    "name": "Seated Reverse Barbell Wrist Curl",
+    "category": "hypertrophy",
+    "primaryMuscle": "forearms",
+    "secondaryMuscles": [],
+    "equipment": "barbell",
+    "difficulty": "beginner",
+    "instructions": [
+      "Overhand grip, extend wrists upward."
+    ],
+    "coachingCues": [
+      "Strengthens forearm extensors"
+    ],
+    "commonMistakes": [
+      "Bouncing bar"
+    ],
+    "recommendedRepRange": {
+      "min": 15,
+      "max": 20
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-wrist-curls-barbell"
+    ]
+  },
+  {
+    "id": "ex-hanging-leg-raise",
+    "name": "Hanging Leg Raise",
+    "category": "calisthenics",
+    "primaryMuscle": "abs",
+    "secondaryMuscles": [
+      "obliques",
+      "forearms"
+    ],
+    "equipment": "bodyweight",
+    "difficulty": "intermediate",
+    "instructions": [
+      "Hang from pull-up bar, curl hips and raise toes to bar without swinging."
+    ],
+    "coachingCues": [
+      "Curl pelvis up toward chest",
+      "Do not rely on hip flexors alone"
+    ],
+    "commonMistakes": [
+      "Swinging like a pendulum"
+    ],
+    "recommendedRepRange": {
+      "min": 10,
+      "max": 15
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-hanging-knee-raise",
+      "ex-cable-crunch"
+    ]
+  },
+  {
+    "id": "ex-hanging-knee-raise",
+    "name": "Hanging Knee Raise (Beginner)",
+    "category": "calisthenics",
+    "primaryMuscle": "abs",
+    "secondaryMuscles": [
+      "forearms"
+    ],
+    "equipment": "bodyweight",
+    "difficulty": "beginner",
+    "instructions": [
+      "Hang from bar, bring knees to chest, lower slowly."
+    ],
+    "coachingCues": [
+      "Tilt pelvis up"
+    ],
+    "commonMistakes": [
+      "Swinging"
+    ],
+    "recommendedRepRange": {
+      "min": 12,
+      "max": 18
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-hanging-leg-raise"
+    ]
+  },
+  {
+    "id": "ex-cable-crunch",
+    "name": "Kneeling Cable Crunch",
+    "category": "hypertrophy",
+    "primaryMuscle": "abs",
+    "secondaryMuscles": [],
+    "equipment": "cable",
+    "difficulty": "beginner",
+    "instructions": [
+      "Kneel facing cable stack holding rope at forehead, crunch ribcage down toward pelvis."
+    ],
+    "coachingCues": [
+      "Curl spine like an accordion",
+      "Keep hips locked stationary"
+    ],
+    "commonMistakes": [
+      "Sitting back on heels instead of crunching"
+    ],
+    "recommendedRepRange": {
+      "min": 12,
+      "max": 18
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-ab-wheel-rollout"
+    ]
+  },
+  {
+    "id": "ex-ab-wheel-rollout",
+    "name": "Ab Wheel Rollout",
+    "category": "calisthenics",
+    "primaryMuscle": "abs",
+    "secondaryMuscles": [
+      "lats",
+      "lower_back"
+    ],
+    "equipment": "other",
+    "difficulty": "advanced",
+    "instructions": [
+      "Kneel with wheel under shoulders, roll forward keeping hollow-body posterior tilt."
+    ],
+    "coachingCues": [
+      "Tuck tailbone",
+      "Do not let lower back sag"
+    ],
+    "commonMistakes": [
+      "Collapsing lower back into extension"
+    ],
+    "recommendedRepRange": {
+      "min": 8,
+      "max": 12
+    },
+    "defaultRestSeconds": 90,
+    "alternativeExerciseIds": [
+      "ex-plank"
+    ]
+  },
+  {
+    "id": "ex-plank",
+    "name": "Standard Forearm Plank",
+    "category": "calisthenics",
+    "primaryMuscle": "abs",
+    "secondaryMuscles": [
+      "glutes",
+      "shoulders",
+      "lower_back"
+    ],
+    "equipment": "bodyweight",
+    "difficulty": "beginner",
+    "instructions": [
+      "Forearms and toes on floor, body in completely rigid straight line."
+    ],
+    "coachingCues": [
+      "Squeeze glutes and abs like taking a punch",
+      "Push floor away"
+    ],
+    "commonMistakes": [
+      "Hips piking in air or sagging down"
+    ],
+    "recommendedRepRange": {
+      "min": 30,
+      "max": 60
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-side-plank"
+    ]
+  },
+  {
+    "id": "ex-side-plank",
+    "name": "Side Plank",
+    "category": "calisthenics",
+    "primaryMuscle": "obliques",
+    "secondaryMuscles": [
+      "abs",
+      "glutes"
+    ],
+    "equipment": "bodyweight",
+    "difficulty": "beginner",
+    "instructions": [
+      "Hold body straight on one forearm and side of foot."
+    ],
+    "coachingCues": [
+      "Keep hips high",
+      "Straight line from ear to ankle"
+    ],
+    "commonMistakes": [
+      "Hips dropping toward floor"
+    ],
+    "recommendedRepRange": {
+      "min": 30,
+      "max": 45
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-pallof-press"
+    ]
+  },
+  {
+    "id": "ex-pallof-press",
+    "name": "Cable Pallof Press",
+    "category": "strength",
+    "primaryMuscle": "obliques",
+    "secondaryMuscles": [
+      "abs"
+    ],
+    "equipment": "cable",
+    "difficulty": "beginner",
+    "instructions": [
+      "Stand perpendicular to cable, press handle straight out from chest resisting rotation."
+    ],
+    "coachingCues": [
+      "Anti-rotation core stability",
+      "Hold 2 seconds at full reach"
+    ],
+    "commonMistakes": [
+      "Twisting shoulders toward weight stack"
+    ],
+    "recommendedRepRange": {
+      "min": 10,
+      "max": 12
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-russian-twists"
+    ]
+  },
+  {
+    "id": "ex-russian-twists",
+    "name": "Russian Twist (Weighted)",
+    "category": "hypertrophy",
+    "primaryMuscle": "obliques",
+    "secondaryMuscles": [
+      "abs"
+    ],
+    "equipment": "dumbbell",
+    "difficulty": "beginner",
+    "instructions": [
+      "Sit with feet elevated, rotate plate or dumbbell side to side."
+    ],
+    "coachingCues": [
+      "Follow hands with eyes",
+      "Controlled rotation"
+    ],
+    "commonMistakes": [
+      "Moving arms without rotating torso"
+    ],
+    "recommendedRepRange": {
+      "min": 16,
+      "max": 24
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-side-plank"
+    ]
+  },
+  {
+    "id": "ex-woodchoppers-cable",
+    "name": "Cable Woodchopper (Diagonal)",
+    "category": "hypertrophy",
+    "primaryMuscle": "obliques",
+    "secondaryMuscles": [
+      "abs",
+      "shoulders"
+    ],
+    "equipment": "cable",
+    "difficulty": "intermediate",
+    "instructions": [
+      "High to low or low to high rotational chop across body."
+    ],
+    "coachingCues": [
+      "Pivot on back foot",
+      "Power from hips and core"
+    ],
+    "commonMistakes": [
+      "Pulling purely with arms"
+    ],
+    "recommendedRepRange": {
+      "min": 10,
+      "max": 14
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-russian-twists"
+    ]
+  },
+  {
+    "id": "ex-decline-situp",
+    "name": "Decline Bench Sit-Up",
+    "category": "hypertrophy",
+    "primaryMuscle": "abs",
+    "secondaryMuscles": [],
+    "equipment": "bench",
+    "difficulty": "intermediate",
+    "instructions": [
+      "Hook feet in decline bench, curl up to top."
+    ],
+    "coachingCues": [
+      "Round spine on way up and down"
+    ],
+    "commonMistakes": [
+      "Hyperextending neck"
+    ],
+    "recommendedRepRange": {
+      "min": 12,
+      "max": 18
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-cable-crunch"
+    ]
+  },
+  {
+    "id": "ex-captains-chair-leg-raise",
+    "name": "Captain's Chair Knee/Leg Raise",
+    "category": "calisthenics",
+    "primaryMuscle": "abs",
+    "secondaryMuscles": [],
+    "equipment": "machine",
+    "difficulty": "beginner",
+    "instructions": [
+      "Forearms on pads, raise legs upward."
+    ],
+    "coachingCues": [
+      "Tilt pelvis"
+    ],
+    "commonMistakes": [
+      "Swinging legs"
+    ],
+    "recommendedRepRange": {
+      "min": 12,
+      "max": 15
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-hanging-leg-raise"
+    ]
+  },
+  {
+    "id": "ex-vacuum-exercise",
+    "name": "Stomach Vacuum",
+    "category": "mobility",
+    "primaryMuscle": "abs",
+    "secondaryMuscles": [],
+    "equipment": "bodyweight",
+    "difficulty": "intermediate",
+    "instructions": [
+      "Exhale all air, pull belly button toward spine and hold."
+    ],
+    "coachingCues": [
+      "Target transverse abdominis for a tighter waist"
+    ],
+    "commonMistakes": [
+      "Holding breath without drawing in"
+    ],
+    "recommendedRepRange": {
+      "min": 15,
+      "max": 30
+    },
+    "defaultRestSeconds": 45,
+    "alternativeExerciseIds": [
+      "ex-plank"
+    ]
+  },
+  {
+    "id": "ex-deadbug",
+    "name": "Dead Bug",
+    "category": "calisthenics",
+    "primaryMuscle": "abs",
+    "secondaryMuscles": [
+      "lower_back"
+    ],
+    "equipment": "bodyweight",
+    "difficulty": "beginner",
+    "instructions": [
+      "Lie on back, lower opposite arm and leg while pressing lower back into floor."
+    ],
+    "coachingCues": [
+      "Zero space under lower back"
+    ],
+    "commonMistakes": [
+      "Lower back arching off mat"
+    ],
+    "recommendedRepRange": {
+      "min": 10,
+      "max": 16
+    },
+    "defaultRestSeconds": 45,
+    "alternativeExerciseIds": [
+      "ex-plank"
+    ]
+  },
+  {
+    "id": "ex-bird-dog",
+    "name": "Bird Dog",
+    "category": "calisthenics",
+    "primaryMuscle": "lower_back",
+    "secondaryMuscles": [
+      "glutes",
+      "abs"
+    ],
+    "equipment": "bodyweight",
+    "difficulty": "beginner",
+    "instructions": [
+      "Hands and knees, reach opposite arm and leg straight out."
+    ],
+    "coachingCues": [
+      "Keep hips level like holding a glass of water"
+    ],
+    "commonMistakes": [
+      "Rotating pelvis"
+    ],
+    "recommendedRepRange": {
+      "min": 10,
+      "max": 14
+    },
+    "defaultRestSeconds": 45,
+    "alternativeExerciseIds": [
+      "ex-deadbug"
+    ]
+  },
+  {
+    "id": "ex-hollow-body-hold",
+    "name": "Hollow Body Hold",
+    "category": "calisthenics",
+    "primaryMuscle": "abs",
+    "secondaryMuscles": [
+      "quads"
+    ],
+    "equipment": "bodyweight",
+    "difficulty": "advanced",
+    "instructions": [
+      "Lie on back, press lumbar spine into floor, hover legs and arms 6 inches off ground."
+    ],
+    "coachingCues": [
+      "Rock solid gymnastics shape"
+    ],
+    "commonMistakes": [
+      "Lumbar lifting"
+    ],
+    "recommendedRepRange": {
+      "min": 20,
+      "max": 40
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-plank"
+    ]
+  },
+  {
+    "id": "ex-bicycle-crunch",
+    "name": "Bicycle Crunch",
+    "category": "calisthenics",
+    "primaryMuscle": "obliques",
+    "secondaryMuscles": [
+      "abs"
+    ],
+    "equipment": "bodyweight",
+    "difficulty": "beginner",
+    "instructions": [
+      "Lie on back, rotate elbow to opposite knee alternating smoothly."
+    ],
+    "coachingCues": [
+      "Shoulder to knee, not just elbow",
+      "Slow 2-second pause per side"
+    ],
+    "commonMistakes": [
+      "Rushing through reps frantically"
+    ],
+    "recommendedRepRange": {
+      "min": 16,
+      "max": 24
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-russian-twists"
+    ]
+  },
+  {
+    "id": "ex-floor-press-barbell",
+    "name": "Barbell Floor Press",
+    "category": "strength",
+    "primaryMuscle": "chest",
+    "secondaryMuscles": [
+      "triceps"
+    ],
+    "equipment": "barbell",
+    "difficulty": "intermediate",
+    "instructions": [
+      "Lie on floor, lower bar until triceps touch floor softly, press up."
+    ],
+    "coachingCues": [
+      "Dead stop on floor",
+      "Explosive drive"
+    ],
+    "commonMistakes": [
+      "Bouncing elbows off floor"
+    ],
+    "recommendedRepRange": {
+      "min": 5,
+      "max": 8
+    },
+    "defaultRestSeconds": 150,
+    "alternativeExerciseIds": [
+      "ex-barbell-bench-press"
+    ]
+  },
+  {
+    "id": "ex-floor-press-dumbbell",
+    "name": "Dumbbell Floor Press",
+    "category": "hypertrophy",
+    "primaryMuscle": "chest",
+    "secondaryMuscles": [
+      "triceps"
+    ],
+    "equipment": "dumbbell",
+    "difficulty": "beginner",
+    "instructions": [
+      "Floor press with dumbbells, pausing at bottom."
+    ],
+    "coachingCues": [
+      "Elbows at 45 degrees"
+    ],
+    "commonMistakes": [
+      "Rushing"
+    ],
+    "recommendedRepRange": {
+      "min": 8,
+      "max": 12
+    },
+    "defaultRestSeconds": 90,
+    "alternativeExerciseIds": [
+      "ex-dumbbell-bench-press"
+    ]
+  },
+  {
+    "id": "ex-cable-iron-cross",
+    "name": "Cable Iron Cross",
+    "category": "hypertrophy",
+    "primaryMuscle": "chest",
+    "secondaryMuscles": [
+      "front_delts"
+    ],
+    "equipment": "cable",
+    "difficulty": "advanced",
+    "instructions": [
+      "High cables pulled down into horizontal T position holding isometric."
+    ],
+    "coachingCues": [
+      "Squeeze pecs hard"
+    ],
+    "commonMistakes": [
+      "Too heavy"
+    ],
+    "recommendedRepRange": {
+      "min": 12,
+      "max": 15
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-cable-crossover-high-to-low"
+    ]
+  },
+  {
+    "id": "ex-diamond-pushup",
+    "name": "Diamond Push-Up",
+    "category": "calisthenics",
+    "primaryMuscle": "triceps",
+    "secondaryMuscles": [
+      "chest",
+      "front_delts"
+    ],
+    "equipment": "bodyweight",
+    "difficulty": "intermediate",
+    "instructions": [
+      "Hands touch forming diamond under sternum, push up."
+    ],
+    "coachingCues": [
+      "Tuck elbows tight"
+    ],
+    "commonMistakes": [
+      "Flaring elbows"
+    ],
+    "recommendedRepRange": {
+      "min": 8,
+      "max": 15
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-close-grip-bench-press"
+    ]
+  },
+  {
+    "id": "ex-wide-grip-pushup",
+    "name": "Wide-Grip Push-Up",
+    "category": "calisthenics",
+    "primaryMuscle": "chest",
+    "secondaryMuscles": [
+      "front_delts"
+    ],
+    "equipment": "bodyweight",
+    "difficulty": "beginner",
+    "instructions": [
+      "Hands placed 1.5x shoulder width, push up."
+    ],
+    "coachingCues": [
+      "Feel deep chest stretch"
+    ],
+    "commonMistakes": [
+      "Partial reps"
+    ],
+    "recommendedRepRange": {
+      "min": 10,
+      "max": 20
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-pushups"
+    ]
+  },
+  {
+    "id": "ex-archer-pushup",
+    "name": "Archer Push-Up",
+    "category": "calisthenics",
+    "primaryMuscle": "chest",
+    "secondaryMuscles": [
+      "triceps",
+      "shoulders"
+    ],
+    "equipment": "bodyweight",
+    "difficulty": "advanced",
+    "instructions": [
+      "Lower toward one arm while extending other arm straight out to side."
+    ],
+    "coachingCues": [
+      "Bodyweight unilateral chest builder"
+    ],
+    "commonMistakes": [
+      "Twisting hips"
+    ],
+    "recommendedRepRange": {
+      "min": 6,
+      "max": 10
+    },
+    "defaultRestSeconds": 90,
+    "alternativeExerciseIds": [
+      "ex-dips-chest-focus"
+    ]
+  },
+  {
+    "id": "ex-guillotine-press",
+    "name": "Neck Press (Guillotine Bench)",
+    "category": "hypertrophy",
+    "primaryMuscle": "chest",
+    "secondaryMuscles": [
+      "front_delts"
+    ],
+    "equipment": "barbell",
+    "difficulty": "advanced",
+    "instructions": [
+      "Wide grip, lower bar to neck/upper chest with light weight."
+    ],
+    "coachingCues": [
+      "Strict control, never go heavy"
+    ],
+    "commonMistakes": [
+      "Heavy weight without spotter"
+    ],
+    "recommendedRepRange": {
+      "min": 10,
+      "max": 15
+    },
+    "defaultRestSeconds": 90,
+    "alternativeExerciseIds": [
+      "ex-incline-dumbbell-press"
+    ]
+  },
+  {
+    "id": "ex-decline-dumbbell-press",
+    "name": "Decline Dumbbell Press",
+    "category": "hypertrophy",
+    "primaryMuscle": "chest",
+    "secondaryMuscles": [
+      "triceps"
+    ],
+    "equipment": "dumbbell",
+    "difficulty": "beginner",
+    "instructions": [
+      "Press dumbbells on decline bench with neutral or pronated grip."
+    ],
+    "coachingCues": [
+      "Focus on lower pec squeeze"
+    ],
+    "commonMistakes": [
+      "Dumbbells drifting backward"
+    ],
+    "recommendedRepRange": {
+      "min": 8,
+      "max": 12
+    },
+    "defaultRestSeconds": 90,
+    "alternativeExerciseIds": [
+      "ex-decline-barbell-press"
+    ]
+  },
+  {
+    "id": "ex-kroc-row",
+    "name": "Heavy Kroc Dumbbell Row",
+    "category": "strength",
+    "primaryMuscle": "lats",
+    "secondaryMuscles": [
+      "upper_back",
+      "forearms"
+    ],
+    "equipment": "dumbbell",
+    "difficulty": "advanced",
+    "instructions": [
+      "Heavy single arm row with controlled body English for high reps."
+    ],
+    "coachingCues": [
+      "Maximum weight, 15-20 reps"
+    ],
+    "commonMistakes": [
+      "Zero lat contraction"
+    ],
+    "recommendedRepRange": {
+      "min": 15,
+      "max": 20
+    },
+    "defaultRestSeconds": 120,
+    "alternativeExerciseIds": [
+      "ex-dumbbell-row-single-arm"
+    ]
+  },
+  {
+    "id": "ex-renegade-row",
+    "name": "Plank Renegade Row",
+    "category": "strength",
+    "primaryMuscle": "upper_back",
+    "secondaryMuscles": [
+      "abs",
+      "lats"
+    ],
+    "equipment": "dumbbell",
+    "difficulty": "intermediate",
+    "instructions": [
+      "In pushup plank on dumbbells, row one dumbbell to hip without rotating pelvis."
+    ],
+    "coachingCues": [
+      "Anti-rotation core stability"
+    ],
+    "commonMistakes": [
+      "Shifting hips"
+    ],
+    "recommendedRepRange": {
+      "min": 8,
+      "max": 12
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-dumbbell-row-single-arm"
+    ]
+  },
+  {
+    "id": "ex-gorilla-row",
+    "name": "Kettlebell Gorilla Row",
+    "category": "hypertrophy",
+    "primaryMuscle": "lats",
+    "secondaryMuscles": [
+      "upper_back",
+      "hamstrings"
+    ],
+    "equipment": "kettlebell",
+    "difficulty": "beginner",
+    "instructions": [
+      "Hinge over two kettlebells on floor, row one while pressing other down."
+    ],
+    "coachingCues": [
+      "Deep hinge, alternating rows"
+    ],
+    "commonMistakes": [
+      "Rounding back"
+    ],
+    "recommendedRepRange": {
+      "min": 10,
+      "max": 14
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-dumbbell-row-single-arm"
+    ]
+  },
+  {
+    "id": "ex-seal-row",
+    "name": "Seal Row (Elevated Bench Barbell Row)",
+    "category": "hypertrophy",
+    "primaryMuscle": "upper_back",
+    "secondaryMuscles": [
+      "lats",
+      "rear_delts"
+    ],
+    "equipment": "barbell",
+    "difficulty": "intermediate",
+    "instructions": [
+      "Lie face down on elevated high bench, row barbell up to bench underside."
+    ],
+    "coachingCues": [
+      "Zero spinal loading, 100% upper back"
+    ],
+    "commonMistakes": [
+      "Banging bar into bench"
+    ],
+    "recommendedRepRange": {
+      "min": 8,
+      "max": 12
+    },
+    "defaultRestSeconds": 90,
+    "alternativeExerciseIds": [
+      "ex-chest-supported-row"
+    ]
+  },
+  {
+    "id": "ex-rack-pull",
+    "name": "Barbell Rack Pull (Above Knee)",
+    "category": "strength",
+    "primaryMuscle": "traps",
+    "secondaryMuscles": [
+      "lower_back",
+      "glutes",
+      "forearms"
+    ],
+    "equipment": "barbell",
+    "difficulty": "intermediate",
+    "instructions": [
+      "Bar on pins just below or above knees, pull to lockout."
+    ],
+    "coachingCues": [
+      "Lockout overload",
+      "Pinch glutes and traps"
+    ],
+    "commonMistakes": [
+      "Hyperextending spine"
+    ],
+    "recommendedRepRange": {
+      "min": 4,
+      "max": 6
+    },
+    "defaultRestSeconds": 180,
+    "alternativeExerciseIds": [
+      "ex-barbell-deadlift"
+    ]
+  },
+  {
+    "id": "ex-pendlay-row",
+    "name": "Pendlay Barbell Row (From Floor)",
+    "category": "strength",
+    "primaryMuscle": "upper_back",
+    "secondaryMuscles": [
+      "lats"
+    ],
+    "equipment": "barbell",
+    "difficulty": "advanced",
+    "instructions": [
+      "Torso strictly parallel to floor, explode bar off floor to sternum every rep."
+    ],
+    "coachingCues": [
+      "Dead stop on floor every rep",
+      "Zero torso rise"
+    ],
+    "commonMistakes": [
+      "Standing up during row"
+    ],
+    "recommendedRepRange": {
+      "min": 5,
+      "max": 8
+    },
+    "defaultRestSeconds": 150,
+    "alternativeExerciseIds": [
+      "ex-barbell-bent-over-row"
+    ]
+  },
+  {
+    "id": "ex-yates-row",
+    "name": "Underhand Yates Row",
+    "category": "hypertrophy",
+    "primaryMuscle": "lats",
+    "secondaryMuscles": [
+      "biceps",
+      "upper_back"
+    ],
+    "equipment": "barbell",
+    "difficulty": "intermediate",
+    "instructions": [
+      "Torso at 70 degrees, underhand grip, row into belly."
+    ],
+    "coachingCues": [
+      "Squeeze lower lats"
+    ],
+    "commonMistakes": [
+      "Shoulders rounding"
+    ],
+    "recommendedRepRange": {
+      "min": 8,
+      "max": 12
+    },
+    "defaultRestSeconds": 90,
+    "alternativeExerciseIds": [
+      "ex-barbell-bent-over-row"
+    ]
+  },
+  {
+    "id": "ex-seated-cable-face-pull",
+    "name": "Seated Cable Face Pull to Neck",
+    "category": "hypertrophy",
+    "primaryMuscle": "rear_delts",
+    "secondaryMuscles": [
+      "traps"
+    ],
+    "equipment": "cable",
+    "difficulty": "beginner",
+    "instructions": [
+      "Seated cable pull to eye line with external shoulder rotation."
+    ],
+    "coachingCues": [
+      "Posture builder"
+    ],
+    "commonMistakes": [
+      "Pulling to chin instead of forehead"
+    ],
+    "recommendedRepRange": {
+      "min": 12,
+      "max": 15
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-cable-face-pull"
+    ]
+  },
+  {
+    "id": "ex-zercher-squat",
+    "name": "Zercher Barbell Squat",
+    "category": "strength",
+    "primaryMuscle": "quads",
+    "secondaryMuscles": [
+      "upper_back",
+      "abs",
+      "glutes"
+    ],
+    "equipment": "barbell",
+    "difficulty": "advanced",
+    "instructions": [
+      "Bar held in crooks of elbows against chest, squat deep."
+    ],
+    "coachingCues": [
+      "Massive core and upper back tension"
+    ],
+    "commonMistakes": [
+      "Collapsing forward"
+    ],
+    "recommendedRepRange": {
+      "min": 5,
+      "max": 8
+    },
+    "defaultRestSeconds": 180,
+    "alternativeExerciseIds": [
+      "ex-front-squat"
+    ]
+  },
+  {
+    "id": "ex-cossack-squat",
+    "name": "Cossack Squat (Lateral Squat)",
+    "category": "mobility",
+    "primaryMuscle": "quads",
+    "secondaryMuscles": [
+      "glutes",
+      "hamstrings"
+    ],
+    "equipment": "bodyweight",
+    "difficulty": "intermediate",
+    "instructions": [
+      "Wide stance, shift all weight to one side squatting deep while opposite leg stays straight."
+    ],
+    "coachingCues": [
+      "Hip mobility and adductor stretch"
+    ],
+    "commonMistakes": [
+      "Heel lifting"
+    ],
+    "recommendedRepRange": {
+      "min": 8,
+      "max": 12
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-bulgarian-split-squat"
+    ]
+  },
+  {
+    "id": "ex-curtsey-lunge",
+    "name": "Curtsey Lunge",
+    "category": "hypertrophy",
+    "primaryMuscle": "glutes",
+    "secondaryMuscles": [
+      "quads"
+    ],
+    "equipment": "dumbbell",
+    "difficulty": "beginner",
+    "instructions": [
+      "Step foot diagonally behind and across front leg, lower into lunge."
+    ],
+    "coachingCues": [
+      "Target glute medius"
+    ],
+    "commonMistakes": [
+      "Twisting front knee"
+    ],
+    "recommendedRepRange": {
+      "min": 10,
+      "max": 14
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-walking-lunges"
+    ]
+  },
+  {
+    "id": "ex-single-leg-rdl",
+    "name": "Single-Leg Dumbbell RDL",
+    "category": "hypertrophy",
+    "primaryMuscle": "hamstrings",
+    "secondaryMuscles": [
+      "glutes",
+      "calves"
+    ],
+    "equipment": "dumbbell",
+    "difficulty": "intermediate",
+    "instructions": [
+      "Hinge forward on one leg while trailing leg floats straight back parallel to floor."
+    ],
+    "coachingCues": [
+      "Hips square to ground",
+      "Balance on midfoot"
+    ],
+    "commonMistakes": [
+      "Opening hips outward"
+    ],
+    "recommendedRepRange": {
+      "min": 8,
+      "max": 12
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-dumbbell-rdl"
+    ]
+  },
+  {
+    "id": "ex-tibialis-raises",
+    "name": "Wall Tibialis Raise",
+    "category": "mobility",
+    "primaryMuscle": "calves",
+    "secondaryMuscles": [],
+    "equipment": "bodyweight",
+    "difficulty": "beginner",
+    "instructions": [
+      "Back against wall, heels 12 inches out, pull toes up toward shins."
+    ],
+    "coachingCues": [
+      "Knee resilience and shin strength",
+      "Burn in anterior tibialis"
+    ],
+    "commonMistakes": [
+      "Bending knees"
+    ],
+    "recommendedRepRange": {
+      "min": 20,
+      "max": 30
+    },
+    "defaultRestSeconds": 45,
+    "alternativeExerciseIds": [
+      "ex-standing-calf-raise"
+    ]
+  },
+  {
+    "id": "ex-belt-squat",
+    "name": "Machine Belt Squat",
+    "category": "hypertrophy",
+    "primaryMuscle": "quads",
+    "secondaryMuscles": [
+      "glutes"
+    ],
+    "equipment": "machine",
+    "difficulty": "beginner",
+    "instructions": [
+      "Weight attached to dip belt at hips, squat without any spinal compression."
+    ],
+    "coachingCues": [
+      "Pure quad drive with 0 spine loading"
+    ],
+    "commonMistakes": [
+      "Leaning too far back"
+    ],
+    "recommendedRepRange": {
+      "min": 10,
+      "max": 15
+    },
+    "defaultRestSeconds": 90,
+    "alternativeExerciseIds": [
+      "ex-barbell-back-squat"
+    ]
+  },
+  {
+    "id": "ex-glute-ham-raise",
+    "name": "Glute-Ham Developer Raise (GHD)",
+    "category": "strength",
+    "primaryMuscle": "hamstrings",
+    "secondaryMuscles": [
+      "glutes",
+      "lower_back"
+    ],
+    "equipment": "bench",
+    "difficulty": "advanced",
+    "instructions": [
+      "On GHD bench, lower torso and pull back up by flexing hamstrings."
+    ],
+    "coachingCues": [
+      "Powerful posterior chain builder"
+    ],
+    "commonMistakes": [
+      "Breaking at hips"
+    ],
+    "recommendedRepRange": {
+      "min": 6,
+      "max": 10
+    },
+    "defaultRestSeconds": 120,
+    "alternativeExerciseIds": [
+      "ex-nordic-hamstring-curl"
+    ]
+  },
+  {
+    "id": "ex-box-squat-barbell",
+    "name": "Barbell Box Squat",
+    "category": "strength",
+    "primaryMuscle": "glutes",
+    "secondaryMuscles": [
+      "quads",
+      "hamstrings"
+    ],
+    "equipment": "barbell",
+    "difficulty": "intermediate",
+    "instructions": [
+      "Squat back onto box, pause momentarily without relaxing core, explode up."
+    ],
+    "coachingCues": [
+      "Sit back, shins vertical, drive up"
+    ],
+    "commonMistakes": [
+      "Rocking off box to cheat momentum"
+    ],
+    "recommendedRepRange": {
+      "min": 5,
+      "max": 8
+    },
+    "defaultRestSeconds": 180,
+    "alternativeExerciseIds": [
+      "ex-barbell-back-squat"
+    ]
+  },
+  {
+    "id": "ex-frog-pumps",
+    "name": "Glute Frog Pumps",
+    "category": "hypertrophy",
+    "primaryMuscle": "glutes",
+    "secondaryMuscles": [],
+    "equipment": "bodyweight",
+    "difficulty": "beginner",
+    "instructions": [
+      "Lie on back, soles of feet together like butterfly, pump hips up."
+    ],
+    "coachingCues": [
+      "High rep glute burn"
+    ],
+    "commonMistakes": [
+      "Short range"
+    ],
+    "recommendedRepRange": {
+      "min": 20,
+      "max": 30
+    },
+    "defaultRestSeconds": 45,
+    "alternativeExerciseIds": [
+      "ex-barbell-hip-thrust"
+    ]
+  },
+  {
+    "id": "ex-reverse-hyperextension",
+    "name": "Reverse Hyperextension",
+    "category": "strength",
+    "primaryMuscle": "lower_back",
+    "secondaryMuscles": [
+      "glutes",
+      "hamstrings"
+    ],
+    "equipment": "machine",
+    "difficulty": "intermediate",
+    "instructions": [
+      "Torso on bench, swing legs up behind using glutes and erectors."
+    ],
+    "coachingCues": [
+      "Spine decompression and posterior pump"
+    ],
+    "commonMistakes": [
+      "Swinging uncontrollably"
+    ],
+    "recommendedRepRange": {
+      "min": 12,
+      "max": 18
+    },
+    "defaultRestSeconds": 90,
+    "alternativeExerciseIds": [
+      "ex-hyperextensions-back"
+    ]
+  },
+  {
+    "id": "ex-bayesian-cable-curl",
+    "name": "Bayesian Cable Bicep Curl",
+    "category": "hypertrophy",
+    "primaryMuscle": "biceps",
+    "secondaryMuscles": [],
+    "equipment": "cable",
+    "difficulty": "intermediate",
+    "instructions": [
+      "Face away from low cable, arm behind torso, curl forward for long head stretch."
+    ],
+    "coachingCues": [
+      "Max stretch on long head of bicep"
+    ],
+    "commonMistakes": [
+      "Shoulder moving forward"
+    ],
+    "recommendedRepRange": {
+      "min": 10,
+      "max": 14
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-incline-dumbbell-curl"
+    ]
+  },
+  {
+    "id": "ex-cross-body-hammer-curl",
+    "name": "Cross-Body Dumbbell Hammer Curl",
+    "category": "hypertrophy",
+    "primaryMuscle": "biceps",
+    "secondaryMuscles": [
+      "forearms"
+    ],
+    "equipment": "dumbbell",
+    "difficulty": "beginner",
+    "instructions": [
+      "Curl dumbbell across torso toward opposite shoulder."
+    ],
+    "coachingCues": [
+      "Builds arm thickness via brachialis"
+    ],
+    "commonMistakes": [
+      "Swinging body"
+    ],
+    "recommendedRepRange": {
+      "min": 10,
+      "max": 12
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-hammer-curl"
+    ]
+  },
+  {
+    "id": "ex-jm-press",
+    "name": "JM Press",
+    "category": "strength",
+    "primaryMuscle": "triceps",
+    "secondaryMuscles": [
+      "chest"
+    ],
+    "equipment": "barbell",
+    "difficulty": "advanced",
+    "instructions": [
+      "Hybrid close-grip bench and skull crusher lowering bar to throat/chin."
+    ],
+    "coachingCues": [
+      "Elbows at 45 deg, powerful tricep mass builder"
+    ],
+    "commonMistakes": [
+      "Dropping on neck"
+    ],
+    "recommendedRepRange": {
+      "min": 6,
+      "max": 10
+    },
+    "defaultRestSeconds": 120,
+    "alternativeExerciseIds": [
+      "ex-close-grip-bench-press"
+    ]
+  },
+  {
+    "id": "ex-tate-press",
+    "name": "Dumbbell Tate Press",
+    "category": "hypertrophy",
+    "primaryMuscle": "triceps",
+    "secondaryMuscles": [],
+    "equipment": "dumbbell",
+    "difficulty": "intermediate",
+    "instructions": [
+      "Lie on flat bench, dumbbells touch at chest, point elbows out and extend forearms."
+    ],
+    "coachingCues": [
+      "Target medial head of triceps"
+    ],
+    "commonMistakes": [
+      "Flaring elbows painfully"
+    ],
+    "recommendedRepRange": {
+      "min": 10,
+      "max": 14
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-skull-crushers"
+    ]
+  },
+  {
+    "id": "ex-bus-driver-shoulders",
+    "name": "Weight Plate Bus Driver",
+    "category": "hypertrophy",
+    "primaryMuscle": "front_delts",
+    "secondaryMuscles": [
+      "forearms"
+    ],
+    "equipment": "other",
+    "difficulty": "beginner",
+    "instructions": [
+      "Hold 10-15kg plate at eye level, rotate steering wheel left and right."
+    ],
+    "coachingCues": [
+      "Constant shoulder burn"
+    ],
+    "commonMistakes": [
+      "Lowering arms"
+    ],
+    "recommendedRepRange": {
+      "min": 15,
+      "max": 20
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-barbell-front-raise"
+    ]
+  },
+  {
+    "id": "ex-farmer-walks",
+    "name": "Heavy Dumbbell Farmer Walk",
+    "category": "strength",
+    "primaryMuscle": "forearms",
+    "secondaryMuscles": [
+      "traps",
+      "abs"
+    ],
+    "equipment": "dumbbell",
+    "difficulty": "intermediate",
+    "instructions": [
+      "Pick up two heavy dumbbells, walk tall with short controlled steps."
+    ],
+    "coachingCues": [
+      "Crush grip, proud chest, zero sway"
+    ],
+    "commonMistakes": [
+      "Slouching shoulders"
+    ],
+    "recommendedRepRange": {
+      "min": 30,
+      "max": 60
+    },
+    "defaultRestSeconds": 90,
+    "alternativeExerciseIds": [
+      "ex-barbell-shrug"
+    ]
+  },
+  {
+    "id": "ex-box-jumps",
+    "name": "Plyometric Box Jump",
+    "category": "mobility",
+    "primaryMuscle": "quads",
+    "secondaryMuscles": [
+      "calves",
+      "glutes"
+    ],
+    "equipment": "other",
+    "difficulty": "intermediate",
+    "instructions": [
+      "Stand before box, swing arms, jump and land softly with bent knees on top of box."
+    ],
+    "coachingCues": [
+      "Land like a ninja softly"
+    ],
+    "commonMistakes": [
+      "Landing with stiff straight knees"
+    ],
+    "recommendedRepRange": {
+      "min": 5,
+      "max": 8
+    },
+    "defaultRestSeconds": 90,
+    "alternativeExerciseIds": [
+      "ex-squat-jumps"
+    ]
+  },
+  {
+    "id": "ex-squat-jumps",
+    "name": "Bodyweight Squat Jump",
+    "category": "calisthenics",
+    "primaryMuscle": "quads",
+    "secondaryMuscles": [
+      "calves",
+      "glutes"
+    ],
+    "equipment": "bodyweight",
+    "difficulty": "beginner",
+    "instructions": [
+      "Quarter squat down, explode vertically into jump, absorb landing softly."
+    ],
+    "coachingCues": [
+      "Maximum power upward"
+    ],
+    "commonMistakes": [
+      "Hard landing"
+    ],
+    "recommendedRepRange": {
+      "min": 10,
+      "max": 15
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-box-jumps"
+    ]
+  },
+  {
+    "id": "ex-mountain-climbers",
+    "name": "Mountain Climber",
+    "category": "calisthenics",
+    "primaryMuscle": "abs",
+    "secondaryMuscles": [
+      "shoulders",
+      "quads"
+    ],
+    "equipment": "bodyweight",
+    "difficulty": "beginner",
+    "instructions": [
+      "High plank, drive knees forward toward chest in rhythmic cadence."
+    ],
+    "coachingCues": [
+      "Hips level, fast feet"
+    ],
+    "commonMistakes": [
+      "Piking hips into air"
+    ],
+    "recommendedRepRange": {
+      "min": 20,
+      "max": 30
+    },
+    "defaultRestSeconds": 45,
+    "alternativeExerciseIds": [
+      "ex-plank"
+    ]
+  },
+  {
+    "id": "ex-kettlebell-swings",
+    "name": "Russian Kettlebell Swing",
+    "category": "strength",
+    "primaryMuscle": "glutes",
+    "secondaryMuscles": [
+      "hamstrings",
+      "lower_back",
+      "forearms"
+    ],
+    "equipment": "kettlebell",
+    "difficulty": "intermediate",
+    "instructions": [
+      "Hinge hips back holding kettlebell, snap hips forward driving bell to chest height."
+    ],
+    "coachingCues": [
+      "Hip snap, not a shoulder front raise"
+    ],
+    "commonMistakes": [
+      "Squatting instead of hinging"
+    ],
+    "recommendedRepRange": {
+      "min": 12,
+      "max": 20
+    },
+    "defaultRestSeconds": 60,
+    "alternativeExerciseIds": [
+      "ex-romanian-deadlift"
+    ]
+  },
+  {
+    "id": "ex-turkish-getup",
+    "name": "Turkish Get-Up",
+    "category": "mobility",
+    "primaryMuscle": "front_delts",
+    "secondaryMuscles": [
+      "abs",
+      "obliques",
+      "glutes"
+    ],
+    "equipment": "kettlebell",
+    "difficulty": "advanced",
+    "instructions": [
+      "Lie holding kettlebell locked overhead, stand up step-by-step maintaining vertical arm."
+    ],
+    "coachingCues": [
+      "Eyes on kettlebell at all times"
+    ],
+    "commonMistakes": [
+      "Bending arm overhead"
+    ],
+    "recommendedRepRange": {
+      "min": 3,
+      "max": 5
+    },
+    "defaultRestSeconds": 90,
+    "alternativeExerciseIds": [
+      "ex-overhead-press"
+    ]
+  }
+]

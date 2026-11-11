@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Sparkles,
   Copy,
@@ -11,6 +12,8 @@ import {
 import { useApp } from '../../context/AppContext';
 import { SyllabusImportPayload } from '../../types';
 import { preprocessAndParseSyllabusJson } from '../../utils/syllabusJsonSanitizer';
+import { useEntitlements } from '../../hooks/useEntitlements';
+import { ProFeatureGate } from '../common/ProFeatureGate';
 
 interface GptSyllabusImportModalProps {
   isOpen: boolean;
@@ -18,46 +21,57 @@ interface GptSyllabusImportModalProps {
 }
 
 const CHATGPT_SYLLABUS_PROMPT_TEMPLATE = `I am providing my college course syllabus document or text.
-Please extract the subject name, all chapters/units, topics, and subtopics, and return it ONLY as a raw, valid JSON object following this exact schema:
+Act as a careful syllabus structure checker before creating JSON. First identify whether this document contains one course or several courses inside a degree, year, semester, or program syllabus. A program title is NOT a course subject. Each actual course (for example, Linear Algebra or Introduction to C) must be a separate item in "subjects". Within each course, put only its real units/chapters/modules in "chapters". Put the smaller syllabus items listed under each chapter in "topics".
+
+Return ONLY a raw, valid JSON object following this exact schema:
 
 {
-  "schemaVersion": 1,
-  "subject": {
-    "name": "Course or Subject Name",
-    "chapters": [
-      {
-        "name": "Chapter or Unit Title",
-        "estimatedLectures": 8,
-        "importance": "High",
-        "topics": [
-          {
-            "name": "Topic Title",
-            "estimatedLectures": 2,
-            "importance": "High",
-            "subtopics": [
-              "Subtopic 1",
-              "Subtopic 2"
-            ]
-          }
-        ]
-      }
-    ]
-  }
+  "schemaVersion": 2,
+  "programTitle": "Optional degree, year, or semester title",
+  "subjects": [
+    {
+      "name": "Actual Course or Subject Name",
+      "code": "Optional course code",
+      "chapters": [
+        {
+          "name": "A real chapter, unit, or module within this course",
+          "estimatedLectures": 8,
+          "importance": "High",
+          "topics": [
+            {
+              "name": "A topic listed inside this chapter",
+              "estimatedLectures": 2,
+              "importance": "High"
+            }
+          ]
+        }
+      ]
+    }
+  ]
 }
 
-STRICT EXTRACTION RULES:
-1. "schemaVersion" must be 1.
-2. "importance" must be exactly one of: "High", "Medium", or "Low". Label this as an academic estimate, never as guaranteed exam weightage.
-3. "estimatedLectures" must be a non-negative integer or omitted if unknown. Explicitly treat lecture counts as estimates.
-4. "name" fields for subject, chapter, and topic must preserve the original syllabus structure and terminology.
-5. Do NOT invent missing topics, exam marks, or predictions.
-6. Output ONLY valid JSON without markdown fences or additional commentary.`;
+HIERARCHY CHECK — do this before returning JSON:
+1. Every entry in "subjects" is a teachable course, not the degree/program/year heading. If the document has one course, still return it as the only item in the "subjects" array.
+2. Every "chapters" entry is a unit/chapter/module belonging to that course. Do not put course names such as "Linear Algebra" or "Introduction to C" in a course's chapters list when they are separate courses in the source document.
+3. Every "topics" entry is a smaller item under its chapter. Never promote a topic to a chapter or demote a chapter to a topic.
+4. Keep the source's order and wording. Do not invent hierarchy or missing content. If headings are ambiguous, use the nearest explicit course/unit headings and do not guess.
+5. This tracker supports exactly three levels: subject → chapter → topic. Do not create a "subtopics" level or move topics into it.
+6. Before output, verify each course has its own chapters and each topic is nested under the chapter where it appears.
+
+FIELD RULES:
+1. "schemaVersion" must be 2.
+2. "importance" must be exactly one of: "High", "Medium", or "Low". Label it as an academic estimate, never as guaranteed exam weightage.
+3. "estimatedLectures" must be a non-negative integer or omitted if unknown. Treat lecture counts as estimates.
+4. Preserve original course, chapter, and topic terminology. Omit uncertain fields instead of guessing.
+5. Output ONLY valid JSON without markdown fences or additional commentary.`;
 
 export const GptSyllabusImportModal: React.FC<GptSyllabusImportModalProps> = ({
   isOpen,
   onClose,
 }) => {
   const { state, importSyllabus } = useApp();
+  const { canAccess } = useEntitlements();
+  const hasAccess = canAccess('ai_study_planner');
 
   const [jsonInput, setJsonInput] = useState('');
   const [copiedPrompt, setCopiedPrompt] = useState(false);
@@ -66,11 +80,13 @@ export const GptSyllabusImportModal: React.FC<GptSyllabusImportModalProps> = ({
   const [warnings, setWarnings] = useState<string[]>([]);
   const [parsedPayload, setParsedPayload] = useState<SyllabusImportPayload | null>(null);
   const [isValidated, setIsValidated] = useState(false);
-  const [importResult, setImportResult] = useState<{ chapters: number; topics: number; subject: string } | null>(null);
+  const [importResult, setImportResult] = useState<{ chapters: number; topics: number; subjects: string[] } | null>(null);
 
   if (!isOpen) return null;
 
   const existingSubjects = state.syllabusSubjects || [];
+  const importSubjects = parsedPayload?.subjects ?? (parsedPayload?.subject ? [parsedPayload.subject] : []);
+  const isMultiSubjectImport = importSubjects.length > 1;
 
   const handleCopyPrompt = async () => {
     try {
@@ -109,92 +125,97 @@ export const GptSyllabusImportModal: React.FC<GptSyllabusImportModalProps> = ({
       return;
     }
 
-    if (payload.schemaVersion !== 1 && payload.version !== 1) {
-      setValidationError('Unsupported schema version. Expected "schemaVersion": 1.');
+    const schemaVersion = payload.schemaVersion ?? payload.version;
+    if (schemaVersion !== 1 && schemaVersion !== 2) {
+      setValidationError('Unsupported schema version. Copy the current TRAKIFY syllabus prompt and use schemaVersion 2.');
       return;
     }
 
-    if (!payload.subject || typeof payload.subject !== 'object') {
-      setValidationError('Missing "subject" object in syllabus payload.');
-      return;
-    }
+    const rawSubjects = Array.isArray(payload.subjects)
+      ? payload.subjects
+      : payload.subject && typeof payload.subject === 'object'
+        ? [payload.subject]
+        : [];
 
-    const subjectName = (payload.subject.name || '').trim();
-    if (!subjectName) {
-      setValidationError('Subject name is required in "subject.name".');
-      return;
-    }
-
-    if (!Array.isArray(payload.subject.chapters) || payload.subject.chapters.length === 0) {
-      setValidationError('Syllabus must contain at least one chapter in "subject.chapters".');
+    if (rawSubjects.length === 0) {
+      setValidationError('No course subjects found. Use a "subjects" array, with each course containing its own chapters and topics.');
       return;
     }
 
     const currentWarnings: string[] = [];
-    const validChapters: any[] = [];
-
-    payload.subject.chapters.forEach((chap: any, cIdx: number) => {
-      const cNum = cIdx + 1;
-      const cName = (chap.name || '').trim();
-      if (!cName) {
-        currentWarnings.push(`Chapter #${cNum} has no name. Skipped.`);
+    const validSubjects: NonNullable<SyllabusImportPayload['subjects']> = [];
+    rawSubjects.forEach((rawSubject: any, sIdx: number) => {
+      const subjectName = String(rawSubject?.name || rawSubject?.courseName || '').trim();
+      if (!subjectName) {
+        currentWarnings.push(`Course #${sIdx + 1} has no course name and was skipped.`);
+        return;
+      }
+      if (/\b(syllabus|curriculum|first|second|third|fourth)\s+(year|semester)\b|\b(b\.?\s?tech|degree)\s+syllabus\b/i.test(subjectName)) {
+        currentWarnings.push(`"${subjectName}" looks like a program/year heading rather than a course. Check the Structure Preview before importing; each actual course should be a separate subject.`);
+      }
+      const rawChapters = Array.isArray(rawSubject?.chapters)
+        ? rawSubject.chapters
+        : Array.isArray(rawSubject?.units)
+          ? rawSubject.units
+          : Array.isArray(rawSubject?.modules)
+            ? rawSubject.modules
+            : [];
+      if (rawChapters.length === 0) {
+        currentWarnings.push(`"${subjectName}" has no chapters/units and was skipped.`);
         return;
       }
 
-      const validTopics: any[] = [];
-      const topicsArr = Array.isArray(chap.topics) ? chap.topics : [];
-      topicsArr.forEach((top: any, tIdx: number) => {
-        const tNum = tIdx + 1;
-        const tName = (top.name || '').trim();
-        if (!tName) {
-          currentWarnings.push(`Chapter "${cName}", Topic #${tNum} has no title. Skipped.`);
+      const validChapters: NonNullable<SyllabusImportPayload['subject']>['chapters'] = [];
+      rawChapters.forEach((chap: any, cIdx: number) => {
+        const cName = String(chap?.name || chap?.title || '').trim();
+        if (!cName) {
+          currentWarnings.push(`Course "${subjectName}", chapter #${cIdx + 1} has no name and was skipped.`);
           return;
         }
-
-        const importanceVal = ['High', 'Medium', 'Low'].includes(top.importance) ? top.importance : undefined;
-        const estLectures = typeof top.estimatedLectures === 'number' && top.estimatedLectures >= 0 ? top.estimatedLectures : undefined;
-
-        validTopics.push({
-          name: tName,
-          estimatedLectures: estLectures,
-          importance: importanceVal,
-          subtopics: Array.isArray(top.subtopics) ? top.subtopics.map(String) : undefined,
+        const validTopics: NonNullable<SyllabusImportPayload['subject']>['chapters'][number]['topics'] = [];
+        const topicsArr = Array.isArray(chap?.topics) ? chap.topics : [];
+        topicsArr.forEach((top: any, tIdx: number) => {
+          const tName = String(typeof top === 'string' ? top : top?.name || top?.title || '').trim();
+          if (!tName) {
+            currentWarnings.push(`"${cName}" topic #${tIdx + 1} has no name and was skipped.`);
+            return;
+          }
+          const importanceVal = ['High', 'Medium', 'Low'].includes(top?.importance) ? top.importance : undefined;
+          const estLectures = typeof top?.estimatedLectures === 'number' && top.estimatedLectures >= 0 ? top.estimatedLectures : undefined;
+          validTopics.push({ name: tName, estimatedLectures: estLectures, importance: importanceVal });
+          if (Array.isArray(top?.subtopics) && top.subtopics.length > 0) {
+            currentWarnings.push(`"${tName}" contains nested subtopics. TRAKIFY has three tracked levels; nested items are retained in the topic notes. Copy the updated prompt to keep every topic at the correct level.`);
+          }
         });
+        const chapImportance = ['High', 'Medium', 'Low'].includes(chap?.importance) ? chap.importance : undefined;
+        const chapLectures = typeof chap?.estimatedLectures === 'number' && chap.estimatedLectures >= 0 ? chap.estimatedLectures : undefined;
+        validChapters.push({ name: cName, estimatedLectures: chapLectures, importance: chapImportance, topics: validTopics });
       });
-
-      const chapImportance = ['High', 'Medium', 'Low'].includes(chap.importance) ? chap.importance : undefined;
-      const chapLectures = typeof chap.estimatedLectures === 'number' && chap.estimatedLectures >= 0 ? chap.estimatedLectures : undefined;
-
-      validChapters.push({
-        name: cName,
-        estimatedLectures: chapLectures,
-        importance: chapImportance,
-        topics: validTopics,
-      });
+      if (validChapters.length > 0) {
+        validSubjects.push({ name: subjectName, code: rawSubject.code ? String(rawSubject.code) : undefined, chapters: validChapters });
+      }
     });
 
-    if (validChapters.length === 0) {
-      setValidationError('No valid chapters could be extracted from the provided syllabus JSON.');
+    if (validSubjects.length === 0) {
+      setValidationError('No valid courses and chapters were found. Each course needs a name and at least one chapter or unit.');
       setWarnings(currentWarnings);
       return;
     }
 
-    // Check if target subject already exists
-    const matchingSubject = existingSubjects.find(
-      (s) => s.name.toLowerCase() === subjectName.toLowerCase()
-    );
-    if (matchingSubject && selectedTargetSubjectId === 'new') {
-      currentWarnings.push(
-        `Notice: An existing subject named "${matchingSubject.name}" already exists. Importing will safely merge new chapters & topics into it.`
-      );
+    validSubjects.forEach((validSubject) => {
+      const matchingSubject = existingSubjects.find((s) => s.name.toLowerCase() === validSubject.name.toLowerCase());
+      if (matchingSubject && (validSubjects.length > 1 || selectedTargetSubjectId === 'new')) {
+        currentWarnings.push(`"${matchingSubject.name}" already exists. Its matching chapters and topics will be safely merged.`);
+      }
+    });
+    if (validSubjects.length > 1) {
+      currentWarnings.unshift(`Structure check: found ${validSubjects.length} separate courses. Each will be imported as its own subject; the target selector applies only to a single-course import.`);
     }
 
     const validated: SyllabusImportPayload = {
-      schemaVersion: 1,
-      subject: {
-        name: subjectName,
-        chapters: validChapters,
-      },
+      schemaVersion: 2,
+      programTitle: typeof payload.programTitle === 'string' ? payload.programTitle : undefined,
+      subjects: validSubjects,
     };
 
     setParsedPayload(validated);
@@ -205,16 +226,16 @@ export const GptSyllabusImportModal: React.FC<GptSyllabusImportModalProps> = ({
   const handleConfirmImport = () => {
     if (!parsedPayload) return;
 
-    let targetId: string | undefined = undefined;
-    if (selectedTargetSubjectId !== 'new') {
-      targetId = selectedTargetSubjectId;
-    }
-
-    const result = importSyllabus(parsedPayload, targetId);
+    const subjectsToImport = parsedPayload.subjects ?? (parsedPayload.subject ? [parsedPayload.subject] : []);
+    if (subjectsToImport.length === 0) return;
+    const targetId = subjectsToImport.length === 1 && selectedTargetSubjectId !== 'new'
+      ? selectedTargetSubjectId
+      : undefined;
+    const results = subjectsToImport.map((subject) => importSyllabus({ schemaVersion: 1, subject }, targetId));
     setImportResult({
-      chapters: result.chaptersAdded,
-      topics: result.topicsAdded,
-      subject: result.subjectName,
+      chapters: results.reduce((sum, result) => sum + result.chaptersAdded, 0),
+      topics: results.reduce((sum, result) => sum + result.topicsAdded, 0),
+      subjects: subjectsToImport.map((subject) => subject.name),
     });
     setIsValidated(false);
   };
@@ -229,11 +250,11 @@ export const GptSyllabusImportModal: React.FC<GptSyllabusImportModalProps> = ({
     setSelectedTargetSubjectId('new');
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-espresso-950/50 backdrop-blur-sm overflow-y-auto">
-      <div className="w-full max-w-2xl bg-white dark:bg-espresso-900 rounded-2xl border border-ivory-300 dark:border-espresso-700 shadow-2xl overflow-hidden my-8">
+  return createPortal((
+    <div className="fixed inset-0 z-[1000] flex items-start sm:items-center justify-center p-3 sm:p-4 bg-espresso-950/50 backdrop-blur-sm overflow-y-auto overscroll-contain">
+      <div className="w-full max-w-3xl max-h-[calc(100dvh-1.5rem)] flex flex-col bg-white dark:bg-espresso-900 rounded-2xl border border-ivory-300 dark:border-espresso-700 shadow-2xl overflow-hidden my-auto">
         {/* Header */}
-        <div className="p-5 border-b border-ivory-300 dark:border-espresso-800 flex items-center justify-between bg-ivory-50/70 dark:bg-espresso-850">
+        <div className="p-4 sm:p-5 border-b border-ivory-300 dark:border-espresso-800 flex items-center justify-between bg-ivory-50/70 dark:bg-espresso-850 shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="p-2 rounded-xl bg-terracotta-100 dark:bg-terracotta-900/40 text-terracotta-700 dark:text-terracotta-300">
               <Sparkles className="w-4 h-4" />
@@ -256,8 +277,14 @@ export const GptSyllabusImportModal: React.FC<GptSyllabusImportModalProps> = ({
         </div>
 
         {/* Modal Body */}
-        <div className="p-6 space-y-5 max-h-[75vh] overflow-y-auto">
-          {/* Success Banner */}
+        {!hasAccess ? (
+          <div className="p-6">
+            <ProFeatureGate featureKey="ai_study_planner" onUpgradeClick={onClose} />
+          </div>
+        ) : (
+          <>
+            <div className="p-4 sm:p-5 space-y-4 flex-1 min-h-0 overflow-y-auto">
+              {/* Success Banner */}
           {importResult && (
             <div className="p-4 rounded-xl bg-sage-50 dark:bg-sage-900/30 border border-sage-200 dark:border-sage-800/50 flex items-start gap-3">
               <CheckCircle2 className="w-5 h-5 text-sage-600 dark:text-sage-400 shrink-0 mt-0.5" />
@@ -266,8 +293,9 @@ export const GptSyllabusImportModal: React.FC<GptSyllabusImportModalProps> = ({
                   Syllabus Imported Successfully!
                 </h4>
                 <p className="text-xs text-sage-700 dark:text-sage-300 mt-0.5">
-                  Imported <span className="font-bold">{importResult.chapters} chapters</span> and{' '}
-                  <span className="font-bold">{importResult.topics} topics</span> into "{importResult.subject}".
+                  Imported <span className="font-bold">{importResult.subjects.length} course{importResult.subjects.length === 1 ? '' : 's'}</span>,{' '}
+                  <span className="font-bold">{importResult.chapters} chapters</span>, and{' '}
+                  <span className="font-bold">{importResult.topics} topics</span>: {importResult.subjects.join(', ')}.
                   Existing notes and progress were completely preserved.
                 </p>
                 <div className="mt-3 flex gap-2">
@@ -290,8 +318,9 @@ export const GptSyllabusImportModal: React.FC<GptSyllabusImportModalProps> = ({
 
           {!importResult && (
             <>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {/* Step 1: Destination Subject */}
-              <div className="p-4 rounded-xl border border-ivory-200 dark:border-espresso-750 bg-ivory-50/60 dark:bg-espresso-850/60 space-y-3">
+              <div className="p-3.5 rounded-xl border border-ivory-200 dark:border-espresso-750 bg-ivory-50/60 dark:bg-espresso-850/60 space-y-3">
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-espresso-200 dark:bg-espresso-700 text-espresso-700 dark:text-ivory-200">
                     Step 1
@@ -301,29 +330,33 @@ export const GptSyllabusImportModal: React.FC<GptSyllabusImportModalProps> = ({
                   </h3>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-espresso-600 dark:text-espresso-300 mb-1">
-                    Select existing subject or create new from JSON:
-                  </label>
-                  <select
-                    value={selectedTargetSubjectId}
-                    onChange={(e) => setSelectedTargetSubjectId(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl border border-ivory-300 dark:border-espresso-700 bg-white dark:bg-espresso-800 text-xs text-espresso-950 dark:text-ivory-50"
-                  >
-                    <option value="new">+ Auto-create from JSON subject name</option>
-                    {existingSubjects.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        Merge into: {s.name} ({s.chapters.length} chapters)
-                      </option>
-                    ))}
-                  </select>
+                  {isMultiSubjectImport ? (
+                    <p className="rounded-lg border border-sage-200 dark:border-sage-800 bg-white/70 dark:bg-espresso-900/60 px-3 py-2 text-xs text-espresso-600 dark:text-espresso-300">
+                      {importSubjects.length} courses detected. Each course will merge by its own name or be created separately.
+                    </p>
+                  ) : <>
+                    <label className="block text-xs font-medium text-espresso-600 dark:text-espresso-300 mb-1">
+                      Merge this course into an existing subject or create it from JSON:
+                    </label>
+                    <select
+                      value={selectedTargetSubjectId}
+                      onChange={(e) => setSelectedTargetSubjectId(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border border-ivory-300 dark:border-espresso-700 bg-white dark:bg-espresso-800 text-xs text-espresso-950 dark:text-ivory-50"
+                    >
+                      <option value="new">+ Create or match JSON course name</option>
+                      {existingSubjects.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          Merge into: {s.name} ({s.chapters.length} chapters)
+                        </option>
+                      ))}
+                    </select>
+                  </>}
                 </div>
-                <p className="text-[11px] text-espresso-500 dark:text-espresso-400">
-                  Tip: If uploading PDF, DOCX, or textbook scans, upload the file directly to ChatGPT using the prompt below!
-                </p>
+                {!isMultiSubjectImport && <p className="text-[11px] text-espresso-500 dark:text-espresso-400">For a combined degree/year syllabus, the updated prompt separates each course automatically.</p>}
               </div>
 
               {/* Step 2: Copy ChatGPT Prompt */}
-              <div className="p-4 rounded-xl border border-ivory-200 dark:border-espresso-750 bg-ivory-50/60 dark:bg-espresso-850/60 space-y-3">
+              <div className="p-3.5 rounded-xl border border-ivory-200 dark:border-espresso-750 bg-ivory-50/60 dark:bg-espresso-850/60 space-y-3">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div>
                     <span className="font-mono text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-espresso-200 dark:bg-espresso-700 text-espresso-700 dark:text-ivory-200">
@@ -349,8 +382,9 @@ export const GptSyllabusImportModal: React.FC<GptSyllabusImportModalProps> = ({
                   </button>
                 </div>
                 <p className="text-xs text-espresso-500 dark:text-espresso-400 leading-relaxed">
-                  Paste this prompt into ChatGPT with your course syllabus or PDF. ChatGPT will extract all units, topics, estimated lecture hours, and importance tags.
+                  Paste this prompt into ChatGPT with your syllabus. It checks course → chapter → topic levels before creating JSON.
                 </p>
+              </div>
               </div>
 
               {/* Step 3: Paste Area */}
@@ -375,14 +409,14 @@ export const GptSyllabusImportModal: React.FC<GptSyllabusImportModalProps> = ({
                 </div>
 
                 <textarea
-                  rows={6}
+                  rows={4}
                   value={jsonInput}
                   onChange={(e) => {
                     setJsonInput(e.target.value);
                     setIsValidated(false);
                     setValidationError(null);
                   }}
-                  placeholder='{\n  "schemaVersion": 1,\n  "subject": {\n    "name": "Engineering Mathematics",\n    "chapters": [\n      {\n        "name": "Differential Equations",\n        "estimatedLectures": 8,\n        "importance": "High",\n        "topics": [\n          { "name": "First-order equations", "estimatedLectures": 2, "importance": "High" }\n        ]\n      }\n    ]\n  }\n}'
+                  placeholder='{\n  "schemaVersion": 2,\n  "programTitle": "First Year BTech",\n  "subjects": [\n    {\n      "name": "Linear Algebra",\n      "chapters": [\n        { "name": "Matrices", "topics": [{ "name": "Rank" }] }\n      ]\n    },\n    {\n      "name": "Introduction to C",\n      "chapters": [\n        { "name": "Control Flow", "topics": [{ "name": "Loops" }] }\n      ]\n    }\n  ]\n}'
                   className="w-full px-3.5 py-2.5 rounded-xl border border-ivory-300 dark:border-espresso-700 bg-ivory-50 dark:bg-espresso-850 font-mono text-xs text-espresso-950 dark:text-ivory-50 placeholder:text-espresso-400 dark:placeholder:text-espresso-600 focus:outline-none focus:ring-2 focus:ring-terracotta-400 resize-y"
                 />
               </div>
@@ -418,53 +452,30 @@ export const GptSyllabusImportModal: React.FC<GptSyllabusImportModalProps> = ({
                         Step 4
                       </span>
                       <h4 className="text-xs font-semibold text-espresso-900 dark:text-ivory-100 uppercase tracking-wider font-mono">
-                        Preview: "{parsedPayload.subject.name}" ({parsedPayload.subject.chapters.length} Chapters)
+                        Structure check: {importSubjects.length} course{importSubjects.length === 1 ? '' : 's'}, {importSubjects.reduce((sum, subject) => sum + subject.chapters.length, 0)} chapters
                       </h4>
                     </div>
                   </div>
-
+                  {parsedPayload.programTitle && <p className="text-[11px] text-espresso-500 dark:text-espresso-400">Program: {parsedPayload.programTitle}</p>}
                   <div className="max-h-56 overflow-y-auto border border-ivory-200 dark:border-espresso-750 rounded-xl divide-y divide-ivory-100 dark:divide-espresso-800 bg-white dark:bg-espresso-850 p-2 space-y-2">
-                    {parsedPayload.subject.chapters.map((chap, cIdx) => (
-                      <div key={cIdx} className="p-2 space-y-1">
-                        <div className="flex items-center justify-between">
-                          <span className="font-serif font-bold text-xs text-espresso-950 dark:text-ivory-50">
-                            {chap.name}
-                          </span>
-                          <div className="flex items-center gap-2">
-                            {chap.estimatedLectures !== undefined && (
-                              <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-ivory-200 dark:bg-espresso-750 text-espresso-600 dark:text-ivory-300">
-                                ~{chap.estimatedLectures} lecs (est.)
-                              </span>
-                            )}
-                            {chap.importance && (
-                              <span
-                                className={`text-[10px] font-mono px-1.5 py-0.2 rounded font-bold ${
-                                  chap.importance === 'High'
-                                    ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300'
-                                    : chap.importance === 'Medium'
-                                    ? 'bg-ochre-100 text-ochre-700 dark:bg-ochre-950/40 dark:text-ochre-300'
-                                    : 'bg-sage-100 text-sage-700 dark:bg-sage-950/40 dark:text-sage-300'
-                                }`}
-                              >
-                                {chap.importance}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="pl-3 border-l-2 border-ivory-300 dark:border-espresso-700 space-y-1">
-                          {chap.topics.map((top, tIdx) => (
-                            <div key={tIdx} className="text-[11px] flex items-center justify-between text-espresso-700 dark:text-ivory-200">
-                              <span>• {top.name}</span>
-                              {top.subtopics?.length ? (
-                                <span className="text-[10px] text-espresso-400 italic">
-                                  ({top.subtopics.length} subtopics)
-                                </span>
-                              ) : null}
+                    {importSubjects.map((subject, sIdx) => (
+                      <section key={`${subject.name}-${sIdx}`} className="p-2 space-y-1.5">
+                        <h5 className="text-xs font-bold text-terracotta-700 dark:text-terracotta-300">Course: {subject.name}</h5>
+                        {subject.chapters.map((chap, cIdx) => (
+                          <div key={`${chap.name}-${cIdx}`} className="pl-2 border-l-2 border-ivory-300 dark:border-espresso-700 py-1">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-serif font-bold text-xs text-espresso-950 dark:text-ivory-50">Chapter: {chap.name}</span>
+                              <div className="flex items-center gap-2 shrink-0">
+                                {chap.estimatedLectures !== undefined && <span className="text-[10px] font-mono text-espresso-500">~{chap.estimatedLectures} lecs</span>}
+                                {chap.importance && <span className="text-[10px] font-mono text-espresso-500">{chap.importance}</span>}
+                              </div>
                             </div>
-                          ))}
-                        </div>
-                      </div>
+                            <ul className="pl-3 mt-1 space-y-0.5">
+                              {chap.topics.map((top, tIdx) => <li key={`${top.name}-${tIdx}`} className="text-[11px] text-espresso-700 dark:text-ivory-200">Topic: {top.name}</li>)}
+                            </ul>
+                          </div>
+                        ))}
+                      </section>
                     ))}
                   </div>
                 </div>
@@ -475,7 +486,7 @@ export const GptSyllabusImportModal: React.FC<GptSyllabusImportModalProps> = ({
 
         {/* Modal Footer */}
         {!importResult && (
-          <div className="p-4 border-t border-ivory-300 dark:border-espresso-800 bg-ivory-50/70 dark:bg-espresso-850 flex items-center justify-between gap-3">
+          <div className="p-4 border-t border-ivory-300 dark:border-espresso-800 bg-ivory-50/70 dark:bg-espresso-850 flex items-center justify-between gap-3 shrink-0">
             <button
               onClick={onClose}
               className="px-4 py-2 text-xs font-semibold rounded-xl border border-ivory-300 dark:border-espresso-700 text-espresso-600 dark:text-espresso-300 hover:bg-ivory-100"
@@ -504,7 +515,9 @@ export const GptSyllabusImportModal: React.FC<GptSyllabusImportModalProps> = ({
             </div>
           </div>
         )}
-      </div>
-    </div>
-  );
+      </>
+    )}
+  </div>
+</div>
+  ), document.body);
 };

@@ -9,18 +9,19 @@ interface FocusMetricsSummaryProps {
 
 export const FocusMetricsSummary: React.FC<FocusMetricsSummaryProps> = ({ summary, streaks }) => {
   const formatHoursMinutes = (mins: number): string => {
-    if (mins === 0) return '0m';
-    const h = Math.floor(mins / 60);
-    const m = mins % 60;
+    const roundedMinutes = Number(mins.toFixed(2));
+    if (roundedMinutes === 0) return '0m';
+    const h = Math.floor(roundedMinutes / 60);
+    const m = Number((roundedMinutes % 60).toFixed(2));
     if (h === 0) return `${m}m`;
     if (m === 0) return `${h}h`;
     return `${h}h ${m}m`;
   };
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5 sm:gap-4">
+    <div className="focus-stats-grid grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5 sm:gap-4">
       {/* 1. Today's Focus */}
-      <div className="p-4 rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 shadow-subtle">
+      <div className="focus-stat-card p-4 rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 shadow-subtle">
         <div className="flex items-center justify-between text-espresso-500 dark:text-espresso-400 mb-1.5">
           <span className="text-[11px] font-semibold uppercase font-mono tracking-wider">Today</span>
           <Clock className="w-4 h-4" style={{ color: 'var(--accent)' }} />
@@ -34,7 +35,7 @@ export const FocusMetricsSummary: React.FC<FocusMetricsSummaryProps> = ({ summar
       </div>
 
       {/* 2. Last 7 Days Total */}
-      <div className="p-4 rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 shadow-subtle">
+      <div className="focus-stat-card p-4 rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 shadow-subtle">
         <div className="flex items-center justify-between text-espresso-500 dark:text-espresso-400 mb-1.5">
           <span className="text-[11px] font-semibold uppercase font-mono tracking-wider">7-Day Total</span>
           <TrendingUp className="w-4 h-4 text-sage-600 dark:text-sage-400" />
@@ -48,7 +49,7 @@ export const FocusMetricsSummary: React.FC<FocusMetricsSummaryProps> = ({ summar
       </div>
 
       {/* 3. Current Study Streak */}
-      <div className="p-4 rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 shadow-subtle">
+      <div className="focus-stat-card p-4 rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 shadow-subtle">
         <div className="flex items-center justify-between text-espresso-500 dark:text-espresso-400 mb-1.5">
           <span className="text-[11px] font-semibold uppercase font-mono tracking-wider">Current Streak</span>
           <Flame
@@ -68,7 +69,7 @@ export const FocusMetricsSummary: React.FC<FocusMetricsSummaryProps> = ({ summar
       </div>
 
       {/* 4. Longest Streak */}
-      <div className="p-4 rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 shadow-subtle">
+      <div className="focus-stat-card p-4 rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 shadow-subtle">
         <div className="flex items-center justify-between text-espresso-500 dark:text-espresso-400 mb-1.5">
           <span className="text-[11px] font-semibold uppercase font-mono tracking-wider">Longest Streak</span>
           <Award className="w-4 h-4 text-ochre-600 dark:text-ochre-400" />
@@ -82,13 +83,13 @@ export const FocusMetricsSummary: React.FC<FocusMetricsSummaryProps> = ({ summar
       </div>
 
       {/* 5. 7-Day Rolling Daily Average */}
-      <div className="p-4 rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 shadow-subtle">
+      <div className="focus-stat-card p-4 rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 shadow-subtle">
         <div className="flex items-center justify-between text-espresso-500 dark:text-espresso-400 mb-1.5">
           <span className="text-[11px] font-semibold uppercase font-mono tracking-wider">Daily Avg</span>
           <BarChart2 className="w-4 h-4 text-dusty-blue-600 dark:text-dusty-blue-400" />
         </div>
         <p className="font-serif tabular-nums text-2xl sm:text-3xl font-bold text-espresso-950 dark:text-ivory-50">
-          {summary.dailyRollingAverage7d}m
+          {Number(summary.dailyRollingAverage7d.toFixed(2))}m
         </p>
         <p className="text-[11px] text-espresso-400 dark:text-espresso-500 mt-1 font-medium">
           Per day (7-day window)
@@ -96,7 +97,7 @@ export const FocusMetricsSummary: React.FC<FocusMetricsSummaryProps> = ({ summar
       </div>
 
       {/* 6. All-Time Completed Blocks & Avg Duration */}
-      <div className="p-4 rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 shadow-subtle">
+      <div className="focus-stat-card p-4 rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 shadow-subtle">
         <div className="flex items-center justify-between text-espresso-500 dark:text-espresso-400 mb-1.5">
           <span className="text-[11px] font-semibold uppercase font-mono tracking-wider">Sessions</span>
           <CheckCircle2 className="w-4 h-4 text-sage-600 dark:text-sage-400" />
@@ -105,7 +106,7 @@ export const FocusMetricsSummary: React.FC<FocusMetricsSummaryProps> = ({ summar
           {summary.totalCompletedSessions}
         </p>
         <p className="text-[11px] text-espresso-400 dark:text-espresso-500 mt-1 font-medium">
-          Avg: {summary.averageSessionMinutes}m (Max {summary.longestSessionMinutes}m)
+          Avg: {Number(summary.averageSessionMinutes.toFixed(2))}m (Max {Number(summary.longestSessionMinutes.toFixed(2))}m)
         </p>
       </div>
     </div>

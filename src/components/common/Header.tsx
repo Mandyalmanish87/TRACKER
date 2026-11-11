@@ -1,8 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { ThemeToggle } from './ThemeToggle';
 import { Button } from './Button';
 import { ConfirmModal } from './ConfirmModal';
+import { CommandPalette } from './CommandPalette';
+import { NavTab } from './Navigation';
+import { usePlatform } from '../../hooks/usePlatform';
 import {
   Trash2,
   Download,
@@ -11,10 +14,36 @@ import {
   Calendar,
   RefreshCw,
   LogOut,
+  Search,
+  Sparkles,
 } from 'lucide-react';
 import { exportCombinedICS, downloadICS } from '../../utils/icsExporter';
 
-export const Header: React.FC = () => {
+interface HeaderProps {
+  currentTab?: NavTab;
+  onSelectTab?: (tab: NavTab) => void;
+}
+
+const MODULE_TITLES: Record<NavTab, string> = {
+  dashboard: 'Dashboard',
+  dayos: 'Day Planner',
+  timetable: 'Timetable',
+  gym: 'Workouts',
+  nutrition: 'Nutrition',
+  bloom: 'Wellness',
+  focus: 'Deep Focus',
+  attendance: 'Attendance',
+  syllabus: 'Syllabus',
+  planner: 'Planner',
+  tests: 'Tests & Errors',
+  reminders: 'Events & Tasks',
+  eduhub: 'Lectures',
+  classspace: 'Classroom',
+  settings: 'Settings',
+  admin: 'Admin Portal',
+};
+
+export const Header: React.FC<HeaderProps> = ({ currentTab = 'dashboard', onSelectTab }) => {
   const {
     state,
     clearSampleData,
@@ -27,11 +56,25 @@ export const Header: React.FC = () => {
     signOut,
     syncNow,
   } = useApp();
+  const { modKey } = usePlatform();
   const [copiedBackup, setCopiedBackup] = useState(false);
   const [showDataMenu, setShowDataMenu] = useState(false);
   const [showAccountMenu, setShowAccountMenu] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [authErrorMessage, setAuthErrorMessage] = useState<string | null>(null);
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+
+  // Global Cmd+K / Ctrl+K listener
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setIsCommandPaletteOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const formattedLastSynced = lastSyncedAt
     ? lastSyncedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -85,26 +128,50 @@ export const Header: React.FC = () => {
   };
 
   return (
-    <header className="border-b border-ivory-300 dark:border-espresso-800 bg-white/70 dark:bg-espresso-900/70 backdrop-blur-md sticky top-0 z-30 transition-colors">
-      <div className="w-full max-w-[1680px] 2xl:max-w-[1840px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 py-3.5 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        {/* Brand & Editorial Date */}
-        <div className="flex items-center gap-4">
-          <div className="flex items-baseline gap-1.5">
-            <span className="font-serif text-2xl font-bold tracking-tight text-espresso-950 dark:text-ivory-50">
-              TRACKER
-            </span>
-            <span className="w-2 h-2 rounded-full inline-block mb-1" style={{ backgroundColor: 'var(--accent)' }} />
+    <header className="tracker-glass-header border-b border-ivory-300/80 dark:border-white/10 bg-white/75 dark:bg-[#0E0C12]/80 backdrop-blur-xl sticky top-0 z-30 transition-colors shadow-xs">
+      <div className="w-full max-w-[1680px] 2xl:max-w-[1840px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 py-3 flex flex-col md:flex-row md:items-center justify-between gap-3">
+        {/* Brand, Spatial OS Label, & Editorial Date */}
+        <div className="flex items-center gap-3.5">
+          <div
+            className="flex items-center gap-2.5 group cursor-pointer"
+            onClick={() => onSelectTab?.('dashboard')}
+            title="Go to Command Center"
+          >
+            <div
+              className="w-8 h-8 rounded-xl flex items-center justify-center font-serif font-bold text-sm text-white shadow-xs transition-transform group-hover:scale-105"
+              style={{ backgroundColor: 'var(--accent)' }}
+            >
+              T
+            </div>
+            <div className="flex flex-col">
+              <div className="flex items-baseline gap-1.5 leading-none">
+                <span className="font-serif text-lg font-bold tracking-tight text-espresso-950 dark:text-ivory-50">
+                  TRAKIFY
+                </span>
+                <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ backgroundColor: 'var(--accent)' }} />
+              </div>
+              <span className="text-[9.5px] font-mono uppercase tracking-widest text-espresso-400 dark:text-espresso-500 font-semibold mt-0.5">
+                Spatial OS
+              </span>
+              <span className="sr-only">Personal Daily Operating System</span>
+            </div>
           </div>
 
-          <div className="h-4 w-px bg-ivory-300 dark:bg-espresso-700 hidden sm:block" />
+          <div className="h-4 w-px bg-ivory-300 dark:bg-espresso-750 hidden sm:block" />
 
           <p className="text-xs font-serif italic text-espresso-500 dark:text-espresso-400 hidden sm:block">
             {dateStr}
           </p>
 
+          {/* Module Breadcrumb Pill */}
+          <span className="hidden lg:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-ivory-100/80 dark:bg-white/[0.04] border border-ivory-200/80 dark:border-white/10 text-xs font-mono font-medium text-espresso-500 dark:text-espresso-400">
+            <span className="opacity-50">/</span>
+            <span className="text-espresso-800 dark:text-ivory-200 font-semibold">{MODULE_TITLES[currentTab] || currentTab}</span>
+          </span>
+
           {/* Profile name badge */}
           {state.profile?.displayName?.trim() && (
-            <span className="hidden md:inline-flex items-center gap-2 text-xs font-medium text-espresso-600 dark:text-espresso-300 bg-ivory-200 dark:bg-espresso-800 rounded-lg px-2.5 py-1">
+            <span className="hidden md:inline-flex items-center gap-2 text-xs font-medium text-espresso-600 dark:text-espresso-300 bg-ivory-200/80 dark:bg-white/[0.05] border border-ivory-300/60 dark:border-white/10 rounded-xl px-2.5 py-1">
               {state.profile?.avatarUrl ? (
                 <img
                   src={state.profile.avatarUrl}
@@ -119,8 +186,34 @@ export const Header: React.FC = () => {
           )}
         </div>
 
+        {/* Spotlight Command Search Trigger (Center) */}
+        <div className="flex-1 max-w-md mx-2 hidden sm:block">
+          <button
+            type="button"
+            onClick={() => setIsCommandPaletteOpen(true)}
+            className="w-full flex items-center justify-between px-3.5 py-1.5 rounded-xl border border-ivory-300/80 dark:border-white/10 bg-ivory-50/70 dark:bg-white/[0.03] hover:bg-white dark:hover:bg-white/[0.07] text-espresso-400 dark:text-espresso-400 hover:text-espresso-800 dark:hover:text-ivory-100 transition shadow-xs text-xs cursor-pointer group"
+          >
+            <div className="flex items-center gap-2">
+              <Search className="w-3.5 h-3.5 text-espresso-400 group-hover:text-terracotta-500 transition-colors shrink-0" />
+              <span className="font-sans text-xs">Search or jump to module...</span>
+            </div>
+            <kbd className="px-1.5 py-0.5 text-[10px] font-mono rounded bg-ivory-200 dark:bg-white/10 border border-ivory-300 dark:border-white/10 text-espresso-600 dark:text-espresso-300 font-semibold">
+              {modKey}K
+            </kbd>
+          </button>
+        </div>
+
         {/* Controls: Data separation banner, export/import, theme toggle */}
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          {/* Mobile search button */}
+          <button
+            type="button"
+            onClick={() => setIsCommandPaletteOpen(true)}
+            className="sm:hidden p-2 rounded-xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 text-espresso-600 dark:text-ivory-300 hover:bg-ivory-100 dark:hover:bg-espresso-800 transition"
+            title={`Search commands (${modKey}K)`}
+          >
+            <Search className="w-4 h-4" />
+          </button>
           {/* Sample Data Purge Banner / Live Mode Indicator */}
           {state.hasSampleData ? (
             <div className="flex items-center gap-2 bg-terracotta-50 dark:bg-terracotta-900/30 border border-terracotta-200 dark:border-terracotta-800/60 rounded-xl px-2.5 py-1 text-xs">
@@ -194,12 +287,25 @@ export const Header: React.FC = () => {
               {/* Dedicated Honest Sync Status Pill */}
               <button
                 type="button"
-                onClick={syncStatus === 'offline' || syncStatus === 'error' ? syncNow : undefined}
+                onClick={
+                  syncStatus === 'pass_required'
+                    ? () => {
+                        if (onSelectTab) onSelectTab('settings');
+                        else if (typeof window !== 'undefined') {
+                          window.dispatchEvent(new CustomEvent('tracker:navigate-tab', { detail: { tab: 'settings' } }));
+                        }
+                      }
+                    : syncStatus === 'offline' || syncStatus === 'error'
+                    ? syncNow
+                    : undefined
+                }
                 className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition ${
                   syncStatus === 'synced'
                     ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/50 cursor-default'
                     : syncStatus === 'syncing'
                     ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800/50 cursor-default'
+                    : syncStatus === 'pass_required'
+                    ? 'bg-ochre-50 dark:bg-ochre-950/40 text-ochre-800 dark:text-ochre-300 border-ochre-200 dark:border-ochre-800/60 hover:bg-ochre-100 cursor-pointer'
                     : syncStatus === 'offline'
                     ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800/50 hover:bg-amber-100 cursor-pointer'
                     : syncStatus === 'error'
@@ -211,6 +317,8 @@ export const Header: React.FC = () => {
                     ? `Synced with cloud${formattedLastSynced ? ` at ${formattedLastSynced}` : ''}`
                     : syncStatus === 'syncing'
                     ? 'Synchronizing changes with cloud...'
+                    : syncStatus === 'pass_required'
+                    ? 'Multi-Device Cloud Sync requires an active TRAKIFY Pass. Your data is stored safely on this device. Click to view passes.'
                     : syncStatus === 'offline'
                     ? 'Offline: changes saved locally on this device. Click to retry sync.'
                     : syncStatus === 'error'
@@ -224,6 +332,8 @@ export const Header: React.FC = () => {
                       ? 'bg-emerald-500'
                       : syncStatus === 'syncing'
                       ? 'bg-amber-500 animate-ping'
+                      : syncStatus === 'pass_required'
+                      ? 'bg-ochre-500'
                       : syncStatus === 'offline'
                       ? 'bg-amber-500'
                       : syncStatus === 'error'
@@ -236,6 +346,8 @@ export const Header: React.FC = () => {
                     ? 'Synced'
                     : syncStatus === 'syncing'
                     ? 'Syncing...'
+                    : syncStatus === 'pass_required'
+                    ? 'Local (Pro Sync)'
                     : syncStatus === 'offline'
                     ? 'Offline (Saved locally)'
                     : syncStatus === 'error'
@@ -247,6 +359,8 @@ export const Header: React.FC = () => {
                     ? 'Synced'
                     : syncStatus === 'syncing'
                     ? 'Syncing'
+                    : syncStatus === 'pass_required'
+                    ? 'Pro Sync'
                     : syncStatus === 'offline'
                     ? 'Offline'
                     : syncStatus === 'error'
@@ -291,6 +405,8 @@ export const Header: React.FC = () => {
                               ? 'bg-emerald-500'
                               : syncStatus === 'syncing'
                               ? 'bg-amber-500 animate-ping'
+                              : syncStatus === 'pass_required'
+                              ? 'bg-ochre-500'
                               : syncStatus === 'offline'
                               ? 'bg-amber-500'
                               : 'bg-rose-500'
@@ -301,6 +417,8 @@ export const Header: React.FC = () => {
                             ? `Synced ${formattedLastSynced ? `(${formattedLastSynced})` : ''}`
                             : syncStatus === 'syncing'
                             ? 'Syncing in progress...'
+                            : syncStatus === 'pass_required'
+                            ? 'Local mode: Pass required for sync'
                             : syncStatus === 'offline'
                             ? 'Offline: saved locally'
                             : 'Sync error: click retry'}
@@ -308,13 +426,28 @@ export const Header: React.FC = () => {
                       </div>
                     </div>
 
-                    <button
-                      onClick={syncNow}
-                      className="w-full text-left px-3.5 py-2 flex items-center gap-2 text-espresso-700 dark:text-ivory-200 hover:bg-ivory-100 dark:hover:bg-espresso-800 cursor-pointer"
-                    >
-                      <RefreshCw className={`w-3.5 h-3.5 text-terracotta-500 ${syncStatus === 'syncing' ? 'animate-spin' : ''}`} />
-                      <span>{syncStatus === 'syncing' ? 'Syncing...' : 'Sync Cloud Now'}</span>
-                    </button>
+                    {syncStatus === 'pass_required' ? (
+                      <button
+                        onClick={() => {
+                          if (onSelectTab) onSelectTab('settings');
+                          else if (typeof window !== 'undefined') {
+                            window.dispatchEvent(new CustomEvent('tracker:navigate-tab', { detail: { tab: 'settings' } }));
+                          }
+                        }}
+                        className="w-full text-left px-3.5 py-2 flex items-center gap-2 text-terracotta-700 dark:text-terracotta-300 hover:bg-terracotta-50 dark:hover:bg-terracotta-950/30 cursor-pointer font-semibold"
+                      >
+                        <Sparkles className="w-3.5 h-3.5 text-terracotta-500" />
+                        <span>Upgrade for Cloud Sync (₹20)</span>
+                      </button>
+                    ) : (
+                      <button
+                        onClick={syncNow}
+                        className="w-full text-left px-3.5 py-2 flex items-center gap-2 text-espresso-700 dark:text-ivory-200 hover:bg-ivory-100 dark:hover:bg-espresso-800 cursor-pointer"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 text-terracotta-500 ${syncStatus === 'syncing' ? 'animate-spin' : ''}`} />
+                        <span>{syncStatus === 'syncing' ? 'Syncing...' : 'Sync Cloud Now'}</span>
+                      </button>
+                    )}
 
                     <button
                       onClick={signOut}
@@ -384,6 +517,13 @@ export const Header: React.FC = () => {
         variant="warning"
         onConfirm={() => setAuthErrorMessage(null)}
         onCancel={() => setAuthErrorMessage(null)}
+      />
+
+      {/* Spotlight Command Palette (Cmd+K) */}
+      <CommandPalette
+        isOpen={isCommandPaletteOpen}
+        onClose={() => setIsCommandPaletteOpen(false)}
+        onSelectTab={onSelectTab || (() => {})}
       />
     </header>
   );

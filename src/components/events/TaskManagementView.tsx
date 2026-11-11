@@ -329,7 +329,7 @@ export const TaskManagementView: React.FC = () => {
           ) : (
             filteredEvents.map((evt) => {
               const conf = getEventCategoryConfig(evt.category);
-              const isOverdue = evt.date < todayStr && !evt.isCompleted;
+              const isOverdue = (evt.endDate || evt.date) < todayStr && !evt.isCompleted;
 
               return (
                 <div
@@ -379,7 +379,7 @@ export const TaskManagementView: React.FC = () => {
                       <div className="flex items-center gap-3 mt-1 text-xs text-espresso-500 dark:text-espresso-400 font-mono">
                         <span className="flex items-center gap-1">
                           <CalendarIcon className="w-3.5 h-3.5 text-espresso-400" />
-                          {evt.date}
+                          {evt.endDate ? `${evt.date} – ${evt.endDate}` : evt.date}
                         </span>
                         {evt.startTime && (
                           <span className="flex items-center gap-1">
@@ -503,7 +503,7 @@ const BoardColumn: React.FC<BoardColumnProps> = ({
         ) : (
           tasks.map((evt) => {
             const conf = getEventCategoryConfig(evt.category);
-            const isOverdue = evt.date < todayStr && !evt.isCompleted;
+            const isOverdue = (evt.endDate || evt.date) < todayStr && !evt.isCompleted;
 
             return (
               <div
@@ -572,7 +572,7 @@ const BoardColumn: React.FC<BoardColumnProps> = ({
                 <div className="flex items-center justify-between gap-2 mt-3 pt-2 border-t border-ivory-100 dark:border-espresso-800 text-[10px] font-mono pl-6">
                   <span className="flex items-center gap-1 text-espresso-500 dark:text-espresso-400">
                     <CalendarIcon className="w-3 h-3 text-espresso-400" />
-                    {evt.date}
+                    {evt.endDate ? `${evt.date} – ${evt.endDate}` : evt.date}
                   </span>
 
                   <div className="flex items-center gap-1.5">

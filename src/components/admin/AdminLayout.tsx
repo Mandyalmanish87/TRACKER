@@ -1,13 +1,33 @@
 import React, { useState } from 'react';
-import { LayoutDashboard, Users, Building, ShieldAlert, LogOut, Shield } from 'lucide-react';
-import { PlatformAdminRole } from '../../types/admin';
-import { AdminOverviewView } from './AdminOverviewView';
-import { AdminUsersView } from './AdminUsersView';
-import { AdminWorkspacesView } from './AdminWorkspacesView';
-import { AdminAuditLogsView } from './AdminAuditLogsView';
-import { Button } from '../common/Button';
+import { PlatformAdminRole, AdminNavTab, AdminTimeframe } from '../../types/admin';
+import { AdminSidebar } from './AdminSidebar';
+import { AdminHeader } from './AdminHeader';
 
-export type AdminTab = 'overview' | 'users' | 'workspaces' | 'audit';
+// Subviews
+import { AdminDashboardView } from './views/AdminDashboardView';
+import { AdminUsersView } from './AdminUsersView';
+import { AdminPaymentsView } from './views/AdminPaymentsView';
+import { AdminAnalyticsView } from './views/AdminAnalyticsView';
+import { AdminLicensesView } from './views/AdminLicensesView';
+import { AdminWorkspacesView } from './AdminWorkspacesView';
+import { AdminWebsiteEditorView } from './views/AdminWebsiteEditorView';
+import { AdminNutritionManagerView } from './views/AdminNutritionManagerView';
+import { AdminActivityLogsView } from './views/AdminActivityLogsView';
+import { AdminDataManagementView } from './views/AdminDataManagementView';
+import { AdminSecurityView } from './views/AdminSecurityView';
+import { AdminConfigurationView } from './views/AdminConfigurationView';
+import { AdminProfileView } from './views/AdminProfileView';
+
+// Legacy Views preserved for seamless routing fallback
+import { AdminAcademicView } from './views/AdminAcademicView';
+import { AdminTimetableView } from './views/AdminTimetableView';
+import { AdminAttendanceView } from './views/AdminAttendanceView';
+import { AdminSyllabusView } from './views/AdminSyllabusView';
+import { AdminEventsTasksView } from './views/AdminEventsTasksView';
+import { AdminFitnessView } from './views/AdminFitnessView';
+import { AdminNutritionView } from './views/AdminNutritionView';
+
+export type AdminTab = AdminNavTab;
 
 interface AdminLayoutProps {
   adminRole: PlatformAdminRole;
@@ -16,90 +36,95 @@ interface AdminLayoutProps {
 }
 
 export const AdminLayout: React.FC<AdminLayoutProps> = ({ adminRole, userId, onExit }) => {
-  const [currentTab, setCurrentTab] = useState<AdminTab>('overview');
-
-  const tabs: { id: AdminTab; label: string; icon: React.ReactNode }[] = [
-    { id: 'overview', label: 'System Overview', icon: <LayoutDashboard className="w-4 h-4" /> },
-    { id: 'users', label: 'User Directory', icon: <Users className="w-4 h-4" /> },
-    { id: 'workspaces', label: 'Workspaces', icon: <Building className="w-4 h-4" /> },
-    { id: 'audit', label: 'Audit Trail', icon: <ShieldAlert className="w-4 h-4" /> },
-  ];
-
-  const getRoleBadge = (role: PlatformAdminRole) => {
-    switch (role) {
-      case 'owner':
-        return 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-800';
-      case 'super_admin':
-        return 'bg-indigo-100 dark:bg-indigo-950/60 text-indigo-800 dark:text-indigo-300 border-indigo-300 dark:border-indigo-800';
-      case 'support':
-      default:
-        return 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800';
-    }
-  };
+  const [currentTab, setCurrentTab] = useState<AdminNavTab>('overview');
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [timeframe, setTimeframe] = useState<AdminTimeframe>('30d');
+  const [searchQuery, setSearchQuery] = useState('');
 
   return (
-    <div className="w-full space-y-6">
-      {/* Editorial Administrative Header Bar */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-5 bg-espresso-900 text-ivory-100 rounded-2xl shadow-md border border-espresso-800">
-        <div className="flex items-center gap-3.5">
-          <div className="p-2.5 rounded-xl bg-terracotta-500/20 text-terracotta-400 border border-terracotta-500/30">
-            <Shield className="w-6 h-6" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="font-serif text-xl font-bold tracking-tight">
-                Tracker Administrative Portal
-              </h1>
-              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${getRoleBadge(adminRole)}`}>
-                {adminRole.replace('_', ' ')}
-              </span>
-            </div>
-            <p className="text-xs text-espresso-300 mt-0.5">
-              Server-authoritative operational oversight · Authenticated Admin: <span className="font-mono text-terracotta-300 text-[11px]">{userId || 'Verified'}</span>
-            </p>
-          </div>
-        </div>
+    <div className="min-h-screen flex bg-[#070B14] text-ivory-100 relative overflow-hidden font-sans selection:bg-blue-600 selection:text-white">
+      {/* Cirrel-inspired decorative spatial lighting orbs */}
+      <div
+        className="fixed -top-40 -left-40 w-96 h-96 rounded-full bg-blue-600/10 blur-[120px] pointer-events-none"
+        aria-hidden="true"
+      />
+      <div
+        className="fixed top-1/3 -right-40 w-96 h-96 rounded-full bg-cyan-500/10 blur-[130px] pointer-events-none"
+        aria-hidden="true"
+      />
+      <div
+        className="fixed -bottom-40 left-1/3 w-96 h-96 rounded-full bg-amber-500/5 blur-[140px] pointer-events-none"
+        aria-hidden="true"
+      />
 
-        <div className="flex items-center gap-3">
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={onExit}
-            className="gap-2 !bg-espresso-800 !text-ivory-200 !border-espresso-700 hover:!bg-espresso-700"
-          >
-            <LogOut className="w-3.5 h-3.5" />
-            Exit to Student View
-          </Button>
-        </div>
+      {/* Accessible product title for the administrative portal. */}
+      <div className="sr-only" aria-hidden="false">
+        <h1>TRAKIFY Administrative Portal</h1>
       </div>
 
-      {/* Admin Tab Navigation */}
-      <div className="flex items-center gap-2 border-b border-ivory-300 dark:border-espresso-800 pb-px overflow-x-auto">
-        {tabs.map((tab) => {
-          const isActive = currentTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setCurrentTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-t-xl transition-all whitespace-nowrap border-b-2 -mb-px ${
-                isActive
-                  ? 'border-terracotta-500 text-terracotta-600 dark:text-terracotta-400 bg-white dark:bg-espresso-900 shadow-sm'
-                  : 'border-transparent text-espresso-500 dark:text-espresso-400 hover:text-espresso-800 dark:hover:text-ivory-200 hover:bg-ivory-100/50 dark:hover:bg-espresso-850'
-              }`}
-            >
-              {tab.icon}
-              {tab.label}
-            </button>
-          );
-        })}
-      </div>
+      {/* Left Persistent Navigation Sidebar */}
+      <AdminSidebar
+        currentTab={currentTab}
+        onSelectTab={setCurrentTab}
+        adminRole={adminRole}
+        isCollapsed={isSidebarCollapsed}
+        onToggleCollapse={() => setIsSidebarCollapsed((prev) => !prev)}
+        isMobileOpen={isMobileMenuOpen}
+        onCloseMobile={() => setIsMobileMenuOpen(false)}
+        onExit={onExit}
+      />
 
-      {/* Subview Rendering */}
-      <div className="pt-2">
-        {currentTab === 'overview' && <AdminOverviewView />}
-        {currentTab === 'users' && <AdminUsersView />}
-        {currentTab === 'workspaces' && <AdminWorkspacesView adminRole={adminRole} />}
-        {currentTab === 'audit' && <AdminAuditLogsView />}
+      {/* Main Content Shell */}
+      <div className="flex-1 flex flex-col min-w-0 min-h-screen relative z-10">
+        {/* Cirrel Top Header Bar */}
+        <AdminHeader
+          currentTab={currentTab}
+          adminRole={adminRole}
+          userId={userId}
+          timeframe={timeframe}
+          onSelectTimeframe={setTimeframe}
+          onOpenMobileMenu={() => setIsMobileMenuOpen(true)}
+          onExit={onExit}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+        />
+
+        {/* Dynamic Page Content */}
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-[1680px] w-full mx-auto space-y-6">
+          {currentTab === 'overview' && (
+            <AdminDashboardView
+              adminRole={adminRole}
+              userId={userId}
+              timeframe={timeframe}
+              onSelectTab={setCurrentTab}
+            />
+          )}
+          {currentTab === 'payments' && <AdminPaymentsView />}
+          {currentTab === 'analytics' && <AdminAnalyticsView timeframe={timeframe} />}
+          {currentTab === 'licenses' && <AdminLicensesView />}
+          {currentTab === 'users' && <AdminUsersView />}
+          {currentTab === 'workspaces' && <AdminWorkspacesView adminRole={adminRole} />}
+          {currentTab === 'website_editor' && <AdminWebsiteEditorView />}
+          {currentTab === 'nutrition_recalibrator' && <AdminNutritionManagerView />}
+          {currentTab === 'audit' && <AdminActivityLogsView />}
+          {currentTab === 'data_management' && <AdminDataManagementView />}
+          {currentTab === 'configuration' && <AdminConfigurationView />}
+          {currentTab === 'security' && <AdminSecurityView adminRole={adminRole} />}
+          {currentTab === 'profile' && (
+            <AdminProfileView adminRole={adminRole} userId={userId} onExit={onExit} />
+          )}
+          {currentTab === 'admin_settings' && <AdminConfigurationView />}
+
+          {/* Legacy Tab Fallbacks */}
+          {currentTab === 'academics' && <AdminAcademicView />}
+          {currentTab === 'timetable' && <AdminTimetableView />}
+          {currentTab === 'attendance' && <AdminAttendanceView />}
+          {currentTab === 'syllabus' && <AdminSyllabusView />}
+          {currentTab === 'events_tasks' && <AdminEventsTasksView />}
+          {currentTab === 'fitness' && <AdminFitnessView />}
+          {currentTab === 'nutrition' && <AdminNutritionView />}
+        </main>
       </div>
     </div>
   );

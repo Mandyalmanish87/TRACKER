@@ -44,6 +44,7 @@ export interface ProductivityInsights {
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const DAY_SHORTS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const roundFocusMinutes = (minutes: number): number => Number(minutes.toFixed(2));
 
 /**
  * Format Date to local YYYY-MM-DD
@@ -128,7 +129,7 @@ export function calculateSevenDayFocus(
     const dateStr = formatLocalDateStr(d);
     const daySessions = sessionsByDate.get(dateStr) || [];
 
-    const minutes = daySessions.reduce((acc, s) => acc + s.durationMinutes, 0);
+    const minutes = roundFocusMinutes(daySessions.reduce((acc, s) => acc + s.durationMinutes, 0));
     const sessionCount = daySessions.length;
     const completedCount = daySessions.filter((s) => s.status === 'completed' || !s.status).length;
 
@@ -178,7 +179,7 @@ export function calculateYearlyFocus(
     d.setHours(0, 0, 0, 0);
     const dateStr = formatLocalDateStr(d);
     const daySessions = sessionsByDate.get(dateStr) || [];
-    const minutes = daySessions.reduce((acc, s) => acc + s.durationMinutes, 0);
+    const minutes = roundFocusMinutes(daySessions.reduce((acc, s) => acc + s.durationMinutes, 0));
     const sessionCount = daySessions.length;
     const completedCount = daySessions.filter((s) => s.status === 'completed' || !s.status).length;
     result.push({
@@ -210,7 +211,7 @@ export function calculateFocusSummaries(
   const todayMetric = sevenDays.find((d) => d.dateStr === todayStr);
   const todayMinutes = todayMetric ? todayMetric.minutes : 0;
 
-  const last7DaysMinutes = sevenDays.reduce((acc, d) => acc + d.minutes, 0);
+  const last7DaysMinutes = roundFocusMinutes(sevenDays.reduce((acc, d) => acc + d.minutes, 0));
   const completedSessions7d = sevenDays.reduce((acc, d) => acc + d.completedCount, 0);
 
   // All-time completed sessions
@@ -219,12 +220,12 @@ export function calculateFocusSummaries(
   );
   const totalCompletedSessions = allCompleted.length;
 
-  const longestSessionMinutes = allCompleted.reduce(
+  const longestSessionMinutes = roundFocusMinutes(allCompleted.reduce(
     (max, s) => Math.max(max, s.durationMinutes),
     0
-  );
+  ));
 
-  const totalCompletedMins = allCompleted.reduce((acc, s) => acc + s.durationMinutes, 0);
+  const totalCompletedMins = roundFocusMinutes(allCompleted.reduce((acc, s) => acc + s.durationMinutes, 0));
   const averageSessionMinutes =
     allCompleted.length > 0 ? Math.round(totalCompletedMins / allCompleted.length) : 0;
 
@@ -364,7 +365,7 @@ export function calculateProductivityInsights(
       bestDayOfWeek: null,
       topSubject: null,
       weekComparison: {
-        current7DaysMinutes: qualifying.reduce((acc, s) => acc + s.durationMinutes, 0),
+        current7DaysMinutes: roundFocusMinutes(qualifying.reduce((acc, s) => acc + s.durationMinutes, 0)),
         previous7DaysMinutes: 0,
         differenceMinutes: 0,
         percentageChange: null,
@@ -404,7 +405,7 @@ export function calculateProductivityInsights(
 
   const mostProductiveHour =
     maxHourMins > 0
-      ? { hour: bestHour, label: formatHour(bestHour), minutes: maxHourMins }
+      ? { hour: bestHour, label: formatHour(bestHour), minutes: roundFocusMinutes(maxHourMins) }
       : null;
 
   // 2. Best day of week (0=Sunday..6=Saturday)
@@ -427,7 +428,7 @@ export function calculateProductivityInsights(
 
   const bestDayOfWeek =
     maxDowMins > 0
-      ? { dayIndex: bestDow, name: DAY_NAMES[bestDow], minutes: maxDowMins }
+      ? { dayIndex: bestDow, name: DAY_NAMES[bestDow], minutes: roundFocusMinutes(maxDowMins) }
       : null;
 
   // 3. Most focused subject (exclude sessions without subject)
@@ -445,7 +446,7 @@ export function calculateProductivityInsights(
   let topSubject: { subjectName: string; minutes: number; sessionCount: number } | null = null;
   for (const [name, stats] of subjectMap.entries()) {
     if (!topSubject || stats.minutes > topSubject.minutes) {
-      topSubject = { subjectName: name, minutes: stats.minutes, sessionCount: stats.sessionCount };
+      topSubject = { subjectName: name, minutes: roundFocusMinutes(stats.minutes), sessionCount: stats.sessionCount };
     }
   }
 
@@ -471,7 +472,9 @@ export function calculateProductivityInsights(
     }
   }
 
-  const differenceMinutes = current7DaysMinutes - previous7DaysMinutes;
+  current7DaysMinutes = roundFocusMinutes(current7DaysMinutes);
+  previous7DaysMinutes = roundFocusMinutes(previous7DaysMinutes);
+  const differenceMinutes = roundFocusMinutes(current7DaysMinutes - previous7DaysMinutes);
   const percentageChange =
     previous7DaysMinutes > 0
       ? Math.round(((current7DaysMinutes - previous7DaysMinutes) / previous7DaysMinutes) * 100)

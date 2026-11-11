@@ -17,10 +17,12 @@ import {
   ClassUserProfile,
 } from '../types/classSpace';
 import { classSpaceService } from '../services/classSpaceService';
+import { isQuotaOrDegradedError } from '../services/cloudSyncService';
 import { resolveClassSchedule, canManageSchedule, canModerate, canManageWorkspace, canPublishNotice } from '../utils/classSpaceUtils';
 import { useApp } from './AppContext';
 import { AuthUser } from '../services/authService';
 import { AcademicCalendarSettings } from '../types';
+import { getActiveAccentColor } from '../utils/themeColors';
 
 // ─── Workspace and Channel Persistence Keys & Helpers ────────────────────────
 export const ACTIVE_WORKSPACE_STORAGE_KEY = 'tracker_active_workspace_id';
@@ -142,6 +144,9 @@ interface ClassSpaceContextType {
 
   // Community Chat
   messages: ClassMessage[];
+  hasMoreMessages: boolean;
+  isLoadingOlderMessages: boolean;
+  loadOlderMessages: () => Promise<void>;
   savedMessages: ClassSavedMessage[];
   pinnedMessages: ClassMessage[];
 
@@ -251,7 +256,6 @@ interface ClassSpaceContextType {
 
   // Profile Actions
   updateProfile: (updates: Partial<ClassUserProfile>) => Promise<{ error?: string }>;
-  uploadAvatar: (file: File) => Promise<{ avatarUrl?: string; error?: string }>;
 }
 
 export const ClassSpaceContext = createContext<ClassSpaceContextType | undefined>(undefined);
@@ -300,6 +304,8 @@ export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [overrides, setOverrides] = useState<ClassTimetableOverride[]>([]);
   const [attendanceRecords, setAttendanceRecords] = useState<ClassAttendanceRecord[]>([]);
   const [messages, setMessages] = useState<ClassMessage[]>([]);
+  const [hasMoreMessages, setHasMoreMessages] = useState<boolean>(false);
+  const [isLoadingOlderMessages, setIsLoadingOlderMessages] = useState<boolean>(false);
   const [savedMessages, setSavedMessages] = useState<ClassSavedMessage[]>([]);
   const [notifications, setNotifications] = useState<ClassNotification[]>([]);
   const [profile, setProfile] = useState<ClassUserProfile | null>(null);
@@ -424,8 +430,14 @@ export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     refreshWorkspaces();
   }, [refreshWorkspaces]);
 
-  // 2. Refresh active workspace's data
-  const refreshWorkspaceData = useCallback(async () => {
+  const inFlightRefreshesRef = useRef<Map<string, Promise<void>>>(new Map());
+  const refreshSequenceRef = useRef<number>(0);
+  const activeWorkspaceRef = useRef<ClassSpaceWorkspace | null>(activeWorkspace);
+  activeWorkspaceRef.current = activeWorkspace;
+  const debouncedExternalRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // 2. Refresh active workspace's data with in-flight deduplication and stale response protection
+  const refreshWorkspaceData = useCallback(async (_force: boolean = false): Promise<void> => {
     if (!activeWorkspace?.id) {
       setMembers([]);
       setChannels([]);
@@ -434,98 +446,160 @@ export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setOverrides([]);
       setAttendanceRecords([]);
       setMessages([]);
+      setHasMoreMessages(false);
       setSavedMessages([]);
       setNotifications([]);
       return;
     }
 
-    try {
-      const [
-        memberList,
-        schedData,
-        attRecords,
-        msgList,
-        savedList,
-        notifList,
-        channelList,
-        reqList,
-      ] = await Promise.all([
-        classSpaceService.getMembers(activeWorkspace.id),
-        classSpaceService.getScheduleData(activeWorkspace.id),
-        classSpaceService.getAttendanceRecords(activeWorkspace.id, effectiveUser.id),
-        classSpaceService.getMessages(activeWorkspace.id),
-        classSpaceService.getSavedMessages(activeWorkspace.id, effectiveUser.id),
-        classSpaceService.getNotifications(activeWorkspace.id, effectiveUser.id),
-        classSpaceService.getChannels(activeWorkspace.id),
-        classSpaceService.getJoinRequests(activeWorkspace.id),
-      ]);
+    const wsId = activeWorkspace.id;
+    const reqSeq = ++refreshSequenceRef.current;
 
-      setMembers(memberList);
-      setRules(schedData.rules);
-      setOverrides(schedData.overrides);
-      setAttendanceRecords(attRecords);
-      setMessages(msgList);
-      setSavedMessages(savedList);
-      setNotifications(notifList);
-      setJoinRequests(reqList);
-
-      setChannels((prev) => {
-        if (
-          prev.length === channelList.length &&
-          prev.every((c, i) => c.id === channelList[i]?.id && c.name === channelList[i]?.name && c.slug === channelList[i]?.slug)
-        ) {
-          return prev;
-        }
-        return channelList;
-      });
-
-      // Channel resolution order:
-      // 1. URL hash channel slug if present (e.g. #classspace/study-vault)
-      // 2. Active channel currently in state if valid in this workspace
-      // 3. Persisted channel ID for this workspace from localStorage
-      // 4. Default 'the-commons' channel or channelList[0]
-      const hashChannelSlug = typeof window !== 'undefined'
-        ? window.location.hash.replace(/^#\/?/, '').split('/')[1]?.toLowerCase()
-        : null;
-
-      const fromHash = hashChannelSlug
-        ? channelList.find((c) => c.slug === hashChannelSlug || c.id === hashChannelSlug)
-        : null;
-
-      const savedChanId = getSavedChannelId(activeWorkspace.id);
-      const fromStorage = savedChanId
-        ? channelList.find((c) => c.id === savedChanId || c.slug === savedChanId)
-        : null;
-
-      setActiveChannelId((prev) => {
-        if (fromHash) {
-          if (fromHash.id !== prev) {
-            saveActiveChannelId(activeWorkspace.id, fromHash.id);
-          }
-          return fromHash.id;
-        }
-        if (prev && channelList.some((c) => c.id === prev)) {
-          return prev;
-        }
-        if (fromStorage) {
-          if (fromStorage.id !== prev) {
-            saveActiveChannelId(activeWorkspace.id, fromStorage.id);
-          }
-          return fromStorage.id;
-        }
-        const fallbackId = channelList[0]?.id || '';
-        if (fallbackId && fallbackId !== prev) {
-          saveActiveChannelId(activeWorkspace.id, fallbackId);
-        }
-        return fallbackId;
-      });
-    } catch (err) {
-      console.warn('[ClassSpaceContext] Error refreshing active workspace data:', err);
+    // Deduplicate identical in-flight requests for the same workspace
+    const existingPromise = inFlightRefreshesRef.current.get(wsId);
+    if (existingPromise) {
+      return existingPromise;
     }
+
+    const refreshPromise = (async () => {
+      try {
+        const [
+          memberList,
+          schedData,
+          attRecords,
+          msgList,
+          savedList,
+          notifList,
+          channelList,
+          reqList,
+        ] = await Promise.all([
+          classSpaceService.getMembers(wsId),
+          classSpaceService.getScheduleData(wsId),
+          classSpaceService.getAttendanceRecords(wsId, effectiveUser.id),
+          classSpaceService.getMessages(wsId),
+          classSpaceService.getSavedMessages(wsId, effectiveUser.id),
+          classSpaceService.getNotifications(wsId, effectiveUser.id),
+          classSpaceService.getChannels(wsId),
+          classSpaceService.getJoinRequests(wsId),
+        ]);
+
+        // Stale response protection: if active workspace changed or another refresh started, discard
+        if (activeWorkspaceRef.current?.id !== wsId || reqSeq < refreshSequenceRef.current) {
+          return;
+        }
+
+        setMembers(memberList);
+        setRules(schedData.rules);
+        setOverrides(schedData.overrides);
+        setAttendanceRecords(attRecords);
+        setMessages(msgList);
+        setHasMoreMessages(msgList.length >= 50);
+        setSavedMessages(savedList);
+        setNotifications(notifList);
+        setJoinRequests(reqList);
+
+        setChannels((prev) => {
+          if (
+            prev.length === channelList.length &&
+            prev.every((c, i) => c.id === channelList[i]?.id && c.name === channelList[i]?.name && c.slug === channelList[i]?.slug)
+          ) {
+            return prev;
+          }
+          return channelList;
+        });
+
+        // Channel resolution order:
+        // 1. URL hash channel slug if present (e.g. #classspace/study-vault)
+        // 2. Active channel currently in state if valid in this workspace
+        // 3. Persisted channel ID for this workspace from localStorage
+        // 4. Default 'the-commons' channel or channelList[0]
+        const hashChannelSlug = typeof window !== 'undefined'
+          ? window.location.hash.replace(/^#\/?/, '').split('/')[1]?.toLowerCase()
+          : null;
+
+        const fromHash = hashChannelSlug
+          ? channelList.find((c) => c.slug === hashChannelSlug || c.id === hashChannelSlug)
+          : null;
+
+        const savedChanId = getSavedChannelId(wsId);
+        const fromStorage = savedChanId
+          ? channelList.find((c) => c.id === savedChanId || c.slug === savedChanId)
+          : null;
+
+        setActiveChannelId((prev) => {
+          if (fromHash) {
+            if (fromHash.id !== prev) {
+              saveActiveChannelId(wsId, fromHash.id);
+            }
+            return fromHash.id;
+          }
+          if (prev && channelList.some((c) => c.id === prev)) {
+            return prev;
+          }
+          if (fromStorage) {
+            if (fromStorage.id !== prev) {
+              saveActiveChannelId(wsId, fromStorage.id);
+            }
+            return fromStorage.id;
+          }
+          const fallbackId = channelList[0]?.id || '';
+          if (fallbackId && fallbackId !== prev) {
+            saveActiveChannelId(wsId, fallbackId);
+          }
+          return fallbackId;
+        });
+      } catch (err: any) {
+        if (!isQuotaOrDegradedError(err)) {
+          console.warn('[ClassSpaceContext] Error refreshing active workspace data:', err?.message || err);
+        }
+      } finally {
+        inFlightRefreshesRef.current.delete(wsId);
+      }
+    })();
+
+    inFlightRefreshesRef.current.set(wsId, refreshPromise);
+    return refreshPromise;
   }, [activeWorkspace?.id, effectiveUser.id]);
 
   const refreshWorkspaceDataRef = useRef(refreshWorkspaceData);
   refreshWorkspaceDataRef.current = refreshWorkspaceData;
+
+  const loadOlderMessages = useCallback(async () => {
+    if (!activeWorkspace?.id || isLoadingOlderMessages || !hasMoreMessages) return;
+    const earliest = messages[0];
+    if (!earliest) {
+      setHasMoreMessages(false);
+      return;
+    }
+
+    setIsLoadingOlderMessages(true);
+    try {
+      const older = await classSpaceService.getOlderMessages(
+        activeWorkspace.id,
+        earliest.createdAt,
+        earliest.id,
+        50
+      );
+
+      if (older.length < 50) {
+        setHasMoreMessages(false);
+      }
+
+      if (older.length > 0) {
+        setMessages((prev) => {
+          const existingIds = new Set(prev.map((m) => m.id));
+          const uniqueOlder = older.filter((m) => !existingIds.has(m.id));
+          return [...uniqueOlder, ...prev];
+        });
+      }
+    } catch (err: any) {
+      if (!isQuotaOrDegradedError(err)) {
+        console.warn('[ClassSpaceContext] Error loading older messages:', err?.message || err);
+      }
+    } finally {
+      setIsLoadingOlderMessages(false);
+    }
+  }, [activeWorkspace?.id, isLoadingOlderMessages, hasMoreMessages, messages]);
 
   const handleSetActiveChannelId = useCallback((channelId: string) => {
     setActiveChannelId(channelId);
@@ -544,14 +618,25 @@ export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     refreshWorkspaceData();
   }, [refreshWorkspaceData]);
 
-  // 3. Realtime subscription for active workspace (depends strictly on workspace ID to prevent subscription thrashing)
+  // 3. Realtime subscription for active workspace with 1500ms debounce
   useEffect(() => {
     if (!activeWorkspace?.id) return;
     const wsId = activeWorkspace.id;
     const unsubscribe = classSpaceService.subscribeToWorkspace(wsId, () => {
-      refreshWorkspaceDataRef.current?.();
+      if (debouncedExternalRefreshTimerRef.current) {
+        clearTimeout(debouncedExternalRefreshTimerRef.current);
+      }
+      debouncedExternalRefreshTimerRef.current = setTimeout(() => {
+        refreshWorkspaceDataRef.current?.();
+      }, 1500);
     });
-    return () => unsubscribe();
+    return () => {
+      if (debouncedExternalRefreshTimerRef.current) {
+        clearTimeout(debouncedExternalRefreshTimerRef.current);
+        debouncedExternalRefreshTimerRef.current = null;
+      }
+      unsubscribe();
+    };
   }, [activeWorkspace?.id]);
 
   // Resolved occurrences for the current date range
@@ -657,11 +742,13 @@ export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const updateWorkspaceAcademicCalendar = async (calendar: AcademicCalendarSettings) => {
     if (!activeWorkspace) return { success: false, error: 'No active ClassSpace selected.' };
+    if (!isCR) return { success: false, error: 'Only the ClassSpace CR or owner can change shared attendance settings.' };
     const res = await classSpaceService.updateWorkspaceAcademicCalendar(activeWorkspace.id, calendar);
     if (res.success) {
-      setActiveWorkspace((prev) => (prev ? { ...prev, academicCalendar: calendar } : null));
+      const updatedAt = new Date().toISOString();
+      setActiveWorkspace((prev) => (prev ? { ...prev, academicCalendar: calendar, updatedAt } : null));
       setWorkspaces((prev) =>
-        prev.map((w) => (w.id === activeWorkspace.id ? { ...w, academicCalendar: calendar } : w))
+        prev.map((w) => (w.id === activeWorkspace.id ? { ...w, academicCalendar: calendar, updatedAt } : w))
       );
     }
     return res;
@@ -678,7 +765,7 @@ export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         const override = overrides.find((o) => o.id === rec.occurrenceKey);
         const subjName = rule?.subjectName || override?.subjectName || 'Class';
         const subjCode = rule?.subjectCode || override?.subjectCode || 'CLS';
-        const subjColor = rule?.subjectColor || override?.subjectColor || '#C45532';
+        const subjColor = rule?.subjectColor || override?.subjectColor || getActiveAccentColor();
 
         const existingSubj = appState.subjects.find((s) => s.code.toUpperCase() === subjCode.toUpperCase());
         if (!existingSubj) {
@@ -1399,14 +1486,6 @@ export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     return { error: res.error };
   };
 
-  const uploadAvatar = async (file: File) => {
-    const res = await classSpaceService.uploadAvatar(effectiveUser.id, file);
-    if (res.avatarUrl) {
-      await updateProfile({ avatarUrl: res.avatarUrl });
-    }
-    return res;
-  };
-
   const contextValue = useMemo<ClassSpaceContextType>(
     () => ({
       workspaces,
@@ -1441,6 +1520,9 @@ export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       attendanceRecords,
       attendanceStats,
       messages,
+      hasMoreMessages,
+      isLoadingOlderMessages,
+      loadOlderMessages,
       savedMessages,
       pinnedMessages,
       notifications,
@@ -1478,7 +1560,6 @@ export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       markNotificationRead,
       markAllNotificationsRead,
       updateProfile,
-      uploadAvatar,
     }),
     [
       workspaces,
@@ -1511,6 +1592,9 @@ export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       attendanceRecords,
       attendanceStats,
       messages,
+      hasMoreMessages,
+      isLoadingOlderMessages,
+      loadOlderMessages,
       savedMessages,
       pinnedMessages,
       notifications,
@@ -1548,7 +1632,6 @@ export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       markNotificationRead,
       markAllNotificationsRead,
       updateProfile,
-      uploadAvatar,
     ]
   );
 

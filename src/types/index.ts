@@ -1,3 +1,19 @@
+import type {
+  WorkoutSession,
+  WorkoutProgram,
+  WorkoutTemplate,
+  ExerciseLibraryItem,
+  BodyMeasurementEntry,
+  BodyCompositionEntry,
+  ProgressPhotoEntry,
+  SleepRecoveryEntry,
+  CardioSession,
+  HydrationLogEntry,
+  MealPlanDay,
+  LocalBarcodeMapping,
+  FitnessInsight,
+  MicronutrientProfile,
+} from './fitness';
 // ----- Milestone: EduHub Video & Playlist Types -----
 export type {
   EduHubCourse,
@@ -9,6 +25,8 @@ export type {
 import type { EduHubCourse } from './eduhub';
 
 export type ThemeMode = 'light' | 'dark' | 'system';
+export type AppearanceMode = 'classic' | 'digital-paper';
+export type PaperContrast = 'soft' | 'balanced' | 'crisp';
 
 export type DayOfWeek = 1 | 2 | 3 | 4 | 5 | 6 | 7; // 1 = Monday, 7 = Sunday
 
@@ -116,6 +134,8 @@ export interface GymWorkout {
   exercises: GymExercise[];
   notes?: string;
   isSample?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface Reminder {
@@ -147,8 +167,9 @@ export interface UserProfile {
   bio?: string; // Short bio or academic motto
 }
 
-export type AccentColor = 'terracotta' | 'sage' | 'ochre' | 'dusty-blue' | 'plum' | 'slate';
-export type BackgroundStyle = 'minimal' | 'abstract' | 'space' | 'ocean' | 'custom';
+export type AccentColor = 'terracotta' | 'sage' | 'ochre' | 'dusty-blue' | 'plum' | 'slate' | 'rose' | 'lavender' | 'teal' | 'cobalt' | 'peach' | 'mint' | 'custom';
+export type BackgroundStyle = 'minimal' | 'abstract' | 'space' | 'ocean' | 'colour-wash' | 'aurora' | 'chromatic' | 'custom';
+export type BackgroundEffect = 'static' | 'breathing' | 'color-cycle' | 'rainbow' | 'starry-night' | 'adaptive-color' | 'immersion' | 'off';
 export type UserMode = 'individual' | 'class_based';
 
 export type AcademicPeriodType = 'semester' | 'year';
@@ -175,8 +196,16 @@ export interface AcademicCalendarSettings {
 
 export interface AppSettings {
   themeMode: ThemeMode;
+  appearanceMode?: AppearanceMode;
+  paperContrast?: PaperContrast;
   accentColor: AccentColor;
+  customAccentColor?: string;
+  savedAccentColors?: string[];
   backgroundStyle: BackgroundStyle;
+  backgroundEffect?: BackgroundEffect;
+  backgroundEffectSpeed?: number;
+  backgroundEffectIntensity?: number;
+  accentEdgeGlow?: boolean;
   customBackgroundUrl?: string;
   studyDayRolloverHour: number; // 0-23
   showExamCountdown: boolean;
@@ -195,6 +224,12 @@ export interface AppSettings {
   dashboardLayoutMode?: 'bento' | 'masonry' | 'comfortable';
   /** Density for dashboard command center widgets */
   dashboardDensity?: 'compact' | 'comfortable';
+  /** Appearance of the Iron Lab muscle model; independent from identity and health tracking. */
+  bodyModelPreference?: 'male' | 'female';
+  /** Profile choice that controls the Iron Lab body model and Bloom availability. */
+  gender?: 'male' | 'female';
+  /** Explicit opt-in to show the local-only Bloom wellness space. */
+  bloomEnabled?: boolean;
 }
 
 // ----- New types for Milestone 3 (Syllabus Tracker) -----
@@ -268,12 +303,19 @@ export interface SyllabusImportChapter {
   topics: SyllabusImportTopic[];
 }
 
+export interface SyllabusImportSubject {
+  name: string;
+  code?: string;
+  chapters: SyllabusImportChapter[];
+}
+
 export interface SyllabusImportPayload {
   schemaVersion: number;
-  subject: {
-    name: string;
-    chapters: SyllabusImportChapter[];
-  };
+  /** Schema v1 compatibility for existing one-course prompt output. */
+  subject?: SyllabusImportSubject;
+  /** Schema v2: each course is a separate Syllabus Tracker subject. */
+  subjects?: SyllabusImportSubject[];
+  programTitle?: string;
 }
 
 // ----- Occurrence Override types (Fix recurring rescheduling bug) -----
@@ -344,6 +386,8 @@ export interface ResolvedCalendarEvent {
 }
 
 export interface AppStateData {
+    /** Keep data from app versions that have fields this version does not know yet. */
+    [key: string]: unknown;
   // Base data
   subjects: Subject[];
   timetable: TimetableSlot[];
@@ -374,6 +418,20 @@ export interface AppStateData {
   recipes?: Recipe[];
   weightLogs?: WeightLogEntry[];
   nutritionProfile?: NutritionProfile;
+  // Advanced Fitness Ecosystem
+  workoutSessions?: WorkoutSession[];
+  workoutPrograms?: WorkoutProgram[];
+  workoutTemplates?: WorkoutTemplate[];
+  exerciseLibrary?: ExerciseLibraryItem[];
+  bodyMeasurements?: BodyMeasurementEntry[];
+  bodyCompositions?: BodyCompositionEntry[];
+  progressPhotos?: ProgressPhotoEntry[];
+  sleepRecoveryLogs?: SleepRecoveryEntry[];
+  cardioSessions?: CardioSession[];
+  hydrationLogs?: HydrationLogEntry[];
+  mealPlans?: MealPlanDay[];
+  customBarcodes?: LocalBarcodeMapping[];
+  fitnessInsights?: FitnessInsight[];
   // Milestone 8: Focus Radio & Custom Playlists
   radioUrls?: RadioUrl[];
   radioQueue?: RadioUrl[];
@@ -471,6 +529,13 @@ export interface PlannerTask {
   subtasks?: Subtask[];
 }
 
+export interface PlannerFocusLaunch {
+  id: string;
+  taskId: string;
+  estimatedDuration?: number;
+  subjectId?: string;
+}
+
 export interface SpacedReviewHistoryItem {
   reviewedAt: string; // ISO string
   nextDueDate: string; // YYYY-MM-DD
@@ -503,6 +568,9 @@ export interface DailyQuestionEntry {
   createdAt: string; // ISO string
   isSample?: boolean;
 }
+
+export * from './muscleAnatomy';
+
 
 // ----- Milestone 7: Gym & Nutrition Types -----
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snacks' | 'pre_workout' | 'post_workout';
@@ -573,6 +641,7 @@ export interface FoodDiaryEntry {
   fiber?: number;
   sugar?: number;
   sodium?: number;
+  micronutrients?: MicronutrientProfile;
   lastEditedAt: string; // ISO string
   isSample?: boolean;
 }
@@ -665,6 +734,9 @@ export interface ErrorLogEntry {
   isSample?: boolean;
 }
 
+export * from './muscleAnatomy';
+
+
 export interface MockTestSubjectScore {
   subjectId: string;
   score: number;
@@ -688,8 +760,37 @@ export interface MockTest {
   isSample?: boolean;
 }
 
+export * from './muscleAnatomy';
 
 
 
+
+
+
+export * from './muscleAnatomy';
+
+export type {
+  WorkoutSession,
+  WorkoutExercise,
+  ExerciseSet,
+  SetType,
+  ExerciseLibraryItem,
+  WorkoutTemplate,
+  WorkoutProgram,
+  BodyMeasurementEntry,
+  BodyCompositionEntry,
+  ProgressPhotoEntry,
+  SleepRecoveryEntry,
+  CardioSession,
+  HydrationLogEntry,
+  MealPlanDay,
+  MicronutrientProfile,
+  EquipmentRequired,
+  MuscleGroup,
+  FitnessInsight,
+  FitnessSyncStatus,
+  LocalBarcodeMapping,
+  CardioType,
+} from './fitness';
 
 

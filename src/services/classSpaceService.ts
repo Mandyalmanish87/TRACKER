@@ -1,5 +1,25 @@
-import { getSupabaseClient, isSupabaseConfigured, AuthUser } from './authService';
+import { getFirebaseDataClientForServices, getSupabaseClient, isFirebaseDataConfigured, AuthUser } from './authService';
+import { firebaseService } from './firebaseService';
+import { subscriptionService } from './subscriptionService';
+import {
+  isQuotaOrDegradedError,
+  markCloudDegraded as markSharedCloudDegraded,
+  resetCloudDegraded as resetSharedCloudDegraded,
+  isCloudDegraded,
+} from './degradedModeService';
+import { recordChannelSubscribed } from '../utils/networkDiagnostics';
 import { AcademicCalendarSettings } from '../types';
+
+function isTestEnvironment(): boolean {
+  return Boolean(
+    (typeof process !== 'undefined' && (process.env?.NODE_ENV === 'test' || Boolean(process.env?.VITEST))) ||
+    (typeof import.meta !== 'undefined' && (import.meta as any).env?.MODE === 'test')
+  );
+}
+
+function getClassSpaceDataClient(): any {
+  return getFirebaseDataClientForServices() || (isTestEnvironment() ? getSupabaseClient() : null);
+}
 import {
   ClassSpaceWorkspace,
   ClassSpaceMember,
@@ -156,14 +176,53 @@ function getLocalData(): LocalClassSpaceData {
   }
 }
 
+function saveLocalDataQuiet(data: LocalClassSpaceData): void {
+  try {
+    localStorage.setItem(LOCAL_STORE_KEY, JSON.stringify(data));
+  } catch (err) {
+    console.warn('[ClassSpaceService] Failed to save quiet local state:', err);
+  }
+}
+
 function saveLocalData(data: LocalClassSpaceData): void {
   try {
     localStorage.setItem(LOCAL_STORE_KEY, JSON.stringify(data));
-    // Trigger cross-tab sync
-    window.dispatchEvent(new Event('tracker_classspace_updated'));
+    // Trigger notification for genuine user mutations
+    window.dispatchEvent(new CustomEvent('tracker_classspace_updated', { detail: { type: 'mutation' } }));
   } catch (err) {
     console.warn('[ClassSpaceService] Failed to save local state:', err);
   }
+}
+
+function saveAttendanceLocally(
+  workspaceId: string,
+  userId: string,
+  occurrenceKey: string,
+  date: string,
+  status: 'present' | 'absent' | 'cancelled',
+  now: string,
+): ClassAttendanceRecord {
+  const local = getLocalData();
+  let record = local.attendanceRecords.find(
+    (a) => a.workspaceId === workspaceId && a.userId === userId && a.occurrenceKey === occurrenceKey,
+  );
+  if (record) {
+    Object.assign(record, { date, status, updatedAt: now });
+  } else {
+    record = {
+      id: 'att_' + Math.random().toString(36).substring(2, 11),
+      workspaceId,
+      userId,
+      occurrenceKey,
+      date,
+      status,
+      createdAt: now,
+      updatedAt: now,
+    };
+    local.attendanceRecords.push(record);
+  }
+  saveLocalData(local);
+  return record;
 }
 
 let recentFailedLookups: number[] = [];
@@ -172,6 +231,17 @@ export const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 60 seconds
 
 export function resetLookupRateLimiter(): void {
   recentFailedLookups = [];
+}
+
+const profileMemoryCache = new Map<string, { profile: ClassUserProfile; cachedAt: number }>();
+const PROFILE_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minute TTL
+
+export function clearProfileMemoryCache(userId?: string): void {
+  if (userId) {
+    profileMemoryCache.delete(userId);
+  } else {
+    profileMemoryCache.clear();
+  }
 }
 
 export function isLookupRateLimited(): boolean {
@@ -187,7 +257,7 @@ export function recordFailedLookup(): void {
 /**
  * Checks whether an identifier is a local-only / simulated / non-UUID ID.
  * Any non-UUID (e.g. 'usr_local_*', 'ws_*', 'mem_*', 'rule_*', 'ov_*', 'att_*', 'msg_*', 'save_*', 'notif_*', etc.)
- * must never be sent to Postgres tables with UUID primary/foreign keys.
+ * must never be used for authenticated Firebase cloud operations.
  */
 export function isLocalId(id?: string | null): boolean {
   if (!id || typeof id !== 'string') return true;
@@ -209,14 +279,16 @@ export function isLocalId(id?: string | null): boolean {
   ) {
     return true;
   }
+  // Firebase Auth UIDs and Firestore-generated document IDs are non-UUIDs too.
+  if (firebaseService.isConfigured && /^[A-Za-z0-9]{20,40}$/.test(trimmed)) return false;
   const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   return !UUID_REGEX.test(trimmed);
 }
 
 /**
- * Formats Supabase PostgREST error objects with code, details, and hint.
+ * Formats Firebase operation errors with code and details.
  */
-export function formatSupabaseError(err: any, fallback: string = 'An unknown cloud error occurred.'): string {
+export function formatFirebaseError(err: any, fallback: string = 'An unknown cloud error occurred.'): string {
   if (!err) return fallback;
   if (typeof err === 'string') return err;
   const parts: string[] = [];
@@ -228,15 +300,27 @@ export function formatSupabaseError(err: any, fallback: string = 'An unknown clo
   return parts.join(' - ');
 }
 
+export function markCloudDegraded(reason?: string): void {
+  markSharedCloudDegraded(reason || 'HTTP 402: Service restricted');
+}
+
+export function resetCloudDegraded(): void {
+  resetSharedCloudDegraded();
+}
+
 /**
- * Checks whether cloud Supabase is available and ready for operation.
+ * Checks whether cloud Firebase is available and ready for operation.
  * In production, strictly requires genuine credentials.
- * In test mode, permits active mocked Supabase client instances.
+ * If quota is exhausted (HTTP 402), returns false during degraded cooldown.
+ * In test mode, permits active mocked Firebase client instances.
  */
 export function isCloudAvailable(): boolean {
-  const client = getSupabaseClient();
+  if (isCloudDegraded()) {
+    return false;
+  }
+  const client = getClassSpaceDataClient();
   if (!client) return false;
-  return isSupabaseConfigured || (typeof process !== 'undefined' && process.env?.NODE_ENV === 'test');
+  return isFirebaseDataConfigured || (typeof process !== 'undefined' && process.env?.NODE_ENV === 'test');
 }
 
 export const classSpaceService = {
@@ -245,6 +329,8 @@ export const classSpaceService = {
   },
   isLocalId,
   isCloudAvailable,
+  markCloudDegraded,
+  resetCloudDegraded,
 
   archiveAndClearLocalData(userId?: string): void {
     if (userId) {
@@ -299,15 +385,15 @@ export const classSpaceService = {
     );
     const localWorkspaces = local.workspaces.filter((w) => joinedWsIds.has(w.id));
 
-    // Never query Supabase with non-UUID local user IDs
+    // Never query Firebase with local or simulated user IDs.
     if (isLocalId(userId)) {
       return localWorkspaces;
     }
 
-    const supabase = getSupabaseClient();
-    if (supabase && isCloudAvailable()) {
+    const firebaseDb = getClassSpaceDataClient();
+    if (firebaseDb && isCloudAvailable()) {
       try {
-        const { data: memberRows, error: mError } = await supabase
+        const { data: memberRows, error: mError } = await firebaseDb
           .from('class_members')
           .select('workspace_id')
           .eq('user_id', userId);
@@ -315,7 +401,7 @@ export const classSpaceService = {
         if (!mError && memberRows && memberRows.length > 0) {
           const wsIds = memberRows.map((r: { workspace_id: string }) => r.workspace_id);
 
-          const { data: workspaces, error: wsError } = await supabase
+          const { data: workspaces, error: wsError } = await firebaseDb
             .from('class_workspaces')
             .select('*')
             .in('id', wsIds);
@@ -323,13 +409,17 @@ export const classSpaceService = {
           if (!wsError && workspaces) {
             const cloudWorkspaces = workspaces.map(mapWorkspaceFromDb);
             const combinedMap = new Map<string, ClassSpaceWorkspace>();
-            cloudWorkspaces.forEach((w) => combinedMap.set(w.id, w));
-            localWorkspaces.forEach((w) => combinedMap.set(w.id, w));
+            cloudWorkspaces.forEach((w: ClassSpaceWorkspace) => combinedMap.set(w.id, w));
+            // Cloud rows are the source of truth for authenticated workspaces.
+            // Keep local-only workspaces, but never let a stale local copy mask newer settings.
+            localWorkspaces.forEach((w) => {
+              if (!combinedMap.has(w.id)) combinedMap.set(w.id, w);
+            });
             return Array.from(combinedMap.values());
           }
         }
       } catch (err) {
-        console.warn('[ClassSpaceService] Supabase getWorkspaces error:', err);
+        console.warn('[ClassSpaceService] Firebase getWorkspaces error:', err);
       }
     }
 
@@ -350,6 +440,19 @@ export const classSpaceService = {
   ): Promise<{ workspace?: ClassSpaceWorkspace; member?: ClassSpaceMember; error?: string }> {
     if (!user || !user.id) {
       return { error: 'You must be signed in to create a ClassSpace.' };
+    }
+
+    if (!isTestEnvironment() || (user as any)?._testEnforceEntitlement) {
+      try {
+        const ent = await subscriptionService.getUserEntitlements(user.id);
+        if (!ent.hasActivePass && !ent.features.includes('classspace_create_workspace')) {
+          return { error: 'Creating a ClassSpace workspace requires an active TRAKIFY pass. Upgrade your account to unlock this feature.' };
+        }
+      } catch (err: any) {
+        if (!isTestEnvironment() || (user as any)?._testEnforceEntitlement) {
+          return { error: err?.message || 'Failed to verify active pass entitlement.' };
+        }
+      }
     }
 
     if (!details.name || !details.name.trim()) {
@@ -396,16 +499,16 @@ export const classSpaceService = {
       avatarUrl: user.avatarUrl,
     };
 
-    const supabase = getSupabaseClient();
-    if (supabase && isCloudAvailable() && !isLocalId(user.id)) {
+    const firebaseDb = getClassSpaceDataClient();
+    if (firebaseDb && isCloudAvailable() && !isLocalId(user.id)) {
       if (!user || user.isSimulated) {
         return { error: 'Authentication required: You must be signed in with a verified account to create cloud ClassSpace workspaces.' };
       }
       try {
         // Strategy 1: Server-authoritative atomic creation via RPC
-        if (typeof supabase.rpc === 'function') {
+        if (typeof firebaseDb.rpc === 'function') {
           try {
-            const { data: rpcData, error: rpcError } = await supabase.rpc('create_class_workspace', {
+            const { data: rpcData, error: rpcError } = await firebaseDb.rpc('create_class_workspace', {
               p_name: newWorkspace.name,
               p_institution: instName || null,
               p_department: newWorkspace.department || null,
@@ -422,11 +525,11 @@ export const classSpaceService = {
                 rpcError.code === '42883' ||
                 /function .* does not exist|could not find the function/i.test(rpcError.message || '');
 
-              // For ANY unexpected server error that is NOT a missing function, fail fast and report real Supabase error.
+              // For ANY unexpected server error that is NOT a missing function, fail fast and report real Firebase error.
               // NEVER fall back to direct table insertion on permissions or database errors.
               if (!isMissingFunction) {
                 console.error('[ClassSpaceService] create_class_workspace RPC error:', rpcError);
-                return { error: formatSupabaseError(rpcError, 'Cloud workspace creation RPC failed') };
+                return { error: formatFirebaseError(rpcError, 'Cloud workspace creation RPC failed') };
               }
 
               console.warn('[ClassSpaceService] create_class_workspace RPC missing on server, attempting fallback direct insert:', rpcError);
@@ -451,7 +554,7 @@ export const classSpaceService = {
         }
 
         // Strategy 2: Direct table insert fallback if RPC is unconfigured/pending migration
-        const { data: wsData, error: wsError } = await supabase
+        const { data: wsData, error: wsError } = await firebaseDb
           .from('class_workspaces')
           .insert({
             name: newWorkspace.name,
@@ -467,12 +570,12 @@ export const classSpaceService = {
           .single();
 
         if (wsError) {
-          return { error: formatSupabaseError(wsError, 'Failed to create workspace in cloud') };
+          return { error: formatFirebaseError(wsError, 'Failed to create workspace in cloud') };
         }
 
         const insertedWs = mapWorkspaceFromDb(wsData);
 
-        const { data: mData, error: mError } = await supabase
+        const { data: mData, error: mError } = await firebaseDb
           .from('class_members')
           .insert({
             workspace_id: insertedWs.id,
@@ -487,9 +590,9 @@ export const classSpaceService = {
         if (mError) {
           // Clean up dangling workspace if initial member insert fails
           try {
-            await supabase.from('class_workspaces').delete().eq('id', insertedWs.id);
+            await firebaseDb.from('class_workspaces').delete().eq('id', insertedWs.id);
           } catch {}
-          return { error: formatSupabaseError(mError, 'Failed to create workspace owner membership in cloud') };
+          return { error: formatFirebaseError(mError, 'Failed to create workspace owner membership in cloud') };
         }
 
         const insertedMember = mapMemberFromDb(mData);
@@ -499,7 +602,7 @@ export const classSpaceService = {
 
         return { workspace: insertedWs, member: insertedMember };
       } catch (err) {
-        console.warn('[ClassSpaceService] Supabase createWorkspace error:', err);
+        console.warn('[ClassSpaceService] Firebase createWorkspace error:', err);
         return { error: err instanceof Error ? err.message : 'Failed to create workspace in cloud.' };
       }
     }
@@ -531,11 +634,11 @@ export const classSpaceService = {
       return { error: 'Too many invalid attempts. Please wait 60 seconds before trying again.' };
     }
 
-    const supabase = getSupabaseClient();
-    if (supabase && isCloudAvailable() && !isLocalId(user.id) && !user.isSimulated) {
+    const firebaseDb = getClassSpaceDataClient();
+    if (firebaseDb && isCloudAvailable() && !isLocalId(user.id) && !user.isSimulated) {
       try {
         // Enforce join-code validation at database boundary via trusted RPC
-        const { data, error } = await supabase.rpc('join_class_workspace', {
+        const { data, error } = await firebaseDb.rpc('join_class_workspace', {
           p_join_code: normalized,
           p_display_name: user.name || user.email.split('@')[0],
           p_avatar_url: user.avatarUrl || null,
@@ -566,7 +669,7 @@ export const classSpaceService = {
         return { error: 'Unable to join ClassSpace: unexpected response from cloud server.' };
       } catch (err) {
         recordFailedLookup();
-        console.warn('[ClassSpaceService] Supabase joinWorkspace RPC error:', err);
+        console.warn('[ClassSpaceService] Firebase joinWorkspace RPC error:', err);
         return { error: err instanceof Error ? err.message : 'Failed to join ClassSpace in cloud.' };
       }
     }
@@ -618,11 +721,11 @@ export const classSpaceService = {
       return { error: 'Too many invalid attempts. Please wait 60 seconds before trying again.' };
     }
 
-    const supabase = getSupabaseClient();
-    if (supabase && isCloudAvailable()) {
+    const firebaseDb = getClassSpaceDataClient();
+    if (firebaseDb && isCloudAvailable()) {
       try {
         // Enforce minimal metadata exposure via secure RPC (prevents directory scraping)
-        const { data, error } = await supabase.rpc('lookup_workspace_by_join_code', {
+        const { data, error } = await firebaseDb.rpc('lookup_workspace_by_join_code', {
           p_join_code: normalized,
         });
 
@@ -675,36 +778,55 @@ export const classSpaceService = {
     workspaceId: string,
     userId: string
   ): Promise<{ newCode?: string; error?: string }> {
-    const supabase = getSupabaseClient();
-    const isCloud = supabase && isCloudAvailable() && !isLocalId(workspaceId) && !isLocalId(userId);
+    const firebaseDb = getClassSpaceDataClient();
+    const isCloud = firebaseDb && isCloudAvailable() && !isLocalId(workspaceId) && !isLocalId(userId);
 
     const newCode = generateJoinCode();
 
     if (isCloud) {
       try {
-        // Enforce database-level authorization: RLS policy "Only CR can update workspace details or rotate code"
-        // checks public.is_class_cr(id, auth.uid()). If unauthorized in database, 0 rows are updated.
-        const { data, error } = await supabase
-          .from('class_workspaces')
-          .update({ join_code: newCode, updated_at: new Date().toISOString() })
-          .eq('id', workspaceId)
-          .select('id, join_code');
-
-        if (error) return { error: error.message };
-        if (!data || data.length === 0) {
-          return { error: 'Unauthorized: Only the Class Representative (CR) or Owner can rotate the join code.' };
+        if (typeof firebaseDb.rpc === 'function') {
+          const { data, error } = await firebaseDb.rpc('rotate_class_workspace_join_code', { p_workspace_id: workspaceId });
+          if (!error && data) {
+            const local = getLocalData();
+            const ws = local.workspaces.find((w) => w.id === workspaceId);
+            if (ws) {
+              ws.joinCode = String(data);
+              ws.updatedAt = new Date().toISOString();
+              saveLocalData(local);
+            }
+            return { newCode: String(data) };
+          }
+          if (error && error.code !== 'PGRST202' && !/does not exist/i.test(error.message || '')) {
+            return { error: error.message };
+          }
         }
 
-        // Keep local cache in sync if present
-        const local = getLocalData();
-        const ws = local.workspaces.find((w) => w.id === workspaceId);
-        if (ws) {
-          ws.joinCode = newCode;
-          ws.updatedAt = new Date().toISOString();
-          saveLocalData(local);
-        }
+        // Direct table update fallback if RPC is not present
+        if (typeof firebaseDb.from === 'function') {
+          const { data: updateData, error: updateError } = await firebaseDb
+            .from('class_workspaces')
+            .update({ join_code: newCode })
+            .eq('id', workspaceId)
+            .select();
 
-        return { newCode };
+          if (updateError) {
+            return { error: updateError.message };
+          }
+
+          if (!updateData || updateData.length === 0) {
+            return { error: 'Unauthorized: Only the Class Representative (CR) or Owner can rotate the join code.' };
+          }
+
+          const local = getLocalData();
+          const ws = local.workspaces.find((w) => w.id === workspaceId);
+          if (ws) {
+            ws.joinCode = newCode;
+            ws.updatedAt = new Date().toISOString();
+            saveLocalData(local);
+          }
+          return { newCode };
+        }
       } catch (err) {
         console.warn('[ClassSpaceService] rotateJoinCode error:', err);
         return { error: err instanceof Error ? err.message : 'Failed to rotate join code in cloud.' };
@@ -729,6 +851,18 @@ export const classSpaceService = {
   },
 
   async deleteWorkspace(workspaceId: string, userId: string): Promise<{ success: boolean; error?: string }> {
+    const firebaseDb = getClassSpaceDataClient();
+    if (firebaseDb && isCloudAvailable() && !isLocalId(workspaceId) && !isLocalId(userId)) {
+      try {
+        const { data, error } = await firebaseDb.rpc('delete_class_workspace', { p_workspace_id: workspaceId });
+
+        if (error) return { success: false, error: error.message };
+        return { success: Boolean(data?.success ?? data) };
+      } catch (err) {
+        return { success: false, error: (err as Error).message };
+      }
+    }
+
     const local = getLocalData();
     const ws = local.workspaces.find((w) => w.id === workspaceId);
     if (!ws) return { success: false, error: 'ClassSpace not found.' };
@@ -736,21 +870,6 @@ export const classSpaceService = {
     const member = local.members.find((m) => m.workspaceId === workspaceId && m.userId === userId);
     if (ws.createdBy !== userId && member?.role !== 'owner') {
       return { success: false, error: 'Only the ClassSpace Owner can delete this workspace.' };
-    }
-
-    const supabase = getSupabaseClient();
-    if (supabase && isCloudAvailable() && !isLocalId(workspaceId) && !isLocalId(userId)) {
-      try {
-        const { error } = await supabase
-          .from('class_workspaces')
-          .delete()
-          .eq('id', workspaceId);
-
-        if (error) return { success: false, error: error.message };
-        return { success: true };
-      } catch (err) {
-        return { success: false, error: (err as Error).message };
-      }
     }
 
     local.workspaces = local.workspaces.filter((w) => w.id !== workspaceId);
@@ -770,6 +889,22 @@ export const classSpaceService = {
     workspaceId: string,
     academicCalendar: AcademicCalendarSettings
   ): Promise<{ success: boolean; error?: string }> {
+    const firebaseDb = getClassSpaceDataClient();
+    if (firebaseDb && isCloudAvailable() && !isLocalId(workspaceId)) {
+      try {
+        const { data, error } = await firebaseDb
+          .from('class_workspaces')
+          .update({ academic_calendar: academicCalendar, updated_at: new Date().toISOString() })
+          .eq('id', workspaceId)
+          .select('id')
+          .maybeSingle();
+        if (error) return { success: false, error: error.message };
+        if (!data) return { success: false, error: 'Could not save attendance settings. Check that you are the ClassSpace CR or owner.' };
+      } catch (err) {
+        return { success: false, error: (err as Error).message };
+      }
+    }
+
     const local = getLocalData();
     const ws = local.workspaces.find((w) => w.id === workspaceId);
     if (ws) {
@@ -781,10 +916,10 @@ export const classSpaceService = {
   },
 
   async leaveWorkspace(workspaceId: string, userId: string): Promise<{ success: boolean; error?: string }> {
-    const supabase = getSupabaseClient();
-    if (supabase && isCloudAvailable() && !isLocalId(workspaceId) && !isLocalId(userId)) {
+    const firebaseDb = getClassSpaceDataClient();
+    if (firebaseDb && isCloudAvailable() && !isLocalId(workspaceId) && !isLocalId(userId)) {
       try {
-        const { error } = await supabase
+        const { error } = await firebaseDb
           .from('class_members')
           .delete()
           .eq('workspace_id', workspaceId)
@@ -810,26 +945,29 @@ export const classSpaceService = {
   // ==========================================================================
 
   async getChannels(workspaceId: string): Promise<ClassSpaceChannel[]> {
-    const supabase = getSupabaseClient();
-    if (supabase && isCloudAvailable() && !isLocalId(workspaceId)) {
+    const firebaseDb = getClassSpaceDataClient();
+    if (firebaseDb && isCloudAvailable() && !isLocalId(workspaceId)) {
       try {
-        const { data, error } = await supabase
+        const { data, error } = await firebaseDb
           .from('class_channels')
           .select('*')
           .eq('workspace_id', workspaceId)
           .order('position', { ascending: true });
 
-        if (!error && data && data.length > 0) {
+        if (error) {
+          if (isQuotaOrDegradedError(error)) markCloudDegraded('HTTP 402 on getChannels');
+        } else if (data && data.length > 0) {
           return data.map(mapChannelFromDb);
         }
       } catch (err) {
-        console.warn('[ClassSpaceService] getChannels cloud error:', err);
+        if (isQuotaOrDegradedError(err)) markCloudDegraded('HTTP 402 on getChannels');
       }
     }
 
     const local = getLocalData();
     local.channels = ensureDefaultChannelsForWorkspace(workspaceId, local.channels || []);
-    saveLocalData(local);
+    // Cache quiet defaults locally without dispatching mutation event
+    saveLocalDataQuiet(local);
     return (local.channels || [])
       .filter((c) => c.workspaceId === workspaceId)
       .sort((a, b) => a.position - b.position);
@@ -860,10 +998,10 @@ export const classSpaceService = {
       updatedAt: now,
     };
 
-    const supabase = getSupabaseClient();
-    if (supabase && isCloudAvailable() && !isLocalId(workspaceId)) {
+    const firebaseDb = getClassSpaceDataClient();
+    if (firebaseDb && isCloudAvailable() && !isLocalId(workspaceId)) {
       try {
-        const { data, error } = await supabase
+        const { data, error } = await firebaseDb
           .from('class_channels')
           .insert({
             workspace_id: workspaceId,
@@ -899,10 +1037,10 @@ export const classSpaceService = {
     _actingUserId: string,
     channelId: string
   ): Promise<{ success: boolean; error?: string }> {
-    const supabase = getSupabaseClient();
-    if (supabase && isCloudAvailable() && !isLocalId(workspaceId) && !isLocalId(channelId)) {
+    const firebaseDb = getClassSpaceDataClient();
+    if (firebaseDb && isCloudAvailable() && !isLocalId(workspaceId) && !isLocalId(channelId)) {
       try {
-        const { error } = await supabase
+        const { error } = await firebaseDb
           .from('class_channels')
           .delete()
           .eq('id', channelId)
@@ -955,10 +1093,10 @@ export const classSpaceService = {
       return { error: 'Too many invalid attempts. Please wait 60 seconds before trying again.' };
     }
 
-    const supabase = getSupabaseClient();
-    if (supabase && isCloudAvailable() && !isLocalId(user.id) && !user.isSimulated) {
+    const firebaseDb = getClassSpaceDataClient();
+    if (firebaseDb && isCloudAvailable() && !isLocalId(user.id) && !user.isSimulated) {
       try {
-        const { data, error } = await supabase.rpc('request_to_join_workspace', {
+        const { data, error } = await firebaseDb.rpc('request_to_join_workspace', {
           p_join_code: normalized,
           p_display_name: user.name || user.email.split('@')[0],
           p_avatar_url: user.avatarUrl || null,
@@ -977,7 +1115,7 @@ export const classSpaceService = {
           };
         }
       } catch (err) {
-        console.warn('[ClassSpaceService] Supabase requestToJoinWorkspace RPC error:', err);
+        console.warn('[ClassSpaceService] Firebase requestToJoinWorkspace RPC error:', err);
       }
     }
 
@@ -1053,10 +1191,10 @@ export const classSpaceService = {
   },
 
   async getJoinRequests(workspaceId: string): Promise<ClassJoinRequest[]> {
-    const supabase = getSupabaseClient();
-    if (supabase && isCloudAvailable() && !isLocalId(workspaceId)) {
+    const firebaseDb = getClassSpaceDataClient();
+    if (firebaseDb && isCloudAvailable() && !isLocalId(workspaceId)) {
       try {
-        const { data, error } = await supabase
+        const { data, error } = await firebaseDb
           .from('class_join_requests')
           .select('*')
           .eq('workspace_id', workspaceId)
@@ -1081,10 +1219,10 @@ export const classSpaceService = {
     requestId: string,
     action: 'approve' | 'reject'
   ): Promise<{ success: boolean; member?: ClassSpaceMember; error?: string }> {
-    const supabase = getSupabaseClient();
-    if (supabase && isCloudAvailable() && !isLocalId(workspaceId) && !isLocalId(requestId)) {
+    const firebaseDb = getClassSpaceDataClient();
+    if (firebaseDb && isCloudAvailable() && !isLocalId(workspaceId) && !isLocalId(requestId)) {
       try {
-        const { data, error } = await supabase.rpc('review_join_request', {
+        const { data, error } = await firebaseDb.rpc('review_join_request', {
           p_request_id: requestId,
           p_action: action,
         });
@@ -1178,40 +1316,18 @@ export const classSpaceService = {
   // ==========================================================================
 
   async getMembers(workspaceId: string): Promise<ClassSpaceMember[]> {
-    const supabase = getSupabaseClient();
-    if (supabase && isCloudAvailable() && !isLocalId(workspaceId)) {
+    const firebaseDb = getClassSpaceDataClient();
+    if (firebaseDb && isCloudAvailable() && !isLocalId(workspaceId)) {
       try {
-        const { data, error } = await supabase
+        const { data, error } = await firebaseDb
           .from('class_members')
           .select('*')
           .eq('workspace_id', workspaceId);
 
         if (error || !data) return [];
-        const members = data.map(mapMemberFromDb);
-        // Enrich with latest public profiles
-        try {
-          const userIds = members.map((m) => m.userId).filter((id) => !isLocalId(id));
-          if (userIds.length > 0) {
-            const { data: profiles } = await supabase
-              .from('class_profiles')
-              .select('user_id, display_name, avatar_url')
-              .in('user_id', userIds);
-
-            if (profiles && profiles.length > 0) {
-              const profileMap = new Map(profiles.map((p) => [p.user_id, p]));
-              for (const m of members) {
-                const p = profileMap.get(m.userId);
-                if (p) {
-                  if (p.display_name) m.displayName = p.display_name;
-                  if (p.avatar_url) m.avatarUrl = p.avatar_url;
-                }
-              }
-            }
-          }
-        } catch {
-          // Non-blocking enrichment
-        }
-        return members;
+          // Membership rows already carry the class-visible name and avatar.
+          // Keep private profile preferences scoped to their owner.
+          return (data as any[]).map(mapMemberFromDb);
       } catch {
         return [];
       }
@@ -1239,10 +1355,10 @@ export const classSpaceService = {
       return { success: false, error: 'Cannot transfer the CR role to yourself.' };
     }
 
-    const supabase = getSupabaseClient();
-    if (supabase && isCloudAvailable() && !isLocalId(workspaceId)) {
+    const firebaseDb = getClassSpaceDataClient();
+    if (firebaseDb && isCloudAvailable() && !isLocalId(workspaceId)) {
       try {
-        const { data, error } = await supabase.rpc('transfer_cr_role', {
+        const { data, error } = await firebaseDb.rpc('transfer_cr_role', {
           p_workspace_id: workspaceId,
           p_target_user_id: targetUserId,
           p_previous_cr_new_role: previousCRNewRole,
@@ -1308,10 +1424,10 @@ export const classSpaceService = {
     targetUserId: string,
     canPublish: boolean
   ): Promise<{ success: boolean; error?: string }> {
-    const supabase = getSupabaseClient();
-    if (supabase && isCloudAvailable() && !isLocalId(workspaceId)) {
+    const firebaseDb = getClassSpaceDataClient();
+    if (firebaseDb && isCloudAvailable() && !isLocalId(workspaceId)) {
       try {
-        const { data, error } = await supabase.rpc('update_co_admin_notice_permission', {
+        const { data, error } = await firebaseDb.rpc('update_co_admin_notice_permission', {
           p_workspace_id: workspaceId,
           p_target_user_id: targetUserId,
           p_can_publish: canPublish,
@@ -1358,16 +1474,16 @@ export const classSpaceService = {
       return { success: false, error: 'Only the Workspace Owner or CR can assign roles.' };
     }
 
-    const supabase = getSupabaseClient();
+    const firebaseDb = getClassSpaceDataClient();
     if (
-      supabase &&
+      firebaseDb &&
       isCloudAvailable() &&
       !isLocalId(workspaceId) &&
       !isLocalId(actingUserId) &&
       !isLocalId(targetUserId)
     ) {
       try {
-        const { error } = await supabase
+        const { error } = await firebaseDb
           .from('class_members')
           .update({ role: newRole })
           .eq('workspace_id', workspaceId)
@@ -1413,16 +1529,16 @@ export const classSpaceService = {
       return { success: false, error: 'Cannot remove the workspace owner.' };
     }
 
-    const supabase = getSupabaseClient();
+    const firebaseDb = getClassSpaceDataClient();
     if (
-      supabase &&
+      firebaseDb &&
       isCloudAvailable() &&
       !isLocalId(workspaceId) &&
       !isLocalId(actingUserId) &&
       !isLocalId(targetUserId)
     ) {
       try {
-        const { error } = await supabase
+        const { error } = await firebaseDb
           .from('class_members')
           .delete()
           .eq('workspace_id', workspaceId)
@@ -1461,20 +1577,33 @@ export const classSpaceService = {
     rules: ClassTimetableRule[];
     overrides: ClassTimetableOverride[];
   }> {
-    const supabase = getSupabaseClient();
-    if (supabase && isCloudAvailable() && !isLocalId(workspaceId)) {
+    const firebaseDb = getClassSpaceDataClient();
+    if (firebaseDb && isCloudAvailable() && !isLocalId(workspaceId)) {
       try {
         const [rulesRes, overridesRes] = await Promise.all([
-          supabase.from('class_timetable_rules').select('*').eq('workspace_id', workspaceId),
-          supabase.from('class_timetable_overrides').select('*').eq('workspace_id', workspaceId),
+          firebaseDb.from('class_timetable_rules').select('*').eq('workspace_id', workspaceId),
+          firebaseDb.from('class_timetable_overrides').select('*').eq('workspace_id', workspaceId),
         ]);
 
-        return {
+        if (rulesRes.error || overridesRes.error) throw rulesRes.error || overridesRes.error;
+
+        // Keep a local mirror as an offline safety net. Cloud data remains
+        // authoritative when the request succeeds.
+        const result = {
           rules: (rulesRes.data || []).map(mapRuleFromDb),
           overrides: (overridesRes.data || []).map(mapOverrideFromDb),
         };
+        const local = getLocalData();
+        local.rules = local.rules.filter((r) => r.workspaceId !== workspaceId).concat(result.rules);
+        local.overrides = local.overrides.filter((o) => o.workspaceId !== workspaceId).concat(result.overrides);
+        saveLocalDataQuiet(local);
+        return result;
       } catch {
-        return { rules: [], overrides: [] };
+        const local = getLocalData();
+        return {
+          rules: local.rules.filter((r) => r.workspaceId === workspaceId),
+          overrides: local.overrides.filter((o) => o.workspaceId === workspaceId),
+        };
       }
     }
 
@@ -1503,10 +1632,10 @@ export const classSpaceService = {
       updatedAt: now,
     };
 
-    const supabase = getSupabaseClient();
-    if (supabase && isCloudAvailable() && !isLocalId(workspaceId) && !isLocalId(rule.createdBy)) {
+    const firebaseDb = getClassSpaceDataClient();
+    if (firebaseDb && isCloudAvailable() && !isLocalId(workspaceId) && !isLocalId(rule.createdBy)) {
       try {
-        const { data, error } = await supabase
+        const { data, error } = await firebaseDb
           .from('class_timetable_rules')
           .insert({
             workspace_id: workspaceId,
@@ -1524,10 +1653,18 @@ export const classSpaceService = {
           .select()
           .single();
 
-        if (error) return { error: error.message };
+        if (error) {
+          const local = getLocalData();
+          local.rules.push(newRule);
+          saveLocalData(local);
+          return { rule: newRule, error: `Saved on this device, but Firebase could not sync it: ${error.message}` };
+        }
         return { rule: mapRuleFromDb(data) };
       } catch (err) {
-        return { error: (err as Error).message };
+        const local = getLocalData();
+        local.rules.push(newRule);
+        saveLocalData(local);
+        return { rule: newRule, error: `Saved on this device, but Firebase could not sync it: ${(err as Error).message}` };
       }
     }
 
@@ -1548,10 +1685,10 @@ export const classSpaceService = {
       return { success: false, error: 'Unauthorized: Only Owner, CR or Co-Admin can update recurring class rules.' };
     }
 
-    const supabase = getSupabaseClient();
-    if (supabase && isCloudAvailable() && !isLocalId(workspaceId) && !isLocalId(ruleId)) {
+    const firebaseDb = getClassSpaceDataClient();
+    if (firebaseDb && isCloudAvailable() && !isLocalId(workspaceId) && !isLocalId(ruleId)) {
       try {
-        const { error } = await supabase
+        const { data, error } = await firebaseDb
           .from('class_timetable_rules')
           .update({
             subject_name: updates.subjectName,
@@ -1566,12 +1703,28 @@ export const classSpaceService = {
             updated_at: new Date().toISOString(),
           })
           .eq('id', ruleId)
-          .eq('workspace_id', workspaceId);
+          .eq('workspace_id', workspaceId)
+          .select('id')
+          .maybeSingle();
 
-        if (error) return { success: false, error: error.message };
+        if (error || !data) {
+          const local = getLocalData();
+          const existing = local.rules.find((r) => r.id === ruleId && r.workspaceId === workspaceId);
+          if (existing) {
+            Object.assign(existing, updates, { updatedAt: new Date().toISOString() });
+            saveLocalData(local);
+          }
+          return { success: Boolean(existing), error: `Saved on this device, but Firebase could not sync it: ${error?.message || 'No matching class or edit access.'}` };
+        }
         return { success: true };
       } catch (err) {
-        return { success: false, error: (err as Error).message };
+        const local = getLocalData();
+        const existing = local.rules.find((r) => r.id === ruleId && r.workspaceId === workspaceId);
+        if (existing) {
+          Object.assign(existing, updates, { updatedAt: new Date().toISOString() });
+          saveLocalData(local);
+        }
+        return { success: Boolean(existing), error: `Saved on this device, but Firebase could not sync it: ${(err as Error).message}` };
       }
     }
 
@@ -1593,16 +1746,19 @@ export const classSpaceService = {
       return { success: false, error: 'Unauthorized: Only Owner, CR or Co-Admin can delete class rules.' };
     }
 
-    const supabase = getSupabaseClient();
-    if (supabase && isCloudAvailable() && !isLocalId(workspaceId) && !isLocalId(ruleId)) {
+    const firebaseDb = getClassSpaceDataClient();
+    if (firebaseDb && isCloudAvailable() && !isLocalId(workspaceId) && !isLocalId(ruleId)) {
       try {
-        const { error } = await supabase
+        const { data, error } = await firebaseDb
           .from('class_timetable_rules')
           .delete()
           .eq('id', ruleId)
-          .eq('workspace_id', workspaceId);
+          .eq('workspace_id', workspaceId)
+          .select('id')
+          .maybeSingle();
 
         if (error) return { success: false, error: error.message };
+        if (!data) return { success: false, error: 'Class was not deleted. Check your ClassSpace schedule permissions and try again.' };
         return { success: true };
       } catch (err) {
         return { success: false, error: (err as Error).message };
@@ -1632,16 +1788,16 @@ export const classSpaceService = {
       createdAt: now,
     };
 
-    const supabase = getSupabaseClient();
+    const firebaseDb = getClassSpaceDataClient();
     if (
-      supabase &&
+      firebaseDb &&
       isCloudAvailable() &&
       !isLocalId(workspaceId) &&
       (!override.ruleId || !isLocalId(override.ruleId)) &&
       !isLocalId(override.createdBy)
     ) {
       try {
-        const { data, error } = await supabase
+        const { data, error } = await firebaseDb
           .from('class_timetable_overrides')
           .insert({
             workspace_id: workspaceId,
@@ -1685,10 +1841,10 @@ export const classSpaceService = {
       return { success: false, error: 'Unauthorized: Only Owner, CR or Co-Admin can restore or revert overrides.' };
     }
 
-    const supabase = getSupabaseClient();
-    if (supabase && isCloudAvailable() && !isLocalId(workspaceId) && !isLocalId(overrideId)) {
+    const firebaseDb = getClassSpaceDataClient();
+    if (firebaseDb && isCloudAvailable() && !isLocalId(workspaceId) && !isLocalId(overrideId)) {
       try {
-        const { error } = await supabase
+        const { error } = await firebaseDb
           .from('class_timetable_overrides')
           .delete()
           .eq('id', overrideId)
@@ -1712,19 +1868,34 @@ export const classSpaceService = {
   // ==========================================================================
 
   async getAttendanceRecords(workspaceId: string, userId: string): Promise<ClassAttendanceRecord[]> {
-    const supabase = getSupabaseClient();
-    if (supabase && isCloudAvailable() && !isLocalId(workspaceId) && !isLocalId(userId)) {
+    const firebaseDb = getClassSpaceDataClient();
+    if (firebaseDb && isCloudAvailable() && !isLocalId(workspaceId) && !isLocalId(userId)) {
       try {
-        const { data, error } = await supabase
+        const { data, error } = await firebaseDb
           .from('class_attendance_records')
           .select('*')
           .eq('workspace_id', workspaceId)
           .eq('user_id', userId);
 
-        if (error || !data) return [];
-        return data.map(mapAttendanceFromDb);
+        if (!error && data) {
+          const local = getLocalData();
+          const cloudRecords: ClassAttendanceRecord[] = data.map(mapAttendanceFromDb);
+          // Keep local-only marks too: they may have been created while Firebase
+          // rejected a write. Cloud records win when both contain the same class.
+          const recordByOccurrence = new Map<string, ClassAttendanceRecord>();
+          local.attendanceRecords
+            .filter((a) => a.workspaceId === workspaceId && a.userId === userId)
+            .forEach((record) => recordByOccurrence.set(record.occurrenceKey, record));
+          cloudRecords.forEach((record) => recordByOccurrence.set(record.occurrenceKey, record));
+          const records = Array.from(recordByOccurrence.values());
+          local.attendanceRecords = local.attendanceRecords.filter(
+            (a) => !(a.workspaceId === workspaceId && a.userId === userId)
+          ).concat(records);
+          saveLocalDataQuiet(local);
+          return records;
+        }
       } catch {
-        return [];
+        // Fall through to the on-device copy below.
       }
     }
 
@@ -1743,10 +1914,10 @@ export const classSpaceService = {
   ): Promise<{ record?: ClassAttendanceRecord; error?: string }> {
     const now = new Date().toISOString();
 
-    const supabase = getSupabaseClient();
-    if (supabase && isCloudAvailable() && !isLocalId(workspaceId) && !isLocalId(userId)) {
+    const firebaseDb = getClassSpaceDataClient();
+    if (firebaseDb && isCloudAvailable() && !isLocalId(workspaceId) && !isLocalId(userId)) {
       try {
-        const { data, error } = await supabase
+        const { data, error } = await firebaseDb
           .from('class_attendance_records')
           .upsert({
             workspace_id: workspaceId,
@@ -1759,81 +1930,168 @@ export const classSpaceService = {
           .select()
           .single();
 
-        if (error) return { error: error.message };
-        return { record: mapAttendanceFromDb(data) };
+        if (error) {
+          const record = saveAttendanceLocally(workspaceId, userId, occurrenceKey, date, status, now);
+          return { record, error: `Saved on this device, but Firebase could not sync it: ${error.message}` };
+        }
+        const record = mapAttendanceFromDb(data);
+        // Mirror the successful cloud save locally so temporary read outages
+        // never make the calendar appear blank on this device.
+        saveAttendanceLocally(workspaceId, userId, occurrenceKey, date, status, now);
+        return { record };
       } catch (err) {
-        return { error: (err as Error).message };
+        const record = saveAttendanceLocally(workspaceId, userId, occurrenceKey, date, status, now);
+        return { record, error: `Saved on this device, but Firebase could not sync it: ${(err as Error).message}` };
       }
     }
-
-    const local = getLocalData();
-    let existing = local.attendanceRecords.find(
-      (a) => a.workspaceId === workspaceId && a.userId === userId && a.occurrenceKey === occurrenceKey
-    );
-
-    if (existing) {
-      existing.status = status;
-      existing.updatedAt = now;
-    } else {
-      existing = {
-        id: 'att_' + Math.random().toString(36).substring(2, 11),
-        workspaceId,
-        userId,
-        occurrenceKey,
-        date,
-        status,
-        createdAt: now,
-        updatedAt: now,
-      };
-      local.attendanceRecords.push(existing);
-    }
-
-    saveLocalData(local);
-    return { record: existing };
+    return { record: saveAttendanceLocally(workspaceId, userId, occurrenceKey, date, status, now) };
   },
 
   // ==========================================================================
   // COMMUNITY CHAT MESSAGES & REACTIONS
   // ==========================================================================
 
-  async getMessages(workspaceId: string): Promise<ClassMessage[]> {
-    const supabase = getSupabaseClient();
-    if (supabase && isCloudAvailable() && !isLocalId(workspaceId)) {
+  async getMessages(workspaceId: string, limitCount: number = 50): Promise<ClassMessage[]> {
+    const firebaseDb = getClassSpaceDataClient();
+    if (firebaseDb && isCloudAvailable() && !isLocalId(workspaceId)) {
       try {
-        const { data: msgRows, error: mErr } = await supabase
+        const { data: msgRows, error: mErr } = await firebaseDb
           .from('class_messages')
           .select('*')
           .eq('workspace_id', workspaceId)
-          .order('created_at', { ascending: true });
+          .order('created_at', { ascending: false })
+          .limit(limitCount);
 
-        if (mErr || !msgRows) return [];
+        if (mErr) {
+          if (isQuotaOrDegradedError(mErr)) markCloudDegraded('HTTP 402 on getMessages');
+          return [];
+        }
+        if (!msgRows) return [];
 
-        const msgIds = msgRows.map((m: { id: string }) => m.id);
-        const { data: reactionsData } = await supabase
-          .from('class_message_reactions')
-          .select('*')
-          .in('message_id', msgIds);
+        // Return chronological order (oldest to newest for chat feed)
+        const orderedRows = [...msgRows].reverse();
+        const msgIds = orderedRows.map((m: { id: string }) => m.id);
+        let reactionsData: any[] = [];
+        if (msgIds.length > 0) {
+          const { data, error: rErr } = await firebaseDb
+            .from('class_message_reactions')
+            .select('*')
+            .in('message_id', msgIds);
+          if (!rErr && data) reactionsData = data;
+        }
 
         // Group reactions
         const reactionMap = new Map<string, Record<string, string[]>>();
-        for (const r of reactionsData || []) {
+        for (const r of reactionsData) {
           if (!reactionMap.has(r.message_id)) reactionMap.set(r.message_id, {});
           const obj = reactionMap.get(r.message_id)!;
           if (!obj[r.emoji]) obj[r.emoji] = [];
           obj[r.emoji].push(r.user_id);
         }
 
-        return msgRows.map((m: any) => ({
+        return orderedRows.map((m: any) => ({
           ...mapMessageFromDb(m),
           reactions: reactionMap.get(m.id) || {},
         }));
-      } catch {
+      } catch (err) {
+        if (isQuotaOrDegradedError(err)) markCloudDegraded('HTTP 402 on getMessages');
         return [];
       }
     }
 
     const local = getLocalData();
-    return local.messages.filter((m) => m.workspaceId === workspaceId);
+    const wsMsgs = (local.messages || [])
+      .filter((m) => m.workspaceId === workspaceId)
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    return wsMsgs.slice(-limitCount);
+  },
+
+  async getOlderMessages(
+    workspaceId: string,
+    beforeCreatedAt: string,
+    beforeId?: string,
+    limitCount: number = 50
+  ): Promise<ClassMessage[]> {
+    const firebaseDb = getClassSpaceDataClient();
+    if (firebaseDb && isCloudAvailable() && !isLocalId(workspaceId)) {
+      try {
+        // Use lte to include messages sharing the exact same timestamp millisecond.
+        // Fetch slightly extra (limitCount + 10) to account for rows skipped by the beforeId tie-breaker.
+        const { data: msgRows, error: mErr } = await firebaseDb
+          .from('class_messages')
+          .select('*')
+          .eq('workspace_id', workspaceId)
+          .lte('created_at', beforeCreatedAt)
+          .order('created_at', { ascending: false })
+          .limit(limitCount + 10);
+
+        if (mErr) {
+          if (isQuotaOrDegradedError(mErr)) markCloudDegraded('HTTP 402 on getOlderMessages');
+          return [];
+        }
+        if (!msgRows) return [];
+
+        // Composite cursor filtering (descending order):
+        // strictly older if created_at < beforeCreatedAt OR (created_at === beforeCreatedAt && id < beforeId)
+        const filteredRows = msgRows
+          .filter((m: any) => {
+            if (m.created_at < beforeCreatedAt) return true;
+            if (m.created_at === beforeCreatedAt) {
+              if (!beforeId) return false;
+              return m.id < beforeId;
+            }
+            return false;
+          })
+          .slice(0, limitCount);
+
+        const orderedRows = [...filteredRows].reverse();
+        const msgIds = orderedRows.map((m: { id: string }) => m.id);
+        let reactionsData: any[] = [];
+        if (msgIds.length > 0) {
+          const { data, error: rErr } = await firebaseDb
+            .from('class_message_reactions')
+            .select('*')
+            .in('message_id', msgIds);
+          if (!rErr && data) reactionsData = data;
+        }
+
+        const reactionMap = new Map<string, Record<string, string[]>>();
+        for (const r of reactionsData) {
+          if (!reactionMap.has(r.message_id)) reactionMap.set(r.message_id, {});
+          const obj = reactionMap.get(r.message_id)!;
+          if (!obj[r.emoji]) obj[r.emoji] = [];
+          obj[r.emoji].push(r.user_id);
+        }
+
+        return orderedRows.map((m: any) => ({
+          ...mapMessageFromDb(m),
+          reactions: reactionMap.get(m.id) || {},
+        }));
+      } catch (err) {
+        if (isQuotaOrDegradedError(err)) markCloudDegraded('HTTP 402 on getOlderMessages');
+        return [];
+      }
+    }
+
+    const local = getLocalData();
+    const targetMs = new Date(beforeCreatedAt).getTime();
+    const wsMsgs = (local.messages || [])
+      .filter((m) => {
+        if (m.workspaceId !== workspaceId) return false;
+        const mTime = new Date(m.createdAt).getTime();
+        if (mTime < targetMs) return true;
+        if (mTime === targetMs) {
+          if (!beforeId) return false;
+          return m.id < beforeId;
+        }
+        return false;
+      })
+      .sort((a, b) => {
+        const timeDiff = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+        if (timeDiff !== 0) return timeDiff;
+        return a.id.localeCompare(b.id);
+      });
+    return wsMsgs.slice(-limitCount);
   },
 
   async sendMessage(
@@ -1885,16 +2143,16 @@ export const classSpaceService = {
       updatedAt: now,
     };
 
-    const supabase = getSupabaseClient();
+    const firebaseDb = getClassSpaceDataClient();
     if (
-      supabase &&
+      firebaseDb &&
       isCloudAvailable() &&
       !isLocalId(workspaceId) &&
       !isLocalId(sender.id) &&
       (!replyTo?.id || !isLocalId(replyTo.id))
     ) {
       try {
-        const { data, error } = await supabase
+        const { data, error } = await firebaseDb
           .from('class_messages')
           .insert({
             workspace_id: workspaceId,
@@ -2051,16 +2309,16 @@ export const classSpaceService = {
     msg.updatedAt = new Date().toISOString();
     saveLocalData(local);
 
-    const supabase = getSupabaseClient();
+    const firebaseDb = getClassSpaceDataClient();
     if (
-      supabase &&
+      firebaseDb &&
       isCloudAvailable() &&
       !isLocalId(workspaceId) &&
       !isLocalId(messageId) &&
       !isLocalId(userId)
     ) {
       try {
-        await supabase
+        await firebaseDb
           .from('class_messages')
           .update({ poll, updated_at: msg.updatedAt })
           .eq('id', messageId);
@@ -2098,16 +2356,16 @@ export const classSpaceService = {
     msg.updatedAt = new Date().toISOString();
     saveLocalData(local);
 
-    const supabase = getSupabaseClient();
+    const firebaseDb = getClassSpaceDataClient();
     if (
-      supabase &&
+      firebaseDb &&
       isCloudAvailable() &&
       !isLocalId(workspaceId) &&
       !isLocalId(messageId) &&
       !isLocalId(actorUserId)
     ) {
       try {
-        await supabase
+        await firebaseDb
           .from('class_messages')
           .update({ poll: msg.poll, updated_at: msg.updatedAt })
           .eq('id', messageId);
@@ -2156,10 +2414,10 @@ export const classSpaceService = {
     userId: string,
     emoji: string
   ): Promise<{ success: boolean; error?: string }> {
-    const supabase = getSupabaseClient();
-    if (supabase && isCloudAvailable() && !isLocalId(messageId) && !isLocalId(userId)) {
+    const firebaseDb = getClassSpaceDataClient();
+    if (firebaseDb && isCloudAvailable() && !isLocalId(messageId) && !isLocalId(userId)) {
       try {
-        const { error } = await supabase
+        const { error } = await firebaseDb
           .from('class_message_reactions')
           .insert({ message_id: messageId, user_id: userId, emoji });
 
@@ -2189,10 +2447,10 @@ export const classSpaceService = {
     userId: string,
     emoji: string
   ): Promise<{ success: boolean }> {
-    const supabase = getSupabaseClient();
-    if (supabase && isCloudAvailable() && !isLocalId(messageId) && !isLocalId(userId)) {
+    const firebaseDb = getClassSpaceDataClient();
+    if (firebaseDb && isCloudAvailable() && !isLocalId(messageId) && !isLocalId(userId)) {
       try {
-        await supabase
+        await firebaseDb
           .from('class_message_reactions')
           .delete()
           .eq('message_id', messageId)
@@ -2221,10 +2479,10 @@ export const classSpaceService = {
   ): Promise<{ success: boolean; error?: string }> {
     if (!newContent.trim()) return { success: false, error: 'Message cannot be empty.' };
 
-    const supabase = getSupabaseClient();
-    if (supabase && isCloudAvailable() && !isLocalId(messageId) && !isLocalId(userId)) {
+    const firebaseDb = getClassSpaceDataClient();
+    if (firebaseDb && isCloudAvailable() && !isLocalId(messageId) && !isLocalId(userId)) {
       try {
-        const { error } = await supabase
+        const { error } = await firebaseDb
           .from('class_messages')
           .update({ content: newContent.trim(), is_edited: true, updated_at: new Date().toISOString() })
           .eq('id', messageId)
@@ -2257,16 +2515,16 @@ export const classSpaceService = {
   ): Promise<{ success: boolean; error?: string }> {
     const isCRorAdmin = actorRole === 'cr' || actorRole === 'co_admin';
 
-    const supabase = getSupabaseClient();
+    const firebaseDb = getClassSpaceDataClient();
     if (
-      supabase &&
+      firebaseDb &&
       isCloudAvailable() &&
       !isLocalId(workspaceId) &&
       !isLocalId(messageId) &&
       !isLocalId(actorUserId)
     ) {
       try {
-        let query = supabase.from('class_messages').update({
+        let query = firebaseDb.from('class_messages').update({
           is_deleted: true,
           content: 'This message was deleted.',
           updated_at: new Date().toISOString(),
@@ -2313,10 +2571,10 @@ export const classSpaceService = {
 
     const newPinned = !msg.isPinned;
 
-    const supabase = getSupabaseClient();
-    if (supabase && isCloudAvailable() && !isLocalId(workspaceId) && !isLocalId(messageId)) {
+    const firebaseDb = getClassSpaceDataClient();
+    if (firebaseDb && isCloudAvailable() && !isLocalId(workspaceId) && !isLocalId(messageId)) {
       try {
-        const { error } = await supabase
+        const { error } = await firebaseDb
           .from('class_messages')
           .update({ is_pinned: newPinned })
           .eq('id', messageId);
@@ -2368,10 +2626,10 @@ export const classSpaceService = {
   // ==========================================================================
 
   async getSavedMessages(workspaceId: string, userId: string): Promise<ClassSavedMessage[]> {
-    const supabase = getSupabaseClient();
-    if (supabase && isCloudAvailable() && !isLocalId(workspaceId) && !isLocalId(userId)) {
+    const firebaseDb = getClassSpaceDataClient();
+    if (firebaseDb && isCloudAvailable() && !isLocalId(workspaceId) && !isLocalId(userId)) {
       try {
-        const { data } = await supabase
+        const { data } = await firebaseDb
           .from('class_saved_messages')
           .select('*')
           .eq('workspace_id', workspaceId)
@@ -2398,9 +2656,9 @@ export const classSpaceService = {
 
     const isAlreadySaved = existingIndex >= 0;
 
-    const supabase = getSupabaseClient();
+    const firebaseDb = getClassSpaceDataClient();
     if (
-      supabase &&
+      firebaseDb &&
       isCloudAvailable() &&
       !isLocalId(workspaceId) &&
       !isLocalId(userId) &&
@@ -2408,7 +2666,7 @@ export const classSpaceService = {
     ) {
       try {
         if (isAlreadySaved) {
-          await supabase
+          await firebaseDb
             .from('class_saved_messages')
             .delete()
             .eq('workspace_id', workspaceId)
@@ -2416,7 +2674,7 @@ export const classSpaceService = {
             .eq('message_id', messageId);
           return { isSaved: false };
         } else {
-          await supabase
+          await firebaseDb
             .from('class_saved_messages')
             .insert({ workspace_id: workspaceId, user_id: userId, message_id: messageId });
           return { isSaved: true };
@@ -2447,10 +2705,10 @@ export const classSpaceService = {
   // ==========================================================================
 
   async getNotifications(workspaceId: string, userId: string): Promise<ClassNotification[]> {
-    const supabase = getSupabaseClient();
-    if (supabase && isCloudAvailable() && !isLocalId(workspaceId) && !isLocalId(userId)) {
+    const firebaseDb = getClassSpaceDataClient();
+    if (firebaseDb && isCloudAvailable() && !isLocalId(workspaceId) && !isLocalId(userId)) {
       try {
-        const { data } = await supabase
+        const { data } = await firebaseDb
           .from('class_notifications')
           .select('*')
           .eq('workspace_id', workspaceId)
@@ -2470,10 +2728,10 @@ export const classSpaceService = {
   },
 
   async markNotificationRead(notificationId: string): Promise<void> {
-    const supabase = getSupabaseClient();
-    if (supabase && isCloudAvailable() && !isLocalId(notificationId)) {
+    const firebaseDb = getClassSpaceDataClient();
+    if (firebaseDb && isCloudAvailable() && !isLocalId(notificationId)) {
       try {
-        await supabase
+        await firebaseDb
           .from('class_notifications')
           .update({ is_read: true })
           .eq('id', notificationId);
@@ -2491,10 +2749,10 @@ export const classSpaceService = {
   },
 
   async markAllNotificationsRead(workspaceId: string, userId: string): Promise<void> {
-    const supabase = getSupabaseClient();
-    if (supabase && isCloudAvailable() && !isLocalId(workspaceId) && !isLocalId(userId)) {
+    const firebaseDb = getClassSpaceDataClient();
+    if (firebaseDb && isCloudAvailable() && !isLocalId(workspaceId) && !isLocalId(userId)) {
       try {
-        await supabase
+        await firebaseDb
           .from('class_notifications')
           .update({ is_read: true })
           .eq('workspace_id', workspaceId)
@@ -2534,9 +2792,9 @@ export const classSpaceService = {
       createdAt: now,
     }));
 
-    const supabase = getSupabaseClient();
+    const firebaseDb = getClassSpaceDataClient();
     if (
-      supabase &&
+      firebaseDb &&
       isCloudAvailable() &&
       !isLocalId(workspaceId) &&
       !isLocalId(originatorUserId) &&
@@ -2544,7 +2802,7 @@ export const classSpaceService = {
       !newNotifs.some((n) => isLocalId(n.userId))
     ) {
       try {
-        await supabase.from('class_notifications').insert(
+        await firebaseDb.from('class_notifications').insert(
           newNotifs.map((n) => ({
             workspace_id: n.workspaceId,
             user_id: n.userId,
@@ -2553,6 +2811,7 @@ export const classSpaceService = {
             type: n.type,
             is_read: false,
             link_occurrence_id: n.linkOccurrenceId,
+            created_by: originatorUserId,
           }))
         );
         return;
@@ -2571,6 +2830,11 @@ export const classSpaceService = {
   // ==========================================================================
 
   async getUserProfile(userId: string): Promise<ClassUserProfile> {
+    const cached = profileMemoryCache.get(userId);
+    if (cached && Date.now() - cached.cachedAt < PROFILE_CACHE_TTL_MS) {
+      return cached.profile;
+    }
+
     const defaultProfile: ClassUserProfile = {
       userId,
       displayName: 'Student',
@@ -2582,30 +2846,45 @@ export const classSpaceService = {
       },
     };
 
-    const supabase = getSupabaseClient();
-    if (supabase && isCloudAvailable() && !isLocalId(userId)) {
+    if (isLocalId(userId)) {
+      const local = getLocalData();
+      const prof = local.profiles[userId] || defaultProfile;
+      profileMemoryCache.set(userId, { profile: prof, cachedAt: Date.now() });
+      return prof;
+    }
+
+    const firebaseDb = getClassSpaceDataClient();
+    if (firebaseDb && isCloudAvailable() && !isLocalId(userId)) {
       try {
-        const { data } = await supabase
+        const { data, error } = await firebaseDb
           .from('class_profiles')
           .select('*')
           .eq('user_id', userId)
           .single();
 
-        if (data) {
-          return {
+        if (error && isQuotaOrDegradedError(error)) {
+          markCloudDegraded('HTTP 402 on getUserProfile');
+        } else if (data) {
+          const prof: ClassUserProfile = {
             userId: data.user_id,
             displayName: data.display_name,
             avatarUrl: data.avatar_url,
             notificationPreferences: data.notification_preferences || defaultProfile.notificationPreferences,
           };
+          profileMemoryCache.set(userId, { profile: prof, cachedAt: Date.now() });
+          return prof;
         }
-      } catch {
-        // Fallback
+      } catch (err) {
+        if (isQuotaOrDegradedError(err)) {
+          markCloudDegraded('HTTP 402 on getUserProfile');
+        }
       }
     }
 
     const local = getLocalData();
-    return local.profiles[userId] || defaultProfile;
+    const prof = local.profiles[userId] || defaultProfile;
+    profileMemoryCache.set(userId, { profile: prof, cachedAt: Date.now() });
+    return prof;
   },
 
   async updateUserProfile(
@@ -2622,10 +2901,10 @@ export const classSpaceService = {
       },
     };
 
-    const supabase = getSupabaseClient();
-    if (supabase && isCloudAvailable() && !isLocalId(userId)) {
+    const firebaseDb = getClassSpaceDataClient();
+    if (firebaseDb && isCloudAvailable() && !isLocalId(userId)) {
       try {
-        const { error } = await supabase
+        const { error } = await firebaseDb
           .from('class_profiles')
           .upsert({
             user_id: userId,
@@ -2639,7 +2918,7 @@ export const classSpaceService = {
 
         // Synchronize display_name and avatar_url to class_members to trigger live Realtime updates
         try {
-          await supabase
+          await firebaseDb
             .from('class_members')
             .update({
               display_name: updated.displayName,
@@ -2656,6 +2935,7 @@ export const classSpaceService = {
 
     const local = getLocalData();
     local.profiles[userId] = updated;
+    profileMemoryCache.set(userId, { profile: updated, cachedAt: Date.now() });
     // Update matching members
     for (const m of local.members) {
       if (m.userId === userId) {
@@ -2678,37 +2958,34 @@ export const classSpaceService = {
     return { profile: updated };
   },
 
-  async uploadAvatar(
-    userId: string,
-    file: File
-  ): Promise<{ avatarUrl?: string; error?: string }> {
-    const supabase = getSupabaseClient();
-    if (supabase && isCloudAvailable() && !isLocalId(userId)) {
+  async uploadAvatar(userId: string, file: File): Promise<{ avatarUrl?: string; error?: string }> {
+    if (isLocalId(userId)) {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve({ avatarUrl: reader.result as string });
+        reader.onerror = () => resolve({ error: 'Failed to read avatar file locally' });
+        reader.readAsDataURL(file);
+      });
+    }
+
+    const firebaseDb = getClassSpaceDataClient();
+    if (firebaseDb?.storage) {
       try {
-        const fileExt = file.name.split('.').pop() || 'png';
-        const filePath = `${userId}/avatar_${Date.now()}.${fileExt}`;
-
-        const { error: uploadError } = await supabase.storage
-          .from('classspace-avatars')
-          .upload(filePath, file, { upsert: true });
-
-        if (uploadError) return { error: uploadError.message };
-
-        const { data } = supabase.storage
-          .from('classspace-avatars')
-          .getPublicUrl(filePath);
-
-        return { avatarUrl: data.publicUrl };
-      } catch (err) {
-        return { error: (err as Error).message };
+        const ext = file.name.split('.').pop() || 'png';
+        const path = `${userId}/avatar.${ext}`;
+        const { error } = await firebaseDb.storage.from('avatars').upload(path, file, { upsert: true });
+        if (error) return { error: error.message };
+        const { data: pubData } = firebaseDb.storage.from('avatars').getPublicUrl(path);
+        return { avatarUrl: pubData?.publicUrl || '' };
+      } catch (err: any) {
+        return { error: err?.message || 'Avatar upload failed' };
       }
     }
 
-    // Local DataURL fallback
     return new Promise((resolve) => {
       const reader = new FileReader();
       reader.onload = () => resolve({ avatarUrl: reader.result as string });
-      reader.onerror = () => resolve({ error: 'Failed to read avatar file.' });
+      reader.onerror = () => resolve({ error: 'Failed to read avatar file locally' });
       reader.readAsDataURL(file);
     });
   },
@@ -2718,13 +2995,16 @@ export const classSpaceService = {
   // ==========================================================================
 
   subscribeToWorkspace(workspaceId: string, onUpdate: () => void): () => void {
-    const supabase = getSupabaseClient();
-    let supabaseChannel: any = null;
+    const firebaseDb = getClassSpaceDataClient();
+    let firebaseDbChannel: any = null;
+    let cleanupChannelDiag: (() => void) | null = null;
 
-    if (supabase && isCloudAvailable() && !isLocalId(workspaceId)) {
+    if (firebaseDb && isCloudAvailable() && !isLocalId(workspaceId)) {
+      const channelTopic = `classspace:${workspaceId}`;
+      cleanupChannelDiag = recordChannelSubscribed(channelTopic);
       try {
-        supabaseChannel = supabase
-          .channel(`classspace:${workspaceId}`)
+        firebaseDbChannel = firebaseDb
+          .channel(channelTopic)
           .on(
             'postgres_changes',
             { event: '*', schema: 'public', table: 'class_messages', filter: `workspace_id=eq.${workspaceId}` },
@@ -2755,37 +3035,31 @@ export const classSpaceService = {
             { event: '*', schema: 'public', table: 'class_notifications', filter: `workspace_id=eq.${workspaceId}` },
             () => onUpdate()
           )
-          .on(
-            'postgres_changes',
-            { event: '*', schema: 'public', table: 'class_profiles' },
-            () => onUpdate()
-          )
           .subscribe();
       } catch (err) {
         console.warn('[ClassSpaceService] Realtime subscription error:', err);
       }
     }
 
-    // Cross-tab local storage update listener
+    // Cross-tab storage update listener (only receives events dispatched from other browser tabs)
     const storageHandler = () => onUpdate();
     if (typeof window !== 'undefined') {
-      window.addEventListener('tracker_classspace_updated', storageHandler);
       window.addEventListener('storage', storageHandler);
     }
 
-    // Gentle fallback heartbeat polling (every 60 seconds, only when tab is visible)
+    // Gentle fallback heartbeat polling (every 60 seconds, only when tab is visible and cloud is available)
     let pollInterval: any = null;
     let visibilityHandler: any = null;
 
     if (typeof document !== 'undefined' && typeof window !== 'undefined') {
       pollInterval = setInterval(() => {
-        if (document.visibilityState === 'visible') {
+        if (document.visibilityState === 'visible' && isCloudAvailable()) {
           onUpdate();
         }
       }, 60000);
 
       visibilityHandler = () => {
-        if (document.visibilityState === 'visible') {
+        if (document.visibilityState === 'visible' && isCloudAvailable()) {
           onUpdate();
         }
       };
@@ -2793,15 +3067,17 @@ export const classSpaceService = {
     }
 
     return () => {
-      if (supabase && supabaseChannel) {
+      if (cleanupChannelDiag) {
+        cleanupChannelDiag();
+      }
+      if (firebaseDb && firebaseDbChannel) {
         try {
-          supabase.removeChannel(supabaseChannel);
+          firebaseDb.removeChannel(firebaseDbChannel);
         } catch {
           // Ignore cleanup error
         }
       }
       if (typeof window !== 'undefined') {
-        window.removeEventListener('tracker_classspace_updated', storageHandler);
         window.removeEventListener('storage', storageHandler);
       }
       if (pollInterval) clearInterval(pollInterval);
@@ -2831,6 +3107,7 @@ function mapWorkspaceFromDb(row: any): ClassSpaceWorkspace {
     createdBy: row.created_by,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    academicCalendar: row.academic_calendar || undefined,
   };
 }
 

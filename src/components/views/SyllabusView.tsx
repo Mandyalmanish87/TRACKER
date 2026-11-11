@@ -22,6 +22,7 @@ import { ConfirmModal } from '../common/ConfirmModal';
 import { GptSyllabusImportModal } from '../syllabus/GptSyllabusImportModal';
 import { TaskModal } from '../planner/TaskModal';
 import { hasActiveReviewForTopic, DEFAULT_REVIEW_INTERVALS } from '../../utils/spacedRepetitionUtils';
+import { getActiveAccentColor } from '../../utils/themeColors';
 
 export interface SyllabusViewProps {
   onNavigateToPlanner?: () => void;
@@ -323,9 +324,9 @@ export const SyllabusView: React.FC<SyllabusViewProps> = ({ onNavigateToPlanner 
   };
 
   return (
-    <div className="space-y-6 pb-20">
+    <div className="study-workspace space-y-6 pb-20">
       {/* ── Header ── */}
-      <div className="border-b border-ivory-300 dark:border-espresso-800 pb-6">
+      <div className="study-page-hero border-b border-ivory-300 dark:border-espresso-800 pb-6">
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
           <div>
             <span className="text-xs font-mono font-semibold uppercase tracking-wider text-terracotta-600 dark:text-terracotta-400">
@@ -360,7 +361,7 @@ export const SyllabusView: React.FC<SyllabusViewProps> = ({ onNavigateToPlanner 
       </div>
 
       {/* ── Overall Progress Summary Card ── */}
-      <div className="p-6 rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 shadow-subtle">
+      <div className="study-overview-panel p-6 rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 shadow-subtle">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="space-y-1.5">
             <div className="flex items-center gap-2">
@@ -380,21 +381,21 @@ export const SyllabusView: React.FC<SyllabusViewProps> = ({ onNavigateToPlanner 
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
-            <div className="px-4 py-2.5 rounded-xl bg-ivory-100 dark:bg-espresso-800 border border-ivory-200 dark:border-espresso-700">
-              <span className="block font-serif text-xl font-bold text-espresso-950 dark:text-ivory-50">{overallStats.total}</span>
-              <span className="text-[10px] font-mono uppercase tracking-wider text-espresso-400">Total Topics</span>
+            <div className="study-progress-metric study-progress-total px-4 py-2.5 rounded-xl bg-ivory-100 dark:bg-espresso-800 border border-ivory-200 dark:border-espresso-700">
+              <span className="study-progress-number block font-serif text-xl font-bold text-espresso-950 dark:text-ivory-50">{overallStats.total}</span>
+              <span className="study-progress-label text-[10px] font-mono uppercase tracking-wider text-espresso-400">Total Topics</span>
             </div>
-            <div className="px-4 py-2.5 rounded-xl bg-sage-50 dark:bg-sage-900/30 border border-sage-200 dark:border-sage-800/40">
-              <span className="block font-serif text-xl font-bold text-sage-600 dark:text-sage-400">{overallStats.done}</span>
-              <span className="text-[10px] font-mono uppercase tracking-wider text-sage-700 dark:text-sage-300">Mastered</span>
+            <div className="study-progress-metric study-progress-mastered px-4 py-2.5 rounded-xl bg-sage-50 dark:bg-sage-900/30 border border-sage-200 dark:border-sage-800/40">
+              <span className="study-progress-number block font-serif text-xl font-bold text-sage-600 dark:text-sage-400">{overallStats.done}</span>
+              <span className="study-progress-label text-[10px] font-mono uppercase tracking-wider text-sage-700 dark:text-sage-300">Mastered</span>
             </div>
-            <div className="px-4 py-2.5 rounded-xl bg-ochre-50 dark:bg-ochre-900/30 border border-ochre-200 dark:border-ochre-800/40">
-              <span className="block font-serif text-xl font-bold text-ochre-600 dark:text-ochre-400">{overallStats.inProgress}</span>
-              <span className="text-[10px] font-mono uppercase tracking-wider text-ochre-700 dark:text-ochre-300">In Progress</span>
+            <div className="study-progress-metric study-progress-in-progress px-4 py-2.5 rounded-xl bg-ochre-50 dark:bg-espresso-800 border border-ochre-500/30 dark:border-ochre-500/40">
+              <span className="study-progress-number block font-serif text-xl font-bold">{overallStats.inProgress}</span>
+              <span className="study-progress-label text-[10px] font-mono uppercase tracking-wider">In Progress</span>
             </div>
-            <div className="px-4 py-2.5 rounded-xl bg-rose-50 dark:bg-rose-900/30 border border-rose-200 dark:border-rose-800/40">
-              <span className="block font-serif text-xl font-bold text-rose-600 dark:text-rose-400">{overallStats.revisionNeeded}</span>
-              <span className="text-[10px] font-mono uppercase tracking-wider text-rose-700 dark:text-rose-300">Needs Revision</span>
+            <div className="study-progress-metric study-progress-revision px-4 py-2.5 rounded-xl bg-rose-50 dark:bg-rose-900/30 border border-rose-200 dark:border-rose-800/40">
+              <span className="study-progress-number block font-serif text-xl font-bold text-rose-600 dark:text-rose-400">{overallStats.revisionNeeded}</span>
+              <span className="study-progress-label text-[10px] font-mono uppercase tracking-wider text-rose-700 dark:text-rose-300">Needs Revision</span>
             </div>
           </div>
         </div>
@@ -508,9 +509,17 @@ export const SyllabusView: React.FC<SyllabusViewProps> = ({ onNavigateToPlanner 
 
       {/* ── Normal Subject Tabs View ── */}
       {statusFilter !== 'deadlines' && (
-        <>
-          {/* Subject Pills Selection */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+        <div className="syllabus-workbench">
+          <aside className="syllabus-subject-rail" aria-label="Syllabus subjects">
+            <div className="syllabus-subject-rail-head">
+              <div>
+                <span>Study path</span>
+                <strong>Subjects</strong>
+              </div>
+              <span className="syllabus-subject-count">{subjects.length}</span>
+            </div>
+            <p className="syllabus-subject-hint">Choose a subject to open its chapters.</p>
+            <div className="syllabus-subject-list">
             {subjects.map((s) => {
               const isSelected = activeSubject?.id === s.id;
               // Topic counts
@@ -525,25 +534,26 @@ export const SyllabusView: React.FC<SyllabusViewProps> = ({ onNavigateToPlanner 
               const pct = sTotal === 0 ? 0 : Math.round((sDone / sTotal) * 100);
 
               return (
-                <div key={s.id} className="relative group shrink-0">
-                  <button
-                    onClick={() => setSelectedSubjectId(s.id)}
-                    className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl border text-xs font-medium transition ${
-                      isSelected
-                        ? 'border-espresso-900 dark:border-ivory-300 bg-white dark:bg-espresso-800 shadow-subtle'
-                        : 'border-ivory-300 dark:border-espresso-750 bg-white/70 dark:bg-espresso-850 hover:bg-ivory-100'
-                    }`}
-                  >
-                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
-                    <span className="font-semibold text-espresso-950 dark:text-ivory-50">{s.name}</span>
-                    <span className="font-mono text-[11px] text-espresso-500 dark:text-espresso-400 tabular-nums">
-                      {pct}%
-                    </span>
-                  </button>
-                </div>
+                <button
+                  key={s.id}
+                  onClick={() => setSelectedSubjectId(s.id)}
+                  aria-pressed={isSelected}
+                  className={`syllabus-subject-option${isSelected ? ' is-active' : ''}`}
+                >
+                  <span className="syllabus-subject-dot" style={{ backgroundColor: s.color }} />
+                  <span className="syllabus-subject-copy">
+                    <strong>{s.name}</strong>
+                    <small>{s.chapters.length} chapters · {sTotal} topics</small>
+                  </span>
+                  <span className="syllabus-subject-percent">{pct}%</span>
+                  <span className="syllabus-subject-meter"><i style={{ width: `${pct}%`, backgroundColor: s.color }} /></span>
+                </button>
               );
             })}
           </div>
+          </aside>
+
+          <div className="syllabus-main-pane">
 
           {/* Empty Subjects State */}
           {subjects.length === 0 ? (
@@ -590,7 +600,7 @@ export const SyllabusView: React.FC<SyllabusViewProps> = ({ onNavigateToPlanner 
                     <Plus className="w-3.5 h-3.5" /> Add Chapter
                   </button>
                   <button
-                    onClick={() => setEditingSubject({ id: activeSubject.id, name: activeSubject.name, color: activeSubject.color || '#C45532' })}
+                    onClick={() => setEditingSubject({ id: activeSubject.id, name: activeSubject.name, color: activeSubject.color || getActiveAccentColor() })}
                     className="p-1.5 rounded-lg text-espresso-500 hover:text-espresso-800 dark:hover:text-ivory-200 hover:bg-ivory-200 dark:hover:bg-espresso-750"
                     title="Rename / change color"
                   >
@@ -902,7 +912,8 @@ export const SyllabusView: React.FC<SyllabusViewProps> = ({ onNavigateToPlanner 
               )}
             </div>
           ) : null}
-        </>
+          </div>
+        </div>
       )}
 
       {/* ── Add Subject Modal ── */}

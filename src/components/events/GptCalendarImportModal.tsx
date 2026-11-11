@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { EventCategory } from '../../types';
+import { preprocessAndParseCalendarJson } from '../../utils/calendarJsonSanitizer';
 import {
   Sparkles,
   Copy,
@@ -104,7 +105,7 @@ export const GptCalendarImportModal: React.FC<GptCalendarImportModalProps> = ({ 
       focusDirective = 'Extract all scheduled events, deadlines, exams, and student tasks.';
     }
 
-    return `You are a high-precision academic calendar parser for my Student Tracker.
+    return `You are a high-precision academic calendar parser for TRAKIFY.
 ${focusDirective}
 
 CRITICAL RULES:
@@ -162,22 +163,6 @@ CRITICAL RULES:
     window.open('https://chatgpt.com', '_blank', 'noopener,noreferrer');
   };
 
-  const sanitizeAndParseJson = (raw: string): ParsedImportData => {
-    let clean = raw.trim();
-    // Strip markdown fences ```json ... ``` or ``` ... ```
-    clean = clean.replace(/^```(?:json)?\s*/i, '');
-    clean = clean.replace(/\s*```$/i, '');
-
-    // If there is surrounding text, extract between first { and last }
-    const firstBrace = clean.indexOf('{');
-    const lastBrace = clean.lastIndexOf('}');
-    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-      clean = clean.substring(firstBrace, lastBrace + 1);
-    }
-
-    return JSON.parse(clean);
-  };
-
   const handleValidateAndStage = () => {
     setValidationError(null);
     if (!jsonInput.trim()) {
@@ -186,7 +171,7 @@ CRITICAL RULES:
     }
 
     try {
-      const parsed = sanitizeAndParseJson(jsonInput);
+      const parsed = preprocessAndParseCalendarJson(jsonInput) as ParsedImportData;
       const rawEvents = Array.isArray(parsed.events) ? parsed.events : [];
       const rawTasks = Array.isArray(parsed.tasks) ? parsed.tasks : [];
 

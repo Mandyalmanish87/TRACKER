@@ -10,11 +10,15 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { TimetableImportClass, DayOfWeek } from '../../types';
+import { ClassTimetableRule } from '../../types/classSpace';
 import { preprocessAndParseTimetableJson } from '../../utils/timetableJsonSanitizer';
 
 interface GptTimetableImportModalProps {
   isOpen: boolean;
   onClose: () => void;
+  destinationLabel?: string;
+  existingOfficialRules?: ClassTimetableRule[];
+  onImportOfficialClasses?: (classes: TimetableImportClass[]) => Promise<{ importedCount: number; skippedCount: number }>;
 }
 
 const CHATGPT_PROMPT_TEMPLATE = `I am uploading a picture/document of my college timetable schedule.
@@ -58,6 +62,9 @@ const TIME_REGEX = /^([01]\d|2[0-3]):([0-5]\d)$/;
 export const GptTimetableImportModal: React.FC<GptTimetableImportModalProps> = ({
   isOpen,
   onClose,
+  destinationLabel = 'your weekly timetable',
+  existingOfficialRules,
+  onImportOfficialClasses,
 }) => {
   const { state, importTimetableClasses } = useApp();
 
@@ -69,6 +76,7 @@ export const GptTimetableImportModal: React.FC<GptTimetableImportModalProps> = (
   const [parsedClasses, setParsedClasses] = useState<TimetableImportClass[]>([]);
   const [isValidated, setIsValidated] = useState(false);
   const [importResult, setImportResult] = useState<{ imported: number; skipped: number } | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
 
   if (!isOpen) return null;
 
@@ -185,11 +193,13 @@ export const GptTimetableImportModal: React.FC<GptTimetableImportModalProps> = (
       let dupCount = 0;
       validEntries.forEach((entry) => {
         const normDay = DAY_MAP[entry.day.toLowerCase().trim()];
-        const exists = state.timetable.some((slot) => {
-          if (slot.dayOfWeek !== normDay || slot.startTime !== entry.startTime) return false;
-          const sub = state.subjects.find((s) => s.id === slot.subjectId);
-          return sub && sub.name.toLowerCase() === entry.subject.toLowerCase();
-        });
+        const exists = existingOfficialRules
+          ? existingOfficialRules.some((rule) => rule.dayOfWeek === normDay && rule.startTime === entry.startTime && rule.endTime === entry.endTime && rule.subjectName.trim().toLowerCase() === entry.subject.trim().toLowerCase())
+          : state.timetable.some((slot) => {
+              if (slot.dayOfWeek !== normDay || slot.startTime !== entry.startTime) return false;
+              const sub = state.subjects.find((s) => s.id === slot.subjectId);
+              return sub && sub.name.toLowerCase() === entry.subject.toLowerCase();
+            });
         if (exists) dupCount++;
       });
       if (dupCount > 0) {
@@ -204,7 +214,7 @@ export const GptTimetableImportModal: React.FC<GptTimetableImportModalProps> = (
     setIsValidated(true);
   };
 
-  const handleConfirmImport = () => {
+  const handleConfirmImport = async () => {
     if (parsedClasses.length === 0) return;
 
     if (replaceExisting) {
@@ -214,9 +224,19 @@ export const GptTimetableImportModal: React.FC<GptTimetableImportModalProps> = (
       if (!ok) return;
     }
 
-    const { importedCount, skippedCount } = importTimetableClasses(parsedClasses, replaceExisting);
-    setImportResult({ imported: importedCount, skipped: skippedCount });
-    setIsValidated(false);
+    setIsImporting(true);
+    setValidationError(null);
+    try {
+      const result = onImportOfficialClasses
+        ? await onImportOfficialClasses(parsedClasses)
+        : importTimetableClasses(parsedClasses, replaceExisting);
+      setImportResult({ imported: result.importedCount, skipped: result.skippedCount });
+      setIsValidated(false);
+    } catch (error) {
+      setValidationError(error instanceof Error ? error.message : 'Import failed. Please try again.');
+    } finally {
+      setIsImporting(false);
+    }
   };
 
   const handleReset = () => {
@@ -266,7 +286,7 @@ export const GptTimetableImportModal: React.FC<GptTimetableImportModalProps> = (
                   Timetable Imported Successfully!
                 </h4>
                 <p className="text-xs text-sage-700 dark:text-sage-300 mt-0.5">
-                  Successfully imported {importResult.imported} class{importResult.imported !== 1 ? 'es' : ''} to your weekly timetable and calendar.{' '}
+                  Successfully imported {importResult.imported} class{importResult.imported !== 1 ? 'es' : ''} to {destinationLabel} and calendar.{' '}
                   {importResult.skipped > 0 && `(${importResult.skipped} duplicates skipped).`}
                 </p>
                 <div className="mt-3 flex gap-2">
@@ -421,7 +441,12 @@ export const GptTimetableImportModal: React.FC<GptTimetableImportModalProps> = (
                     ))}
                   </div>
 
-                  {/* Replace Existing Option */}
+                  {/* A class representative appends to the authoritative shared schedule. */}
+                  {onImportOfficialClasses ? (
+                    <p className="pt-2 text-[11px] text-espresso-500 dark:text-espresso-400">
+                      Import destination: <strong className="text-espresso-700 dark:text-ivory-200">{destinationLabel}</strong>. Existing shared classes stay in place; duplicates are skipped.
+                    </p>
+                  ) : (
                   <div className="pt-2">
                     <label className="flex items-center gap-2 cursor-pointer text-xs text-espresso-600 dark:text-espresso-400">
                       <input
@@ -433,6 +458,7 @@ export const GptTimetableImportModal: React.FC<GptTimetableImportModalProps> = (
                       <span>Replace all existing timetable classes (clean overwrite)</span>
                     </label>
                   </div>
+                  )}
                 </div>
               )}
             </>
@@ -461,10 +487,11 @@ export const GptTimetableImportModal: React.FC<GptTimetableImportModalProps> = (
               ) : (
                 <button
                   onClick={handleConfirmImport}
+                  disabled={isImporting}
                   className="px-4 py-2 text-xs font-semibold rounded-xl text-white shadow-subtle hover:opacity-95 transition flex items-center gap-1.5"
                   style={{ backgroundColor: 'var(--accent)' }}
                 >
-                  <Upload className="w-3.5 h-3.5" /> Import {parsedClasses.length} Classes
+                  <Upload className="w-3.5 h-3.5" /> {isImporting ? 'Importing…' : `Import ${parsedClasses.length} Classes`}
                 </button>
               )}
             </div>

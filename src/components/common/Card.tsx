@@ -13,6 +13,7 @@ export const CardDensityContext = createContext<CardDensityContextValue>({
 export const useCardDensity = () => useContext(CardDensityContext);
 
 export interface CardProps {
+  id?: string;
   children: React.ReactNode;
   eyebrow?: string;
   title?: string;
@@ -25,6 +26,7 @@ export interface CardProps {
 }
 
 export const Card: React.FC<CardProps> = ({
+  id,
   children,
   eyebrow,
   title,
@@ -44,17 +46,18 @@ export const Card: React.FC<CardProps> = ({
 
   return (
     <div
-      className={`bg-white dark:bg-espresso-850 ${
+      id={id}
+      className={`${effectiveBorderless ? '' : 'tracker-glass-card'} ${
         effectiveBorderless
-          ? ''
-          : 'border border-ivory-300 dark:border-espresso-750 rounded-2xl shadow-subtle'
+          ? 'bg-transparent'
+          : 'bg-white/95 dark:bg-[#18151D]/90 border border-ivory-300/80 dark:border-white/10 rounded-2xl shadow-subtle [box-shadow:inset_0_1px_0_0_rgba(255,255,255,0.7),0_1px_3px_0_rgba(0,0,0,0.02)] dark:[box-shadow:inset_0_1px_0_0_rgba(255,255,255,0.08),0_8px_24px_-4px_rgba(0,0,0,0.4)]'
       } transition-all duration-200 overflow-hidden flex flex-col h-full ${className}`}
     >
       {hasHeader && (
         <div
           className={`${
             isCompact ? 'px-4 py-2.5 sm:px-4.5 sm:py-3' : 'px-6 py-4 sm:px-7 sm:py-4.5'
-          } border-b border-ivory-200 dark:border-espresso-800 flex items-start justify-between gap-3 shrink-0`}
+          } border-b border-ivory-200/80 dark:border-white/10 flex items-start justify-between gap-3 shrink-0`}
         >
           <div className="min-w-0">
             {eyebrow && (

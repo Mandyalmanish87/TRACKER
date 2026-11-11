@@ -11,6 +11,7 @@ import {
   ShieldCheck,
   GraduationCap,
   Sparkles,
+  Trash2,
 } from 'lucide-react';
 import { useClassSpace } from '../../context/ClassSpaceContext';
 
@@ -19,6 +20,7 @@ interface ClassSpaceHeaderProps {
   onJoinClick: () => void;
   onToggleNotifications: () => void;
   onPendingRequestsClick?: () => void;
+  onDeleteClick?: () => void;
 }
 
 export const ClassSpaceHeader: React.FC<ClassSpaceHeaderProps> = ({
@@ -26,6 +28,7 @@ export const ClassSpaceHeader: React.FC<ClassSpaceHeaderProps> = ({
   onJoinClick,
   onToggleNotifications,
   onPendingRequestsClick,
+  onDeleteClick,
 }) => {
   const {
     workspaces,
@@ -35,6 +38,7 @@ export const ClassSpaceHeader: React.FC<ClassSpaceHeaderProps> = ({
     unreadNotificationCount,
     isCloudConfigured,
     isCR,
+    isOwner,
     joinRequests,
   } = useClassSpace();
 
@@ -224,6 +228,16 @@ export const ClassSpaceHeader: React.FC<ClassSpaceHeaderProps> = ({
             <Plus className="w-3.5 h-3.5" />
             <span>Create ClassSpace</span>
           </button>
+          {isOwner && onDeleteClick && (
+            <button
+              onClick={onDeleteClick}
+              className="classspace-delete-action"
+              title="Permanently delete this ClassSpace"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Delete Space</span>
+            </button>
+          )}
         </div>
       </div>
     </div>

@@ -86,14 +86,23 @@ export const DEFAULT_PROFILE: UserProfile = {
 
 export const DEFAULT_SETTINGS: AppSettings = {
   themeMode: 'system',
+  appearanceMode: 'classic',
+  paperContrast: 'balanced',
   accentColor: 'terracotta',
   backgroundStyle: 'minimal',
+  backgroundEffect: 'static',
+  backgroundEffectSpeed: 2,
+  backgroundEffectIntensity: 0.22,
+  accentEdgeGlow: true,
   studyDayRolloverHour: 0,
   showExamCountdown: true,
   showFocusRadio: false,
   dashboardLayoutMode: 'bento',
   dashboardDensity: 'compact',
   userMode: 'individual',
+  bodyModelPreference: 'male',
+  gender: 'male',
+  bloomEnabled: false,
 };
 
 export const EMPTY_STATE: AppStateData = {
@@ -120,6 +129,20 @@ export const EMPTY_STATE: AppStateData = {
   recipes: [],
   weightLogs: [],
   nutritionProfile: DEFAULT_NUTRITION_PROFILE,
+  // Fitness Ecosystem Core Collections
+  workoutSessions: [],
+  workoutPrograms: [],
+  workoutTemplates: [],
+  exerciseLibrary: [],
+  customBarcodes: [],
+  mealPlans: [],
+  bodyMeasurements: [],
+  bodyCompositions: [],
+  progressPhotos: [],
+  sleepRecoveryLogs: [],
+  cardioSessions: [],
+  hydrationLogs: [],
+  fitnessInsights: [],
   radioUrls: [],
   radioQueue: [],
   radioLoopMode: 'off',
@@ -131,4 +154,6 @@ export const EMPTY_STATE: AppStateData = {
   eduhubCourses: [],
   tombstones: [],
 };
+
+export const DEFAULT_STATE: AppStateData = EMPTY_STATE;
 

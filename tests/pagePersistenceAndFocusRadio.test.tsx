@@ -255,30 +255,30 @@ describe('Task 3 — Reuse EduHub YouTube Playlist Import in Focus Radio', () =>
     title: 'Deep Focus & Ambient Work Beats',
     description: 'Curated instrumental tracks for high concentration.',
     channelTitle: 'Ambient Chill',
-    thumbnailUrl: 'https://img.youtube.com/vi/video-01/hqdefault.jpg',
+    thumbnailUrl: 'https://img.youtube.com/vi/vid_track01/hqdefault.jpg',
     itemCount: 3,
     totalDurationSeconds: 4500,
     lectures: [
       {
-        videoId: 'video-01',
+        videoId: 'vid_track01',
         title: 'Morning Rain & Piano',
         position: 0,
         durationSeconds: 1500,
-        thumbnailUrl: 'https://img.youtube.com/vi/video-01/hqdefault.jpg',
+        thumbnailUrl: 'https://img.youtube.com/vi/vid_track01/hqdefault.jpg',
       },
       {
-        videoId: 'video-02',
+        videoId: 'vid_track02',
         title: 'Library Atmosphere & Soft Chords',
         position: 1,
         durationSeconds: 1800,
-        thumbnailUrl: 'https://img.youtube.com/vi/video-02/hqdefault.jpg',
+        thumbnailUrl: 'https://img.youtube.com/vi/vid_track02/hqdefault.jpg',
       },
       {
-        videoId: 'video-03',
+        videoId: 'vid_track03',
         title: 'Binaural Theta Waves',
         position: 2,
         durationSeconds: 1200,
-        thumbnailUrl: 'https://img.youtube.com/vi/video-03/hqdefault.jpg',
+        thumbnailUrl: 'https://img.youtube.com/vi/vid_track03/hqdefault.jpg',
       },
     ],
   };
@@ -291,11 +291,11 @@ describe('Task 3 — Reuse EduHub YouTube Playlist Import in Focus Radio', () =>
     const lectureItem = mockEduHubPreview.lectures[0];
     const track = playlistItemToRadioTrack(lectureItem, mockEduHubPreview.channelTitle);
 
-    expect(track.videoId).toBe('video-01');
+    expect(track.videoId).toBe('vid_track01');
     expect(track.title).toBe('Morning Rain & Piano');
     expect(track.author).toBe('Ambient Chill');
     expect(track.duration).toBe(1500);
-    expect(track.thumbnailUrl).toContain('video-01');
+    expect(track.thumbnailUrl).toContain('vid_track01');
   });
 
   it('imports YouTube playlist in Focus Radio using shared fetchYouTubePlaylistPreview', async () => {
@@ -379,9 +379,9 @@ describe('Task 3 — Reuse EduHub YouTube Playlist Import in Focus Radio', () =>
     });
 
     // Queue now contains the imported tracks
-    expect(currentQueue.some((t) => t.videoId === 'video-01')).toBe(true);
-    expect(currentQueue.some((t) => t.videoId === 'video-02')).toBe(true);
-    expect(currentQueue.some((t) => t.videoId === 'video-03')).toBe(true);
+    expect(currentQueue.some((t) => t.videoId === 'vid_track01')).toBe(true);
+    expect(currentQueue.some((t) => t.videoId === 'vid_track02')).toBe(true);
+    expect(currentQueue.some((t) => t.videoId === 'vid_track03')).toBe(true);
   });
 
   it('allows saving imported playlist directly to saved playlists and reopening later', async () => {
@@ -422,7 +422,7 @@ describe('Task 3 — Reuse EduHub YouTube Playlist Import in Focus Radio', () =>
     const saved = savedPlaylistsList.find((p) => p.name === mockEduHubPreview.title);
     expect(saved).toBeDefined();
     expect(saved.tracks).toHaveLength(3);
-    expect(saved.tracks[0].videoId).toBe('video-01');
+    expect(saved.tracks[0].videoId).toBe('vid_track01');
   });
 });
 

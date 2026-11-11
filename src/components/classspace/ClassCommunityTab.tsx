@@ -24,6 +24,7 @@ import {
   Hash,
   Zap,
   Plus,
+  MessageCircle,
 } from 'lucide-react';
 import { useClassSpace } from '../../context/ClassSpaceContext';
 import { getAvatarInitials, getAvatarColor } from '../../utils/classSpaceUtils';
@@ -39,6 +40,9 @@ export const ClassCommunityTab: React.FC = () => {
   const {
     activeWorkspace,
     messages,
+    hasMoreMessages,
+    isLoadingOlderMessages,
+    loadOlderMessages,
     savedMessages,
     pinnedMessages,
     channels,
@@ -84,6 +88,7 @@ export const ClassCommunityTab: React.FC = () => {
   const [copiedResourceId, setCopiedResourceId] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const messageInputRef = useRef<HTMLInputElement | null>(null);
 
   // Auto-scroll to bottom on new messages (safeguarded against JSDOM)
   useEffect(() => {
@@ -173,17 +178,35 @@ export const ClassCommunityTab: React.FC = () => {
   });
 
   return (
-    <div className="flex flex-col h-[750px] space-y-3">
+    <div className="classspace-chat-shell">
       {/* ── Channel Navigation Bar ── */}
-      <div className="p-2.5 rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 shadow-subtle flex items-center justify-between gap-2 overflow-x-auto shrink-0">
-        <div className="flex items-center gap-1.5 overflow-x-auto py-0.5">
+      <aside className="classspace-channel-sidebar" aria-label="Class channels">
+        <div className="classspace-sidebar-heading">
+          <div>
+            <span className="classspace-sidebar-kicker">Workspace</span>
+            <h3>Chats</h3>
+          </div>
+          {isCR && (
+            <button
+              onClick={() => setShowCreateChannelModal(true)}
+              className="classspace-add-channel"
+              title="Create a new class channel"
+              aria-label="Create a new class channel"
+            >
+              <Plus className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+        <div className="classspace-channel-list">
           {channels.map((chan) => {
             const isChanActive = (activeChannel?.id === chan.id) || (chan.slug === 'the-commons' && !activeChannelId);
             return (
               <button
                 key={chan.id}
                 onClick={() => setActiveChannelId(chan.id)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition cursor-pointer ${
+                aria-pressed={isChanActive}
+                aria-current={isChanActive ? 'page' : undefined}
+                className={`classspace-channel-item ${isChanActive ? 'is-active' : ''} ${
                   isChanActive
                     ? 'bg-terracotta-600 text-white shadow-2xs'
                     : 'text-espresso-700 dark:text-ivory-200 hover:bg-ivory-100 dark:hover:bg-espresso-800'
@@ -196,27 +219,19 @@ export const ClassCommunityTab: React.FC = () => {
                 ) : (
                   <Hash className="w-3.5 h-3.5 text-terracotta-400" />
                 )}
-                <span>{chan.name}</span>
+                <span className="classspace-channel-copy">
+                  <strong>{chan.name}</strong>
+                  <small>{chan.description || (chan.isDefault ? 'Class announcements and chat' : 'Channel discussion')}</small>
+                </span>
               </button>
             );
           })}
         </div>
-
-        {isCR && (
-          <button
-            onClick={() => setShowCreateChannelModal(true)}
-            className="px-2.5 py-1.5 rounded-xl text-xs font-semibold text-terracotta-600 hover:bg-terracotta-50 dark:hover:bg-terracotta-950/40 border border-terracotta-300 dark:border-terracotta-800 transition cursor-pointer flex items-center gap-1 shrink-0"
-            title="Create a new class channel"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Channel</span>
-          </button>
-        )}
-      </div>
+      </aside>
 
       {/* Active Channel Topic & Description */}
       {activeChannel && (
-        <div className="px-4 py-2 rounded-xl bg-ivory-100/70 dark:bg-espresso-800/50 border border-ivory-300/80 dark:border-espresso-750 flex items-center justify-between text-xs text-espresso-600 dark:text-espresso-300 shrink-0">
+        <div className="classspace-conversation-header px-4 py-2 rounded-xl bg-ivory-100/70 dark:bg-espresso-800/50 border border-ivory-300/80 dark:border-espresso-750 flex items-center justify-between text-xs text-espresso-600 dark:text-espresso-300 shrink-0">
           <div className="flex items-center gap-2 truncate">
             <span className="font-bold text-espresso-900 dark:text-ivory-100 flex items-center gap-1">
               <Hash className="w-3.5 h-3.5 text-terracotta-500" />
@@ -225,11 +240,12 @@ export const ClassCommunityTab: React.FC = () => {
             <span>&bull;</span>
             <span className="truncate text-espresso-500 dark:text-espresso-400">{activeChannel.description || 'Channel discussion'}</span>
           </div>
+          <span className="classspace-chat-presence"><span /> Class chat</span>
         </div>
       )}
 
       {/* Top Bar: Search, Category Filters, Pinned announcements indicator */}
-      <div className="p-3.5 rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 shadow-subtle space-y-3 shrink-0">
+      <div className="classspace-chat-toolbar p-3.5 rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 shadow-subtle space-y-3 shrink-0">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="relative flex-1 min-w-[200px]">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-espresso-400" />
@@ -364,7 +380,7 @@ export const ClassCommunityTab: React.FC = () => {
 
       {/* Pinned Announcements Drawer if any */}
       {pinnedMessages.length > 0 && activeFilter === 'all' && !searchQuery && (
-        <div className="p-3.5 rounded-2xl border border-amber-200 dark:border-amber-900/60 bg-amber-50/70 dark:bg-amber-950/30 shrink-0 space-y-2">
+        <div className="classspace-pinned p-3.5 rounded-2xl border border-amber-200 dark:border-amber-900/60 bg-amber-50/70 dark:bg-amber-950/30 shrink-0 space-y-2">
           <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-amber-800 dark:text-amber-300">
             <Pin className="w-3.5 h-3.5" />
             <span>Pinned Class Announcements ({pinnedMessages.length})</span>
@@ -399,27 +415,62 @@ export const ClassCommunityTab: React.FC = () => {
       )}
 
       {/* Main Message History Stream */}
-      <div className="flex-1 overflow-y-auto p-4 rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 shadow-subtle space-y-4">
+      <div className="classspace-message-history flex-1 overflow-y-auto p-4 rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 shadow-subtle space-y-4" aria-live="polite" aria-label="Channel messages">
+        {hasMoreMessages && activeFilter === 'all' && !searchQuery.trim() && (
+          <div className="flex justify-center py-1">
+            <button
+              type="button"
+              onClick={() => loadOlderMessages()}
+              disabled={isLoadingOlderMessages}
+              className="text-xs font-medium px-3 py-1.5 rounded-lg border border-amber-300 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/60 transition-colors disabled:opacity-50"
+            >
+              {isLoadingOlderMessages ? 'Loading older messages...' : 'Load older messages'}
+            </button>
+          </div>
+        )}
         {filteredMessages.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-center p-8 space-y-2">
-            <Bookmark className="w-8 h-8 text-espresso-300 dark:text-espresso-600 mb-1" />
-            <p className="text-sm font-semibold text-espresso-700 dark:text-ivory-200">
-              {activeFilter === 'starred'
+          !searchQuery.trim() && activeFilter === 'all' && channelMessages.length === 0 ? (
+            <div className="classspace-empty-state">
+              <div className="classspace-empty-art" aria-hidden="true">
+                <div><MessageCircle className="w-7 h-7" /></div>
+                <span className="classspace-empty-spark">✦</span>
+                <span className="classspace-empty-dot" />
+              </div>
+              <span className="classspace-empty-channel"><Hash className="w-3.5 h-3.5" /> {activeChannel?.name || 'ClassSpace'}</span>
+              <h3>Start the conversation</h3>
+              <p>Share a question, a class update, or a useful resource. Your classmates will see it here.</p>
+              <button
+                type="button"
+                onClick={() => {
+                  setInputContent('Hi everyone! 👋');
+                  messageInputRef.current?.focus();
+                }}
+                className="classspace-empty-cta"
+              >
+                Say hello <Send className="w-3.5 h-3.5" />
+              </button>
+              <span className="classspace-empty-hint">or write your first message below</span>
+            </div>
+          ) : (
+            <div className="classspace-filter-empty">
+              <Bookmark className="w-7 h-7" aria-hidden="true" />
+              <p>{activeFilter === 'starred'
                 ? 'No starred messages found.'
                 : activeFilter === 'polls'
-                ? 'No polls posted yet. Launch the first poll below!'
+                ? 'No polls posted yet.'
                 : activeFilter === 'resources'
                 ? 'No study materials or links shared yet.'
                 : activeFilter === 'notices'
                 ? 'No official announcements posted yet.'
-                : searchQuery
-                ? 'No matching results found.'
-                : 'No messages yet.'}
-            </p>
-            <p className="text-xs text-espresso-400 dark:text-espresso-500 max-w-sm">
-              Use the tools below to launch a class poll with multi-choice options, share lecture slides, or discuss questions with classmates.
-            </p>
-          </div>
+                : 'No matching messages found.'}</p>
+              <span>Try another filter or search term.</span>
+              {(searchQuery || activeFilter !== 'all') && (
+                <button type="button" onClick={() => { setSearchQuery(''); setActiveFilter('all'); }}>
+                  Clear filters
+                </button>
+              )}
+            </div>
+          )
         ) : (
           filteredMessages.map((msg) => {
             const isMe = msg.senderId === currentMember?.userId;
@@ -430,7 +481,7 @@ export const ClassCommunityTab: React.FC = () => {
             return (
               <div
                 key={msg.id}
-                className={`group relative flex items-start gap-3 p-3 rounded-2xl transition hover:bg-ivory-50 dark:hover:bg-espresso-800/60 ${
+                className={`classspace-message-row group relative flex items-start gap-3 p-3 rounded-2xl transition hover:bg-ivory-50 dark:hover:bg-espresso-800/60 ${isMe ? 'is-mine' : ''} ${
                   msg.isPinned
                     ? 'border-l-4 border-amber-500 bg-amber-50/30 dark:bg-amber-950/10'
                     : ''
@@ -925,7 +976,7 @@ export const ClassCommunityTab: React.FC = () => {
       )}
 
       {/* Quick Tools & Message Input Bar */}
-      <div className="space-y-2 shrink-0">
+      <div className="classspace-chat-composer space-y-2 shrink-0">
         {/* Quick Tools Toolbar */}
         <div className="flex items-center justify-between gap-2 px-1">
           <div className="flex items-center gap-1.5">
@@ -971,6 +1022,7 @@ export const ClassCommunityTab: React.FC = () => {
         {/* Message Input Form */}
         <form onSubmit={handleSend} className="flex items-center gap-2">
           <input
+            ref={messageInputRef}
             type="text"
             value={inputContent}
             onChange={(e) => setInputContent(e.target.value)}

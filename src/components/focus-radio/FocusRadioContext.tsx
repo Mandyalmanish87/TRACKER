@@ -1,5 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import { RadioTrack, SavedPlaylist, CURATED_STARTER_TRACKS } from './youtubeUtils';
+import { subscriptionService } from '../../services/subscriptionService';
+
+export const FREE_PLAYLIST_LIMIT = 2;
 
 interface FocusRadioContextType {
   queue: RadioTrack[];
@@ -12,6 +15,8 @@ interface FocusRadioContextType {
   shuffle: boolean;
   repeatMode: 'off' | 'all' | 'one';
   savedPlaylists: SavedPlaylist[];
+  hasUnlimitedPlaylists: boolean;
+  freePlaylistLimit: number;
   isMiniPlayerOpen: boolean;
   isMiniPlayerCollapsed: boolean;
   errorMessage: string | null;
@@ -37,8 +42,8 @@ interface FocusRadioContextType {
   moveInQueue: (fromIndex: number, toIndex: number) => void;
   playTrackAtIndex: (index: number) => void;
   clearQueue: () => void;
-  saveCurrentPlaylist: (name: string) => void;
-  savePlaylistDirectly: (name: string, tracks: RadioTrack[]) => void;
+  saveCurrentPlaylist: (name: string) => { success: boolean; error?: string };
+  savePlaylistDirectly: (name: string, tracks: RadioTrack[]) => { success: boolean; error?: string };
   loadSavedPlaylist: (playlistId: string) => void;
   deleteSavedPlaylist: (playlistId: string) => void;
   renameSavedPlaylist: (playlistId: string, newName: string) => void;
@@ -125,6 +130,40 @@ export const FocusRadioProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     typeof initialData?.savedPlaybackPosition === 'number' ? initialData.savedPlaybackPosition : 0
   );
   const [duration, setDuration] = useState<number>(0);
+
+  // Pro Unlimited Playlists Entitlement State
+  const [hasUnlimitedPlaylists, setHasUnlimitedPlaylists] = useState<boolean>(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    const checkUnlimited = async () => {
+      try {
+        const ent = await subscriptionService.getUserEntitlements();
+        if (isMounted) {
+          setHasUnlimitedPlaylists(Boolean(ent.hasActivePass || ent.features.includes('saved_playlists_unlimited')));
+        }
+      } catch {
+        if (isMounted) setHasUnlimitedPlaylists(false);
+      }
+    };
+    checkUnlimited();
+
+    const handleUpdate = () => {
+      checkUnlimited();
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('tracker:entitlements-updated', handleUpdate);
+      window.addEventListener('focus', handleUpdate);
+    }
+    return () => {
+      isMounted = false;
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('tracker:entitlements-updated', handleUpdate);
+        window.removeEventListener('focus', handleUpdate);
+      }
+    };
+  }, []);
 
   const playerRef = useRef<any>(null);
   const isApiReadyRef = useRef<boolean>(false);
@@ -446,6 +485,7 @@ export const FocusRadioProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   }, []);
 
   const addToQueue = useCallback((track: RadioTrack, playNow: boolean = false) => {
+    if (!track || !track.videoId || !/^[a-zA-Z0-9_-]{11}$/.test(track.videoId.trim())) return;
     setQueue((prev) => {
       const updated = [...prev, track];
       if (playNow) {
@@ -457,10 +497,13 @@ export const FocusRadioProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   }, [play]);
 
   const addTracksToQueue = useCallback((tracks: RadioTrack[], playNow: boolean = false) => {
-    if (tracks.length === 0) return;
+    const validTracks = (tracks || []).filter(
+      (t) => t && typeof t.videoId === 'string' && /^[a-zA-Z0-9_-]{11}$/.test(t.videoId.trim())
+    );
+    if (validTracks.length === 0) return;
     setQueue((prev) => {
       const startIndex = prev.length;
-      const updated = [...prev, ...tracks];
+      const updated = [...prev, ...validTracks];
       if (playNow) {
         setCurrentIndex(startIndex);
         setTimeout(() => play(), 100);
@@ -518,8 +561,16 @@ export const FocusRadioProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     if (playerRef.current?.stopVideo) playerRef.current.stopVideo();
   }, []);
 
-  const saveCurrentPlaylist = useCallback((name: string) => {
-    if (!name.trim() || queue.length === 0) return;
+  const saveCurrentPlaylist = useCallback((name: string): { success: boolean; error?: string } => {
+    if (!name.trim() || queue.length === 0) {
+      return { success: false, error: 'Cannot save an empty playlist.' };
+    }
+    if (!hasUnlimitedPlaylists && savedPlaylists.length >= FREE_PLAYLIST_LIMIT) {
+      return {
+        success: false,
+        error: `Free tier allows saving up to ${FREE_PLAYLIST_LIMIT} playlists. Upgrade to any TRAKIFY Pass for unlimited custom playlists.`,
+      };
+    }
     const newPlaylist: SavedPlaylist = {
       id: `playlist-${Date.now()}`,
       name: name.trim(),
@@ -527,18 +578,31 @@ export const FocusRadioProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       tracks: [...queue],
     };
     setSavedPlaylists((prev) => [newPlaylist, ...prev]);
-  }, [queue]);
+    return { success: true };
+  }, [queue, hasUnlimitedPlaylists, savedPlaylists.length]);
 
-  const savePlaylistDirectly = useCallback((name: string, tracks: RadioTrack[]) => {
-    if (!name.trim() || tracks.length === 0) return;
+  const savePlaylistDirectly = useCallback((name: string, tracks: RadioTrack[]): { success: boolean; error?: string } => {
+    const validTracks = (tracks || []).filter(
+      (t) => t && typeof t.videoId === 'string' && /^[a-zA-Z0-9_-]{11}$/.test(t.videoId.trim())
+    );
+    if (!name.trim() || validTracks.length === 0) {
+      return { success: false, error: 'Cannot save an empty playlist.' };
+    }
+    if (!hasUnlimitedPlaylists && savedPlaylists.length >= FREE_PLAYLIST_LIMIT) {
+      return {
+        success: false,
+        error: `Free tier allows saving up to ${FREE_PLAYLIST_LIMIT} playlists. Upgrade to any TRAKIFY Pass for unlimited custom playlists.`,
+      };
+    }
     const newPlaylist: SavedPlaylist = {
       id: `playlist-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       name: name.trim(),
       createdAt: new Date().toISOString(),
-      tracks: [...tracks],
+      tracks: [...validTracks],
     };
     setSavedPlaylists((prev) => [newPlaylist, ...prev]);
-  }, []);
+    return { success: true };
+  }, [hasUnlimitedPlaylists, savedPlaylists.length]);
 
   const loadSavedPlaylist = useCallback((playlistId: string) => {
     const found = savedPlaylists.find((p) => p.id === playlistId);
@@ -626,6 +690,8 @@ export const FocusRadioProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         currentTime,
         duration,
         savedPlaybackPosition,
+        hasUnlimitedPlaylists,
+        freePlaylistLimit: FREE_PLAYLIST_LIMIT,
         play,
         pause,
         togglePlay,
@@ -684,6 +750,8 @@ const FALLBACK_FOCUS_RADIO_CONTEXT: FocusRadioContextType = {
   shuffle: false,
   repeatMode: 'all',
   savedPlaylists: [],
+  hasUnlimitedPlaylists: false,
+  freePlaylistLimit: FREE_PLAYLIST_LIMIT,
   isMiniPlayerOpen: false,
   isMiniPlayerCollapsed: false,
   errorMessage: null,
@@ -707,8 +775,8 @@ const FALLBACK_FOCUS_RADIO_CONTEXT: FocusRadioContextType = {
   moveInQueue: () => {},
   playTrackAtIndex: () => {},
   clearQueue: () => {},
-  saveCurrentPlaylist: () => {},
-  savePlaylistDirectly: () => {},
+  saveCurrentPlaylist: () => ({ success: false, error: 'Context not initialized' }),
+  savePlaylistDirectly: () => ({ success: false, error: 'Context not initialized' }),
   loadSavedPlaylist: () => {},
   deleteSavedPlaylist: () => {},
   renameSavedPlaylist: () => {},

@@ -1,0 +1,22 @@
+{
+  "name": "tracker-firebase-functions",
+  "private": true,
+  "main": "lib/index.js",
+  "engines": {
+    "node": "22"
+  },
+  "scripts": {
+    "build": "tsc",
+    "deploy": "firebase deploy --only functions",
+    "migrate:legacy:dry-run": "node scripts/migrate-legacy-data.mjs",
+    "migrate:legacy:apply": "node scripts/migrate-legacy-data.mjs --apply"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.4.0",
+    "firebase-functions": "^6.4.0",
+    "stripe": "^18.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  }
+}

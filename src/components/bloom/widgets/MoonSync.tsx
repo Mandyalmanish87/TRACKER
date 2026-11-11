@@ -1,0 +1,3 @@
+import React from 'react';
+const lunar = (date: Date) => { const month=29.530588853, epoch=new Date('2000-01-06T18:14:00Z'); const age=((date.getTime()-epoch.getTime())/86400000%month+month)%month; return [['New Moon','🌑'],['Waxing Crescent','🌒'],['First Quarter','🌓'],['Waxing Gibbous','🌔'],['Full Moon','🌕'],['Waning Gibbous','🌖'],['Last Quarter','🌗'],['Waning Crescent','🌘']][Math.floor(age/month*8+.5)%8] as [string,string]; };
+export const MoonSync: React.FC = () => { const [name,icon]=lunar(new Date()); return <div className="bloom-moon-sync" title="Astronomical lunar phase, shown for reflection"><span aria-hidden="true">{icon}</span><span>{name}</span><small>Moon phase</small></div>; };

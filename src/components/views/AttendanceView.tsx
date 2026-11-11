@@ -11,6 +11,7 @@ import { resolveAttendanceScope } from '../../utils/attendanceScopeResolver';
 import { AcademicCalendarSettings } from '../../utils/academicCalendarEngine';
 import { AttendanceCalendarTab } from '../attendance/AttendanceCalendarTab';
 import { AcademicCalendarModal } from '../attendance/AcademicCalendarModal';
+import { DataTable } from '../common/DataTable';
 import {
   Calendar,
   BarChart3,
@@ -20,6 +21,7 @@ import {
   Settings,
   ChevronDown,
   Info,
+  Table2,
 } from 'lucide-react';
 
 export const AttendanceView: React.FC = () => {
@@ -29,7 +31,7 @@ export const AttendanceView: React.FC = () => {
   const userMode = state.settings?.userMode || 'individual';
   const targetRequirement = getAttendanceReq();
 
-  const [activeTab, setActiveTab] = useState<'calendar' | 'analytics'>('calendar');
+  const [activeTab, setActiveTab] = useState<'calendar' | 'analytics' | 'table'>('calendar');
   const [simExtraAttend, setSimExtraAttend] = useState<number>(3);
   const [selectedSubId, setSelectedSubId] = useState<string>('');
   const [isCalendarModalOpen, setIsCalendarModalOpen] = useState(false);
@@ -58,7 +60,8 @@ export const AttendanceView: React.FC = () => {
 
   const handleSaveAcademicCalendar = async (newCalendar: AcademicCalendarSettings) => {
     if (scopeData.mode === 'class_based' && classSpace?.activeWorkspace) {
-      await classSpace.updateWorkspaceAcademicCalendar(newCalendar);
+      const result = await classSpace.updateWorkspaceAcademicCalendar(newCalendar);
+      if (!result.success) throw new Error(result.error || 'Could not save ClassSpace attendance settings.');
     } else {
       updateSettings({ academicCalendar: newCalendar });
     }
@@ -66,10 +69,10 @@ export const AttendanceView: React.FC = () => {
 
   const canEditAcademicSettings =
     scopeData.mode === 'individual' ||
-    Boolean(classSpace?.isOwner || classSpace?.isCR || classSpace?.isCoAdmin);
+    Boolean(classSpace?.isOwner || classSpace?.isCR);
 
   return (
-    <div className="space-y-6 pb-16">
+    <div className="attendance-page space-y-6 pb-16">
       {/* ─── Top Header & Scope Switcher ─── */}
       <div className="border-b border-ivory-300 dark:border-espresso-800 pb-6 flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
@@ -102,6 +105,7 @@ export const AttendanceView: React.FC = () => {
         <div className="flex items-center p-1 bg-ivory-100 dark:bg-espresso-800 rounded-xl border border-ivory-300 dark:border-espresso-700 shrink-0 self-start md:self-auto">
           <button
             onClick={() => setActiveTab('calendar')}
+            aria-pressed={activeTab === 'calendar'}
             className={`flex items-center gap-1.5 px-3.5 sm:px-4 py-1.5 rounded-lg text-xs font-medium transition ${
               activeTab === 'calendar'
                 ? 'bg-white dark:bg-espresso-700 text-espresso-950 dark:text-ivory-50 shadow-subtle'
@@ -113,6 +117,7 @@ export const AttendanceView: React.FC = () => {
           </button>
           <button
             onClick={() => setActiveTab('analytics')}
+            aria-pressed={activeTab === 'analytics'}
             className={`flex items-center gap-1.5 px-3.5 sm:px-4 py-1.5 rounded-lg text-xs font-medium transition ${
               activeTab === 'analytics'
                 ? 'bg-white dark:bg-espresso-700 text-espresso-950 dark:text-ivory-50 shadow-subtle'
@@ -122,11 +127,23 @@ export const AttendanceView: React.FC = () => {
             <BarChart3 className="w-3.5 h-3.5" />
             <span>Analytics & Simulator</span>
           </button>
+          <button
+            onClick={() => setActiveTab('table')}
+            aria-pressed={activeTab === 'table'}
+            className={`flex items-center gap-1.5 px-3.5 sm:px-4 py-1.5 rounded-lg text-xs font-medium transition ${
+              activeTab === 'table'
+                ? 'bg-white dark:bg-espresso-700 text-espresso-950 dark:text-ivory-50 shadow-subtle'
+                : 'text-espresso-600 dark:text-espresso-300 hover:text-espresso-900 dark:hover:text-ivory-100'
+            }`}
+          >
+            <Table2 className="w-3.5 h-3.5" />
+            <span>Ledger Table</span>
+          </button>
         </div>
       </div>
 
-      {/* ─── ClassSpace Scope Selection Bar (when in Class-Based Mode) ─── */}
-      {scopeData.mode === 'class_based' && (
+      {/* ─── Scope Selection Bar (Personal vs Enrolled ClassSpaces) ─── */}
+      {classSpace && classSpace.workspaces.length > 0 && (
         <div className="p-4 rounded-2xl bg-white dark:bg-espresso-850 border border-ivory-300 dark:border-espresso-750 shadow-subtle flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-xl bg-terracotta-100 dark:bg-terracotta-950/60 text-terracotta-600 dark:text-terracotta-400 shrink-0">
@@ -136,36 +153,42 @@ export const AttendanceView: React.FC = () => {
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-[11px] font-mono uppercase tracking-wider text-espresso-500 font-bold">
-                  ClassSpace Attendance Scope:
+                  Attendance Analytics Scope:
                 </span>
-                {scopeData.role && (
+                {scopeData.mode === 'class_based' && scopeData.role && (
                   <span className="px-1.5 py-0.5 rounded text-[10px] font-mono uppercase font-semibold bg-ivory-200 dark:bg-espresso-800 text-espresso-700 dark:text-ivory-200">
                     Role: {scopeData.role}
                   </span>
                 )}
               </div>
 
-              {/* ClassSpace Dropdown Selector */}
-              {classSpace && classSpace.workspaces.length > 0 ? (
-                <div className="relative inline-block mt-1">
-                  <select
-                    value={classSpace.activeWorkspace?.id || ''}
-                    onChange={(e) => classSpace.selectWorkspace(e.target.value)}
-                    className="appearance-none font-serif text-lg font-bold text-espresso-950 dark:text-ivory-50 bg-transparent pr-7 cursor-pointer focus:outline-none hover:text-terracotta-600 dark:hover:text-terracotta-400 transition"
-                  >
-                    {classSpace.workspaces.map((ws) => (
-                      <option key={ws.id} value={ws.id} className="text-espresso-950 dark:text-ivory-50 bg-white dark:bg-espresso-850 text-sm">
-                        {ws.name} ({ws.joinCode})
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown className="w-4 h-4 text-espresso-500 absolute right-0 top-1/2 -translate-y-1/2 pointer-events-none" />
-                </div>
-              ) : (
-                <p className="font-serif text-sm font-semibold text-espresso-900 dark:text-ivory-100 mt-0.5">
-                  No enrolled ClassSpaces
-                </p>
-              )}
+              {/* ClassSpace / Scope Dropdown Selector */}
+              <div className="relative inline-block mt-1">
+                <select
+                  value={userMode === 'class_based' ? (classSpace.activeWorkspace?.id || '') : 'individual'}
+                  onChange={(e) => {
+                    if (e.target.value === 'individual') {
+                      updateSettings({ userMode: 'individual' });
+                    } else {
+                      updateSettings({ userMode: 'class_based' });
+                      classSpace.selectWorkspace(e.target.value);
+                    }
+                  }}
+                  className="appearance-none font-serif text-lg font-bold text-espresso-950 dark:text-ivory-50 bg-transparent pr-7 cursor-pointer focus:outline-none hover:text-terracotta-600 dark:hover:text-terracotta-400 transition"
+                >
+                  {userMode !== 'class_based' && (
+                    <option value="individual" className="text-espresso-950 dark:text-ivory-50 bg-white dark:bg-espresso-850 text-sm">
+                      Personal Tracker (Timetable Schedule)
+                    </option>
+                  )}
+                  {classSpace.workspaces.map((ws) => (
+                    <option key={ws.id} value={ws.id} className="text-espresso-950 dark:text-ivory-50 bg-white dark:bg-espresso-850 text-sm">
+                      {ws.name} ({ws.joinCode})
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="w-4 h-4 text-espresso-500 absolute right-0 top-1/2 -translate-y-1/2 pointer-events-none" />
+              </div>
             </div>
           </div>
 
@@ -173,7 +196,7 @@ export const AttendanceView: React.FC = () => {
           <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-ivory-100 dark:bg-espresso-800/80 border border-ivory-200 dark:border-espresso-700 text-xs text-espresso-600 dark:text-ivory-300">
             <ShieldCheck className="w-4 h-4 text-sage-600 dark:text-sage-400 shrink-0" />
             <span className="text-[11px] leading-tight">
-              <strong>Self-Attendance Active:</strong> Marking records and calculations are 100% personal to your account.
+              <strong>Self-Attendance Active:</strong> Attendance records and simulations are 100% personal to your account.
             </span>
           </div>
         </div>
@@ -327,6 +350,14 @@ export const AttendanceView: React.FC = () => {
                         ? 'This ClassSpace timetable has no recurring classes or extra sessions configured yet.'
                         : 'Add courses to your personal timetable or syllabus to monitor attendance margins.'}
                     </p>
+                    {scopeData.mode === 'class_based' && classSpace?.canEditSchedule && (
+                      <a
+                        href="#timetable"
+                        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-terracotta-600 text-white text-xs font-semibold hover:bg-terracotta-700 transition mt-2"
+                      >
+                        Configure Timetable in ClassSpace
+                      </a>
+                    )}
                   </div>
                 ) : (
                   <div className="space-y-4">
@@ -479,6 +510,93 @@ export const AttendanceView: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {activeTab === 'table' && (
+        <Card
+          eyebrow="Structured Course Ledger"
+          title="Attendance & Compliance Ledger"
+          subtitle="Sortable table of conducted sessions, percentages, and safety margins"
+        >
+          <DataTable
+            data={scopeData.subjectMetrics}
+            keyField="subjectId"
+            columns={[
+              {
+                key: 'subjectName',
+                header: 'Course Name',
+                sortable: true,
+                render: (row) => (
+                  <div>
+                    <span className="font-semibold block text-espresso-950 dark:text-ivory-50">
+                      {row.subjectName}
+                    </span>
+                    <span className="text-[11px] font-mono text-espresso-400">
+                      {row.subjectCode}
+                    </span>
+                  </div>
+                ),
+              },
+              {
+                key: 'attended',
+                header: 'Attended / Conducted',
+                sortable: true,
+                render: (row) => (
+                  <span className="font-mono text-xs">
+                    {row.attended} / {row.effectiveConducted}
+                  </span>
+                ),
+              },
+              {
+                key: 'percentage',
+                header: 'Attendance %',
+                sortable: true,
+                render: (row) => (
+                  <div className="space-y-1 min-w-[120px]">
+                    <span className="font-mono font-bold text-xs text-espresso-900 dark:text-ivory-100">
+                      {row.formattedPercentage}
+                    </span>
+                    <ProgressBar
+                      value={row.percentage}
+                      threshold={row.targetPercentage || targetRequirement}
+                    />
+                  </div>
+                ),
+              },
+              {
+                key: 'status',
+                header: 'Status',
+                sortable: true,
+                render: (row) => (
+                  <Badge
+                    variant={
+                      row.status === 'safe'
+                        ? 'sage'
+                        : row.status === 'warning'
+                        ? 'ochre'
+                        : 'danger'
+                    }
+                  >
+                    {row.status === 'safe'
+                      ? 'Comfortable'
+                      : row.status === 'warning'
+                      ? 'Borderline'
+                      : 'In Danger'}
+                  </Badge>
+                ),
+              },
+              {
+                key: 'summaryText',
+                header: 'Safe Margin / Skips',
+                render: (row) => (
+                  <span className="text-xs text-espresso-600 dark:text-ivory-300">
+                    {row.summaryText}
+                  </span>
+                ),
+              },
+            ]}
+          />
+        </Card>
       )}
 
       {/* ─── Academic Calendar Settings Modal ─── */}

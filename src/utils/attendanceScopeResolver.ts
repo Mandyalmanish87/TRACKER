@@ -27,6 +27,7 @@ import {
 } from './academicCalendarEngine';
 import { resolveSchedule, formatDateStr, parseDateStr } from './scheduleResolver';
 import { resolveClassSchedule } from './classSpaceUtils';
+import { getEventHolidayRanges, isEventHolidayOnDate, mergeEventHolidays } from './eventHolidayCalendar';
 
 export interface AttendanceScopeData {
   mode: 'individual' | 'class_based';
@@ -52,6 +53,7 @@ export interface ResolveScopeParams {
     occurrenceOverrides?: OccurrenceOverride[];
     extraClasses?: ExtraClass[];
     attendanceLogs: AttendanceLog[];
+    events?: import('../types').CalendarEvent[];
     settings?: AppSettings;
   };
   classSpace?: {
@@ -78,6 +80,7 @@ export function resolveAttendanceScope(params: ResolveScopeParams): AttendanceSc
     targetReqParam ?? appState.settings?.attendanceRequirement ?? 75;
 
   const todayStr = formatDateStr(new Date());
+  const eventHolidays = getEventHolidayRanges(appState.events || []);
 
   // -------------------------------------------------------------------------
   // 1. CLASS-BASED MODE
@@ -95,7 +98,7 @@ export function resolveAttendanceScope(params: ResolveScopeParams): AttendanceSc
           defaultCal.startDate,
           defaultCal.endDate,
           defaultCal.weeklyOffDays,
-          defaultCal.nationalHolidays
+          mergeEventHolidays(defaultCal.nationalHolidays, eventHolidays)
         ),
         subjectMetrics: [],
         aggregateMetrics: calculateWeightedAggregateAttendance([], targetRequirement),
@@ -114,7 +117,7 @@ export function resolveAttendanceScope(params: ResolveScopeParams): AttendanceSc
       academicCalendar.startDate,
       academicCalendar.endDate,
       academicCalendar.weeklyOffDays,
-      academicCalendar.nationalHolidays
+      mergeEventHolidays(academicCalendar.nationalHolidays, eventHolidays)
     );
 
     // Resolve occurrences within academic period [startDate, endDate]
@@ -143,8 +146,8 @@ export function resolveAttendanceScope(params: ResolveScopeParams): AttendanceSc
       instructor: occ.instructor,
       notes: occ.notes,
       source: occ.source,
-      isCancelled: occ.isCancelled,
-      changeNote: occ.changeNote,
+      isCancelled: occ.isCancelled || isEventHolidayOnDate(occ.date, eventHolidays),
+      changeNote: isEventHolidayOnDate(occ.date, eventHolidays) ? 'Holiday' : occ.changeNote,
     }));
 
     const todayOccurrences = scheduledOccurrences.filter((o) => o.date === todayStr);
@@ -156,6 +159,15 @@ export function resolveAttendanceScope(params: ResolveScopeParams): AttendanceSc
       attMap.set(rec.occurrenceKey, rec);
     }
 
+    // Helper to safely normalize subject codes
+    const normalizeSubCode = (code?: string, name?: string) => {
+      const c = (code || '').toUpperCase().trim();
+      if (c) return c;
+      const n = (name || '').toUpperCase().trim();
+      if (n) return n.slice(0, 8);
+      return 'ACAD';
+    };
+
     // Identify unique subjects from rules and extra class overrides
     const subjectMap = new Map<
       string,
@@ -163,11 +175,11 @@ export function resolveAttendanceScope(params: ResolveScopeParams): AttendanceSc
     >();
 
     for (const r of classSpace?.rules || []) {
-      const code = (r.subjectCode || 'GEN').toUpperCase().trim();
+      const code = normalizeSubCode(r.subjectCode, r.subjectName);
       if (!subjectMap.has(code)) {
         subjectMap.set(code, {
           id: r.id,
-          code,
+          code: r.subjectCode || code,
           name: r.subjectName || code,
           color: r.subjectColor || '#B45309',
         });
@@ -175,12 +187,12 @@ export function resolveAttendanceScope(params: ResolveScopeParams): AttendanceSc
     }
 
     for (const o of classSpace?.overrides || []) {
-      if (o.type === 'extra' && o.subjectCode) {
-        const code = o.subjectCode.toUpperCase().trim();
+      if (o.type === 'extra' && (o.subjectCode || o.subjectName)) {
+        const code = normalizeSubCode(o.subjectCode, o.subjectName);
         if (!subjectMap.has(code)) {
           subjectMap.set(code, {
             id: o.id,
-            code,
+            code: o.subjectCode || code,
             name: o.subjectName || code,
             color: o.subjectColor || '#3D6A8A',
           });
@@ -191,10 +203,10 @@ export function resolveAttendanceScope(params: ResolveScopeParams): AttendanceSc
     // Calculate metrics per subject for this student
     const subjectMetrics: SubjectAttendanceMetrics[] = [];
 
-    subjectMap.forEach((sub, subCode) => {
-      // Find all class occurrences for this subject code
+    subjectMap.forEach((sub, subKey) => {
+      // Find all class occurrences for this subject
       const subOccurrences = classOccurrences.filter(
-        (occ) => (occ.subjectCode || '').toUpperCase().trim() === subCode
+        (occ) => normalizeSubCode(occ.subjectCode, occ.subjectName) === subKey
       );
 
       let attended = 0;
@@ -202,6 +214,10 @@ export function resolveAttendanceScope(params: ResolveScopeParams): AttendanceSc
       let cancelled = 0;
 
       for (const occ of subOccurrences) {
+        if (isEventHolidayOnDate(occ.date, eventHolidays)) {
+          cancelled++;
+          continue;
+        }
         const rec = attMap.get(occ.occurrenceKey);
         if (rec) {
           if (rec.status === 'present') attended++;
@@ -259,7 +275,7 @@ export function resolveAttendanceScope(params: ResolveScopeParams): AttendanceSc
     academicCalendar.startDate,
     academicCalendar.endDate,
     academicCalendar.weeklyOffDays,
-    academicCalendar.nationalHolidays
+    mergeEventHolidays(academicCalendar.nationalHolidays, eventHolidays)
   );
 
   const periodStart = parseDateStr(academicCalendar.startDate);
@@ -271,7 +287,9 @@ export function resolveAttendanceScope(params: ResolveScopeParams): AttendanceSc
     appState.extraClasses || [],
     periodStart,
     periodEnd
-  );
+  ).map((occ) => isEventHolidayOnDate(occ.date, eventHolidays)
+    ? { ...occ, isCancelled: true, changeNote: 'Holiday' }
+    : occ);
 
   const todayOccurrences = scheduledOccurrences.filter((o) => o.date === todayStr);
 
@@ -296,6 +314,10 @@ export function resolveAttendanceScope(params: ResolveScopeParams): AttendanceSc
     let cancelled = 0;
 
     for (const occ of subOccurrences) {
+      if (isEventHolidayOnDate(occ.date, eventHolidays)) {
+        cancelled++;
+        continue;
+      }
       const logKey = occ.extraClassId
         ? `extra::${occ.extraClassId}::${occ.date}`
         : `slot::${occ.slotId}::${occ.date}`;

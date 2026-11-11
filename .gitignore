@@ -40,3 +40,25 @@ Thumbs.db
 .vercel
 supabase/.temp/
 supabase/.branches/
+docs/archive/legacy-supabase/.temp/
+docs/archive/legacy-supabase/.branches/
+
+# Agent and tool directories
+.agent/
+.agents/
+.gemini/
+.gsd/
+adapters/
+model_capabilities.yaml
+GSD-STYLE.md
+PROJECT_RULES.md
+VERSION
+
+# Temporary files
+*.py
+deep-focus-recording-contact.png
+
+# Firebase Functions dependencies and build
+functions/node_modules/
+functions/lib/
+

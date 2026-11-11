@@ -42,6 +42,10 @@ export const parseLocalDate = (str: string): Date => {
   return new Date(year, (month || 1) - 1, day || 1);
 };
 
+/** Calendar event ranges use inclusive start and end dates. */
+export const isCalendarEventOnDate = (event: CalendarEvent, dateStr: string): boolean =>
+  event.date <= dateStr && (event.endDate || event.date) >= dateStr;
+
 export const EventCalendar: React.FC<EventCalendarProps> = () => {
   const { state, updateEvent, toggleEventComplete } = useApp();
 
@@ -126,7 +130,16 @@ export const EventCalendar: React.FC<EventCalendarProps> = () => {
     const eventId = e.dataTransfer.getData('text/plain') || draggedEventId;
     if (!eventId) return;
 
+    const event = (state.events || []).find((item) => item.id === eventId);
     const updates: Partial<CalendarEvent> = { date: targetDateStr };
+    if (event?.endDate) {
+      const [startYear, startMonth, startDay] = event.date.split('-').map(Number);
+      const [endYear, endMonth, endDay] = event.endDate.split('-').map(Number);
+      const duration = Math.max(0, Math.round((Date.UTC(endYear, endMonth - 1, endDay) - Date.UTC(startYear, startMonth - 1, startDay)) / 86400000));
+      const shiftedEnd = parseLocalDate(targetDateStr);
+      shiftedEnd.setDate(shiftedEnd.getDate() + duration);
+      updates.endDate = toLocalDateString(shiftedEnd);
+    }
     if (targetHour !== undefined) {
       const hourStr = String(targetHour).padStart(2, '0') + ':00';
       const endHour = targetHour + 1;
@@ -431,9 +444,9 @@ const DayView: React.FC<DayViewProps> = ({
   const dateStr = toLocalDateString(currentDate);
   const isToday = dateStr === todayStr;
 
-  const dayEvents = events.filter((e) => e.date === dateStr);
+  const dayEvents = events.filter((e) => isCalendarEventOnDate(e, dateStr));
   const allDayEvents = dayEvents.filter((e) => e.isAllDay || (!e.startTime && !e.endTime));
-  const timedEvents = dayEvents.filter((e) => !e.isAllDay && e.startTime);
+  const timedEvents = dayEvents.filter((e) => !e.isAllDay && !e.endDate && e.startTime);
 
   return (
     <div className="bg-white dark:bg-espresso-850 rounded-2xl border border-ivory-300 dark:border-espresso-750 shadow-xs overflow-hidden">
@@ -658,7 +671,7 @@ const WeekView: React.FC<WeekViewProps> = ({
           {weekDays.map((d) => {
             const dateStr = toLocalDateString(d);
             const allDayEvents = events.filter(
-              (evt) => evt.date === dateStr && (evt.isAllDay || (!evt.startTime && !evt.endTime))
+              (evt) => isCalendarEventOnDate(evt, dateStr) && (evt.isAllDay || evt.category === 'holiday' || evt.endDate || (!evt.startTime && !evt.endTime))
             );
 
             return (
@@ -711,7 +724,7 @@ const WeekView: React.FC<WeekViewProps> = ({
               {weekDays.map((d) => {
                 const dateStr = toLocalDateString(d);
                 const hourEvents = events.filter((evt) => {
-                  if (evt.date !== dateStr) return false;
+                  if (evt.date !== dateStr || evt.endDate) return false;
                   if (evt.isAllDay) return false;
                   const h = parseInt((evt.startTime || '00:00').split(':')[0], 10);
                   return h === hour;
@@ -810,7 +823,7 @@ const MonthView: React.FC<MonthViewProps> = ({
           const dateStr = toLocalDateString(d);
           const isToday = dateStr === todayStr;
           const isCurrentMonth = d.getMonth() === currentMonthIdx;
-          const dayEvents = events.filter((e) => e.date === dateStr);
+          const dayEvents = events.filter((e) => isCalendarEventOnDate(e, dateStr));
           const visibleEvents = dayEvents.slice(0, 3);
           const remainingCount = dayEvents.length - visibleEvents.length;
 
@@ -952,7 +965,7 @@ const YearView: React.FC<YearViewProps> = ({
                 const dayNum = i + 1;
                 const dateStr = `${year}-${String(monthIdx + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
                 const isToday = dateStr === todayStr;
-                const dayEvents = events.filter((e) => e.date === dateStr);
+                const dayEvents = events.filter((e) => isCalendarEventOnDate(e, dateStr));
                 const hasEvents = dayEvents.length > 0;
                 const primaryCategory = hasEvents ? dayEvents[0].category : undefined;
                 const dotColor = primaryCategory

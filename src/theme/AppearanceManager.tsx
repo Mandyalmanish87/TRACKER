@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useApp } from '../context/AppContext';
+import { useOptionalApp } from '../context/AppContext';
 import { useTheme } from './ThemeContext';
 import type { AccentColor, BackgroundStyle } from '../types';
 
@@ -11,7 +11,7 @@ export const DEFAULT_CUSTOM_WALLPAPER =
  * accent colour and background style from AppContext and applies them
  * to the DOM so the CSS custom properties take effect application-wide.
  *
- * Must be rendered inside <AppProvider> and <ThemeProvider>.
+ * Safe to render inside or outside AppProvider.
  *
  * DOM mutations:
  *   <html data-accent="terracotta|sage|ochre|dusty-blue|plum|slate">
@@ -19,18 +19,58 @@ export const DEFAULT_CUSTOM_WALLPAPER =
  *         style="background-image: ...">   ← for custom bg
  */
 export const AppearanceManager: React.FC = () => {
-  const { state } = useApp();
+  const appContext = useOptionalApp();
   const { resolvedTheme } = useTheme();
 
-  const accent: AccentColor       = state.settings?.accentColor ?? 'terracotta';
-  const bgStyle: BackgroundStyle  = state.settings?.backgroundStyle ?? 'minimal';
-  const customUrl: string         = state.settings?.customBackgroundUrl ?? '';
+  const accent: AccentColor       = appContext?.state?.settings?.accentColor ?? 'terracotta';
+  const appearanceMode = appContext?.state?.settings?.appearanceMode ?? 'classic';
+  const paperContrast = appContext?.state?.settings?.paperContrast ?? 'balanced';
+  const customAccent = appContext?.state?.settings?.customAccentColor ?? '#d77f98';
+  const bgStyle: BackgroundStyle  = appContext?.state?.settings?.backgroundStyle ?? 'minimal';
+  const backgroundEffect = appContext?.state?.settings?.backgroundEffect ?? 'static';
+  const backgroundEffectSpeed = appContext?.state?.settings?.backgroundEffectSpeed ?? 2;
+  const backgroundEffectIntensity = appContext?.state?.settings?.backgroundEffectIntensity ?? 0.22;
+  const accentEdgeGlow = appContext?.state?.settings?.accentEdgeGlow ?? true;
+  const customUrl: string         = appContext?.state?.settings?.customBackgroundUrl ?? '';
   const [imageFailed, setImageFailed] = useState(false);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    root.setAttribute('data-appearance', appearanceMode);
+    root.setAttribute('data-paper-contrast', paperContrast);
+  }, [appearanceMode, paperContrast]);
 
   // ── Apply accent colour data-attribute to <html> ──────────
   useEffect(() => {
-    document.documentElement.setAttribute('data-accent', accent);
-  }, [accent]);
+    const root = document.documentElement;
+    root.setAttribute('data-accent', accent);
+    if (accent === 'custom' && /^#[0-9a-fA-F]{6}$/.test(customAccent)) {
+      const darkAccent = `color-mix(in srgb, ${customAccent} 72%, white 28%)`;
+      root.style.setProperty('--accent', resolvedTheme === 'dark' ? darkAccent : customAccent);
+      root.style.setProperty('--accent-dark-resolved', darkAccent);
+      root.style.setProperty('--accent-light', `color-mix(in srgb, ${customAccent} 10%, white 90%)`);
+    } else {
+      root.style.removeProperty('--accent');
+      root.style.removeProperty('--accent-dark-resolved');
+      root.style.removeProperty('--accent-light');
+    }
+  }, [accent, customAccent, resolvedTheme]);
+
+  useEffect(() => {
+    const body = document.body;
+    body.setAttribute('data-background-effect', backgroundEffect);
+    body.style.setProperty('--ambient-effect-speed', String(Math.min(5, Math.max(1, backgroundEffectSpeed))));
+    body.style.setProperty('--ambient-effect-intensity', String(Math.min(0.4, Math.max(0.05, backgroundEffectIntensity))));
+    return () => {
+      body.removeAttribute('data-background-effect');
+      body.style.removeProperty('--ambient-effect-speed');
+      body.style.removeProperty('--ambient-effect-intensity');
+    };
+  }, [backgroundEffect, backgroundEffectSpeed, backgroundEffectIntensity]);
+
+  useEffect(() => {
+    document.body.setAttribute('data-accent-edge-glow', accentEdgeGlow ? 'true' : 'false');
+  }, [accentEdgeGlow]);
 
   // ── Pre-test image load for custom URLs ───────────────────
   useEffect(() => {

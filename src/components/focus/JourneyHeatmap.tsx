@@ -202,7 +202,7 @@ export const JourneyHeatmap: React.FC = () => {
     <Card
       title="Focus Journey & Consistency"
       subtitle="Empirical day-by-day contribution heatmap of your active study sessions over the past 365 days."
-      className="w-full"
+      className="w-full focus-journey-card"
       bodyClassName="p-4 sm:p-6"
       action={
         <div className="flex items-center gap-2 text-xs font-mono font-medium text-espresso-600 dark:text-espresso-300 bg-ivory-100 dark:bg-espresso-800 px-3 py-1.5 rounded-xl border border-ivory-200 dark:border-espresso-750">

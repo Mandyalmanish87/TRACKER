@@ -10,6 +10,7 @@ import {
   ExternalLink,
   ArrowRight,
   RotateCcw,
+  Timer,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { PlannerTask, TaskStatus, TaskPriority } from '../../types';
@@ -22,6 +23,7 @@ import { InlineSubtaskList } from './InlineSubtaskList';
 interface KanbanBoardProps {
   tasks: PlannerTask[];
   onNavigateToSyllabus?: (subjectId?: string) => void;
+  onOpenTaskFocus?: (task: PlannerTask) => void;
 }
 
 const COLUMN_CONFIG: { id: TaskStatus; label: string; dotColor: string }[] = [
@@ -57,7 +59,7 @@ const PRIORITY_BADGES: Record<TaskPriority, { label: string; badgeClass: string 
   },
 };
 
-export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, onNavigateToSyllabus }) => {
+export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, onNavigateToSyllabus, onOpenTaskFocus }) => {
   const { state, setTaskStatus, deleteTask, toggleTaskSubtask } = useApp();
 
   const [activeMobileColumn, setActiveMobileColumn] = useState<TaskStatus>('todo');
@@ -279,7 +281,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, onNavigateToSyl
           )}
 
           {task.status === 'in_progress' && (
-            <div className="flex items-center gap-1.5 w-full">
+            <div className="flex w-full flex-wrap items-center gap-1.5">
               <button
                 onClick={() => setTaskStatus(task.id, 'todo')}
                 className="py-1.5 px-2.5 rounded-full text-xs font-mono text-espresso-600 hover:text-espresso-900 dark:text-espresso-300 dark:hover:text-ivory-100 bg-ivory-200 dark:bg-espresso-800 hover:bg-ivory-300 dark:hover:bg-espresso-750 transition"
@@ -289,11 +291,23 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, onNavigateToSyl
               </button>
               <button
                 onClick={() => setTaskStatus(task.id, 'done')}
-                className="flex-1 py-1.5 px-3 rounded-full text-xs font-semibold uppercase tracking-wider bg-emerald-600 hover:bg-emerald-700 text-white transition flex items-center justify-center gap-1 shadow-subtle"
+                className="flex-1 min-w-[130px] py-1.5 px-3 rounded-full text-xs font-semibold uppercase tracking-wider bg-emerald-600 hover:bg-emerald-700 text-white transition flex items-center justify-center gap-1 shadow-subtle"
               >
                 <CheckCircle2 className="w-3.5 h-3.5" />
                 <span>Mark Completed</span>
               </button>
+              {onOpenTaskFocus && (
+                <button
+                  type="button"
+                  onClick={() => onOpenTaskFocus(task)}
+                  className="w-full py-1.5 px-3 rounded-full text-xs font-semibold tracking-wide border border-terracotta-300 dark:border-terracotta-800 bg-terracotta-50 dark:bg-terracotta-950/30 text-terracotta-800 dark:text-terracotta-200 hover:bg-terracotta-100 dark:hover:bg-terracotta-950/50 transition flex items-center justify-center gap-1.5"
+                  aria-label={`Open Deep Focus for ${task.title}${task.estimatedDuration ? `, ${task.estimatedDuration} minutes` : ', untimed'}`}
+                >
+                  <Timer className="w-3.5 h-3.5" />
+                  <span>Open Deep Focus</span>
+                  <span className="opacity-75">{task.estimatedDuration ? `· ${task.estimatedDuration} min` : '· Untimed'}</span>
+                </button>
+              )}
             </div>
           )}
 

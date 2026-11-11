@@ -8,8 +8,10 @@ import {
   Filter,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { getActiveAccentColor } from '../../utils/themeColors';
 import { DayOfWeek, ResolvedCalendarEvent } from '../../types';
 import { resolveSchedule } from '../../utils/scheduleResolver';
+import { getEventHolidayRanges, isEventHolidayOnDate, mergeEventHolidays } from '../../utils/eventHolidayCalendar';
 import { useOptionalClassSpace } from '../../context/ClassSpaceContext';
 import {
   isWeeklyOffDay,
@@ -55,6 +57,7 @@ export const AttendanceCalendarTab: React.FC = () => {
   const [markingEvent, setMarkingEvent] = useState<ResolvedCalendarEvent | null>(null);
 
   const todayStr = useMemo(() => formatDateStr(new Date()), []);
+  const eventHolidays = useMemo(() => getEventHolidayRanges(state.events || []), [state.events]);
 
   const academicCalendar = useMemo(() => {
     if (isClassBased && classSpace?.activeWorkspace) {
@@ -68,6 +71,11 @@ export const AttendanceCalendarTab: React.FC = () => {
       createDefaultAcademicSettings('semester')
     );
   }, [isClassBased, classSpace?.activeWorkspace, state.settings?.academicCalendar]);
+
+  const attendanceHolidays = useMemo(
+    () => mergeEventHolidays(academicCalendar.nationalHolidays, eventHolidays),
+    [academicCalendar.nationalHolidays, eventHolidays]
+  );
 
   // Available subjects for the active scope filter
   const availableCourses = useMemo(() => {
@@ -211,8 +219,8 @@ export const AttendanceCalendarTab: React.FC = () => {
           instructor: occ.instructor,
           notes: occ.notes,
           source: occ.source,
-          isCancelled: occ.isCancelled,
-          changeNote: occ.changeNote,
+          isCancelled: occ.isCancelled || isEventHolidayOnDate(occ.date, eventHolidays),
+          changeNote: isEventHolidayOnDate(occ.date, eventHolidays) ? 'Holiday' : occ.changeNote,
         };
         const list = map.get(occ.date) || [];
         list.push(evt);
@@ -237,15 +245,19 @@ export const AttendanceCalendarTab: React.FC = () => {
       if (selectedSubjectFilter !== 'all' && evt.subjectId !== selectedSubjectFilter) {
         continue;
       }
+      const holiday = isEventHolidayOnDate(evt.date, eventHolidays);
       const list = map.get(evt.date) || [];
-      list.push(evt);
+      list.push(holiday ? { ...evt, isCancelled: true, changeNote: 'Holiday' } : evt);
       map.set(evt.date, list);
     }
     return map;
-  }, [monthDays, isClassBased, classSpace?.activeWorkspace, classSpace?.occurrences, state.timetable, state.occurrenceOverrides, state.extraClasses, selectedSubjectFilter]);
+  }, [monthDays, isClassBased, classSpace?.activeWorkspace, classSpace?.occurrences, state.timetable, state.occurrenceOverrides, state.extraClasses, selectedSubjectFilter, eventHolidays]);
 
   // Attendance log lookup for quick status display
   const getAttendanceForEvent = (evt: ResolvedCalendarEvent) => {
+    if (evt.isCancelled && evt.changeNote === 'Holiday') {
+      return { date: evt.date, status: 'cancelled' as const, subjectId: evt.subjectId, isPlanned: false };
+    }
     if (isClassBased && classSpace?.activeWorkspace) {
       const record = classSpace.attendanceRecords.find((r) => r.occurrenceKey === evt.occurrenceKey);
       if (record) {
@@ -267,9 +279,36 @@ export const AttendanceCalendarTab: React.FC = () => {
   };
 
   const getSubject = (id: string) => {
-    const personal = state.subjects.find((s) => s.id === id);
-    if (personal) return personal;
+    // In class-based mode, ClassSpace is the authoritative source. Rule IDs can
+    // overlap personal subject IDs, so checking personal subjects first can
+    // show a stale one-letter code instead of the official course code.
     if (isClassBased && classSpace?.activeWorkspace) {
+      const rule = classSpace.rules.find((item) => item.id === id);
+      if (rule) {
+        return {
+          id: rule.id,
+          name: rule.subjectName,
+          code: rule.subjectCode,
+          color: rule.subjectColor,
+          targetPct: classSpace.attendanceStats.targetPercentage,
+          totalConducted: classSpace.attendanceStats.totalConducted,
+          attended: classSpace.attendanceStats.attended,
+        };
+      }
+
+      const extraClass = classSpace.overrides.find((item) => item.id === id && item.type === 'extra');
+      if (extraClass) {
+        return {
+          id: extraClass.id,
+          name: extraClass.subjectName || 'Extra Lecture',
+          code: extraClass.subjectCode || 'EXTRA',
+          color: extraClass.subjectColor,
+          targetPct: classSpace.attendanceStats.targetPercentage,
+          totalConducted: classSpace.attendanceStats.totalConducted,
+          attended: classSpace.attendanceStats.attended,
+        };
+      }
+
       const occ = classSpace.occurrences.find((o) => (o.ruleId || o.overrideId || o.occurrenceKey) === id);
       if (occ) {
         return {
@@ -283,7 +322,7 @@ export const AttendanceCalendarTab: React.FC = () => {
         };
       }
     }
-    return undefined;
+    return state.subjects.find((s) => s.id === id);
   };
 
   const headerTitle = useMemo(() => {
@@ -303,7 +342,7 @@ export const AttendanceCalendarTab: React.FC = () => {
   }, [currentDate, calendarView]);
 
   return (
-    <div className="space-y-4">
+    <div className="attendance-calendar space-y-4">
       {/* Calendar Toolbar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-white dark:bg-espresso-850 border border-ivory-300 dark:border-espresso-750 shadow-subtle">
         <div className="flex items-center gap-3">
@@ -317,6 +356,7 @@ export const AttendanceCalendarTab: React.FC = () => {
           <div className="flex items-center border border-ivory-300 dark:border-espresso-700 rounded-xl overflow-hidden bg-ivory-100 dark:bg-espresso-800">
             <button
               onClick={handlePrev}
+              aria-label={`Previous ${calendarView}`}
               className="p-1.5 text-espresso-600 dark:text-espresso-300 hover:bg-ivory-200 dark:hover:bg-espresso-700 transition"
               title="Previous"
             >
@@ -324,6 +364,7 @@ export const AttendanceCalendarTab: React.FC = () => {
             </button>
             <button
               onClick={handleNext}
+              aria-label={`Next ${calendarView}`}
               className="p-1.5 text-espresso-600 dark:text-espresso-300 hover:bg-ivory-200 dark:hover:bg-espresso-700 border-l border-ivory-300 dark:border-espresso-700 transition"
               title="Next"
             >
@@ -357,6 +398,7 @@ export const AttendanceCalendarTab: React.FC = () => {
           <div className="flex items-center p-1 bg-ivory-100 dark:bg-espresso-800 rounded-xl border border-ivory-300 dark:border-espresso-700">
             <button
               onClick={() => setCalendarView('month')}
+              aria-pressed={calendarView === 'month'}
               className={`px-3.5 sm:px-4 py-1.5 rounded-lg text-xs font-medium transition ${
                 calendarView === 'month'
                   ? 'bg-white dark:bg-espresso-700 text-espresso-950 dark:text-ivory-50 shadow-subtle'
@@ -367,6 +409,7 @@ export const AttendanceCalendarTab: React.FC = () => {
             </button>
             <button
               onClick={() => setCalendarView('week')}
+              aria-pressed={calendarView === 'week'}
               className={`px-3.5 sm:px-4 py-1.5 rounded-lg text-xs font-medium transition ${
                 calendarView === 'week'
                   ? 'bg-white dark:bg-espresso-700 text-espresso-950 dark:text-ivory-50 shadow-subtle'
@@ -394,7 +437,7 @@ export const AttendanceCalendarTab: React.FC = () => {
               const isFuture = cell.dateStr > todayStr;
               const cellEvents = resolvedEventsByDate.get(cell.dateStr) || [];
               const isOffDay = isWeeklyOffDay(cell.date, academicCalendar.weeklyOffDays);
-              const holiday = findNationalHoliday(cell.dateStr, academicCalendar.nationalHolidays);
+              const holiday = findNationalHoliday(cell.dateStr, attendanceHolidays);
 
               return (
                 <div
@@ -443,7 +486,7 @@ export const AttendanceCalendarTab: React.FC = () => {
                   <div className="space-y-1 flex-1 overflow-y-auto no-scrollbar max-h-24">
                     {cellEvents.map((evt) => {
                       const subject = getSubject(evt.subjectId);
-                      const color = subject?.color || '#C45532';
+                      const color = subject?.color || getActiveAccentColor();
                       const log = getAttendanceForEvent(evt);
                       const isCancelled = Boolean(evt.isCancelled);
 
@@ -510,7 +553,7 @@ export const AttendanceCalendarTab: React.FC = () => {
               {weekDays.map((day) => {
                 const isToday = day.dateStr === todayStr;
                 const isOffDay = isWeeklyOffDay(day.date, academicCalendar.weeklyOffDays);
-                const holiday = findNationalHoliday(day.dateStr, academicCalendar.nationalHolidays);
+                const holiday = findNationalHoliday(day.dateStr, attendanceHolidays);
 
                 return (
                   <div key={day.dayOfWeek} className="px-2">
@@ -545,7 +588,7 @@ export const AttendanceCalendarTab: React.FC = () => {
               {weekDays.map((day) => {
                 const isToday = day.dateStr === todayStr;
                 const isOffDay = isWeeklyOffDay(day.date, academicCalendar.weeklyOffDays);
-                const holiday = findNationalHoliday(day.dateStr, academicCalendar.nationalHolidays);
+                const holiday = findNationalHoliday(day.dateStr, attendanceHolidays);
                 const dayEvents = resolvedEventsByDate.get(day.dateStr) || [];
 
                 return (
@@ -566,7 +609,7 @@ export const AttendanceCalendarTab: React.FC = () => {
                     ) : (
                       dayEvents.map((evt) => {
                         const subject = getSubject(evt.subjectId);
-                        const color = subject?.color || '#C45532';
+                        const color = subject?.color || getActiveAccentColor();
                         const log = getAttendanceForEvent(evt);
 
                         return (

@@ -1,47 +1,74 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Target, CalendarDays, AlertCircle, CheckCircle2 } from 'lucide-react';
 
-/**
- * Computes full calendar days between today (local midnight) and the target date.
- * Returns null if no date is configured or the string is invalid.
- */
-function computeDaysRemaining(examDateStr: string | undefined): number | null {
-  if (!examDateStr) return null;
-  const target = new Date(examDateStr + 'T00:00:00'); // parse as local midnight
-  if (isNaN(target.getTime())) return null;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const diffMs = target.getTime() - today.getTime();
-  return Math.round(diffMs / (1000 * 60 * 60 * 24));
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function parseLocalDate(dateString: string | undefined): Date | null {
+  if (!dateString) return null;
+  const match = dateString.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  return date.getFullYear() === Number(match[1]) && date.getMonth() === Number(match[2]) - 1 && date.getDate() === Number(match[3])
+    ? date
+    : null;
+}
+
+function dateKey(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function calendarDayNumber(date: Date): number {
+  return Math.floor(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) / DAY_MS);
+}
+
+function formatTargetDate(date: Date): string {
+  return date.toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  });
 }
 
 export const AcademicCountdownWidget: React.FC = () => {
   const { state } = useApp();
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setNow(new Date()), 60_000);
+    return () => window.clearInterval(interval);
+  }, []);
 
   const settings = state.settings;
-  const profile  = state.profile;
+  const profile = state.profile;
 
-  // If the user has hidden the countdown in settings, render nothing
   if (settings && settings.showExamCountdown === false) return null;
 
-  const daysRemaining = useMemo(
-    () => computeDaysRemaining(profile?.examDate),
-    [profile?.examDate],
-  );
-
+  const targetDate = parseLocalDate(profile?.examDate);
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const daysRemaining = targetDate ? calendarDayNumber(targetDate) - calendarDayNumber(today) : null;
   const targetLabel = profile?.targetExam?.trim() || 'Academic Target';
-  const hasDate     = daysRemaining !== null;
 
-  /* ── No date configured ── */
-  if (!hasDate) {
+  const timelineDays = useMemo(() => {
+    if (!targetDate || daysRemaining === null) return [];
+    const start = daysRemaining >= 0 ? today : targetDate;
+    const end = daysRemaining >= 0 ? targetDate : today;
+    const days: Date[] = [];
+    const cursor = new Date(start);
+    while (cursor <= end) {
+      days.push(new Date(cursor));
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    return days;
+  }, [profile?.examDate, daysRemaining, now]);
+
+  if (!targetDate || daysRemaining === null) {
     return (
       <div className="p-5 rounded-2xl border border-dashed border-ivory-400 dark:border-espresso-700 bg-ivory-50 dark:bg-espresso-900/50 flex items-start gap-3">
-        <CalendarDays className="w-5 h-5 text-espresso-400 dark:text-espresso-500 mt-0.5 shrink-0" />
+        <CalendarDays className="w-5 h-5 text-espresso-400 dark:text-espresso-500 mt-0.5 shrink-0" aria-hidden="true" />
         <div>
-          <p className="text-xs font-semibold uppercase font-mono tracking-wider text-espresso-500 dark:text-espresso-400">
-            Countdown
-          </p>
+          <p className="text-xs font-semibold uppercase font-mono tracking-wider text-espresso-500 dark:text-espresso-400">Countdown</p>
           <p className="text-sm text-espresso-600 dark:text-espresso-300 mt-1">
             Set a <span className="font-semibold">target date</span> in{' '}
             <span className="font-semibold">Settings → Profile</span> to see your countdown here.
@@ -55,7 +82,7 @@ export const AcademicCountdownWidget: React.FC = () => {
   if (daysRemaining < 0) {
     return (
       <div className="p-5 rounded-2xl border border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850 shadow-subtle flex items-start gap-3">
-        <CheckCircle2 className="w-5 h-5 text-sage-500 dark:text-sage-400 mt-0.5 shrink-0" />
+        <CheckCircle2 className="w-5 h-5 text-sage-500 dark:text-sage-400 mt-0.5 shrink-0" aria-hidden="true" />
         <div>
           <p className="text-xs font-semibold uppercase font-mono tracking-wider text-espresso-500 dark:text-espresso-400">
             {targetLabel}
@@ -85,71 +112,87 @@ export const AcademicCountdownWidget: React.FC = () => {
     );
   }
 
-  /* ── Urgency tier ── */
-  const urgent  = daysRemaining <= 7;
-  const warning = daysRemaining <= 30;
-
-  const colorClasses = urgent
-    ? 'border-red-200 dark:border-red-900/60 bg-red-50 dark:bg-red-900/20'
+  const urgent = daysRemaining >= 0 && daysRemaining <= 7;
+  const warning = daysRemaining > 7 && daysRemaining <= 30;
+  const bannerTone = urgent
+    ? 'border-red-300/70 dark:border-red-900/60 bg-red-50 dark:bg-red-950/35'
     : warning
-    ? 'border-amber-200 dark:border-amber-900/60 bg-amber-50 dark:bg-amber-900/20'
+    ? 'border-amber-300/70 dark:border-amber-900/60 bg-amber-50 dark:bg-amber-950/30'
     : 'border-ivory-300 dark:border-espresso-750 bg-white dark:bg-espresso-850';
-
-  const accentColor = urgent
-    ? 'text-red-600 dark:text-red-400'
-    : warning
-    ? 'text-amber-600 dark:text-amber-400'
-    : 'text-terracotta-600 dark:text-terracotta-400';
-
-  const numberColor = urgent
+  const countTone = urgent
     ? 'text-red-700 dark:text-red-300'
     : warning
     ? 'text-amber-700 dark:text-amber-300'
     : 'text-espresso-950 dark:text-ivory-50';
+  const labelTone = urgent
+    ? 'text-red-700 dark:text-red-300'
+    : warning
+    ? 'text-amber-700 dark:text-amber-300'
+    : 'text-terracotta-600 dark:text-terracotta-400';
+  const examKey = dateKey(targetDate);
+  const todayKey = dateKey(today);
 
   return (
-    <div className={`p-5 rounded-2xl border shadow-subtle ${colorClasses}`}>
-      {/* Label row */}
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <Target className={`w-4 h-4 ${accentColor}`} />
-          <span className={`text-xs font-semibold uppercase font-mono tracking-wider ${accentColor}`}>
-            {targetLabel}
-          </span>
-        </div>
-        {urgent && (
-          <div className="flex items-center gap-1 text-xs text-red-600 dark:text-red-400 font-medium">
-            <AlertCircle className="w-3.5 h-3.5" />
-            Final stretch!
+    <section className={`academic-countdown-banner rounded-2xl border shadow-subtle p-4 sm:p-5 ${bannerTone}`} aria-label={`${targetLabel} countdown`}>
+      <div className="flex flex-col gap-5 md:flex-row md:items-center md:gap-6">
+        <div className="min-w-0 md:w-[190px] md:shrink-0 md:border-r md:border-[var(--border)] md:pr-5">
+          <div className="flex items-center gap-2">
+            <Target className={`w-4 h-4 shrink-0 ${labelTone}`} aria-hidden="true" />
+            <span className={`truncate text-xs font-semibold uppercase font-mono tracking-wider ${labelTone}`} title={targetLabel}>
+              {targetLabel}
+            </span>
+            {urgent && <AlertCircle className="w-3.5 h-3.5 shrink-0 text-red-600 dark:text-red-400" aria-label="Final stretch" />}
           </div>
-        )}
-      </div>
-
-      {/* Big counter */}
-      <div className="flex items-end gap-2">
-        <span className={`font-serif tabular-nums text-5xl sm:text-6xl font-bold leading-none ${numberColor}`}>
-          {daysRemaining}
-        </span>
-        <div className="mb-1">
-          <p className="text-sm font-semibold text-espresso-700 dark:text-espresso-200 leading-tight">
-            {daysRemaining === 1 ? 'day' : 'days'}
+          <div className="mt-2 flex items-end gap-2">
+            <span className={`font-serif tabular-nums text-5xl sm:text-6xl font-bold leading-none ${countTone}`}>
+              {Math.abs(daysRemaining)}
+            </span>
+            <span className="mb-1 text-xs leading-tight text-espresso-500 dark:text-espresso-400">
+              {daysRemaining < 0 ? <>days<br />past</> : <>{daysRemaining === 1 ? 'day' : 'days'}<br />remaining</>}
+            </span>
+          </div>
+          <p className="mt-2 flex items-center gap-1.5 text-[11px] leading-snug text-espresso-500 dark:text-espresso-400">
+            <CalendarDays className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            <span>{formatTargetDate(targetDate)}</span>
           </p>
-          <p className="text-xs text-espresso-400 dark:text-espresso-500">remaining</p>
+        </div>
+
+        <div className="min-w-0 flex-1" role="group" aria-label="Daily countdown heatmap">
+          <div
+            className="grid w-full items-center gap-x-1 gap-y-1.5 sm:gap-x-1.5"
+            style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(10px, 1fr))' }}
+            role="grid"
+            aria-label={`Days from ${formatTargetDate(today)} to ${formatTargetDate(targetDate)}`}
+          >
+            {timelineDays.map((day) => {
+              const key = dateKey(day);
+              const isToday = key === todayKey;
+              const isExam = key === examKey;
+              const stateLabel = isToday && isExam ? 'Today and exam' : isToday ? 'Today' : isExam ? 'Exam' : 'Future';
+              return (
+                <span
+                  key={key}
+                  role="gridcell"
+                  aria-label={`${day.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}: ${stateLabel}`}
+                  title={`${day.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · ${stateLabel}`}
+                  className="aspect-square w-[10px] justify-self-center rounded-[3px] transition-colors sm:w-3 sm:rounded-[4px]"
+                  style={{
+                    backgroundColor: isExam ? 'var(--warning)' : isToday ? 'var(--accent)' : 'color-mix(in srgb, var(--text-primary) 9%, var(--surface))',
+                    border: isToday && isExam ? '2px solid var(--accent)' : '1px solid color-mix(in srgb, var(--border) 75%, transparent)',
+                    boxShadow: isToday && isExam ? '0 0 0 2px var(--surface), 0 0 0 3px var(--accent)' : undefined,
+                  }}
+                />
+              );
+            })}
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[10px] font-medium text-espresso-500 dark:text-espresso-400" aria-label="Heatmap legend">
+            <span className="inline-flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-[3px] border border-[var(--border)]" style={{ backgroundColor: 'color-mix(in srgb, var(--text-primary) 9%, var(--surface))' }} aria-hidden="true" />Future</span>
+            <span className="inline-flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-[3px]" style={{ backgroundColor: 'var(--accent)' }} aria-hidden="true" />Today</span>
+            <span className="inline-flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-[3px]" style={{ backgroundColor: 'var(--warning)' }} aria-hidden="true" />Exam</span>
+          </div>
         </div>
       </div>
-
-      {/* Date display */}
-      {profile?.examDate && (
-        <p className="text-xs text-espresso-400 dark:text-espresso-500 mt-3 flex items-center gap-1.5">
-          <CalendarDays className="w-3.5 h-3.5" />
-          {new Date(profile.examDate + 'T00:00:00').toLocaleDateString('en-US', {
-            weekday: 'long',
-            month:   'long',
-            day:     'numeric',
-            year:    'numeric',
-          })}
-        </p>
-      )}
-    </div>
+    </section>
   );
 };

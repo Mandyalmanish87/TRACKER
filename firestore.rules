@@ -1,0 +1,172 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function isAdmin() {
+      return signedIn() && (request.auth.token.admin == true ||
+        (exists(/databases/$(database)/documents/admin_users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/admin_users/$(request.auth.uid)).data.is_active == true));
+    }
+    function memberPath(workspaceId, userId) {
+      return /databases/$(database)/documents/class_members/$(workspaceId + '__' + userId);
+    }
+    function isMember(workspaceId) {
+      return signedIn() && exists(memberPath(workspaceId, request.auth.uid));
+    }
+    function memberRole(workspaceId) {
+      return get(memberPath(workspaceId, request.auth.uid)).data.role;
+    }
+    function canManageSchedule(workspaceId) {
+      return isAdmin() || (isMember(workspaceId) && memberRole(workspaceId) in ['owner', 'cr', 'co_admin']);
+    }
+    function canManageWorkspace(workspaceId) {
+      return isAdmin() || (isMember(workspaceId) && memberRole(workspaceId) in ['owner', 'cr']);
+    }
+    function canModerate(workspaceId) {
+      return canManageSchedule(workspaceId);
+    }
+    function rowMember() { return signedIn() && isMember(resource.data.workspace_id); }
+    function hasActivePass(userId) {
+      let subDoc = /databases/$(database)/documents/user_subscriptions/$(userId);
+      return exists(subDoc)
+        && get(subDoc).data.status == 'active'
+        && (
+          (get(subDoc).data.period_end_timestamp is timestamp && request.time < get(subDoc).data.period_end_timestamp)
+          || (get(subDoc).data.current_period_end is timestamp && request.time < get(subDoc).data.current_period_end)
+        );
+    }
+
+    match /user_trackers/{userId} {
+      allow read: if signedIn() && request.auth.uid == userId;
+      allow write: if signedIn() && request.auth.uid == userId && hasActivePass(userId);
+    }
+
+    match /class_workspaces/{workspaceId} {
+      allow read: if signedIn() && (resource.data.created_by == request.auth.uid || isMember(workspaceId));
+      allow create: if signedIn() && request.resource.data.created_by == request.auth.uid && hasActivePass(request.auth.uid);
+      allow update: if canManageWorkspace(workspaceId);
+      allow delete: if signedIn() && (resource.data.created_by == request.auth.uid || (isMember(workspaceId) && memberRole(workspaceId) == 'owner'));
+    }
+
+    match /class_members/{memberId} {
+      allow read: if signedIn() && (resource.data.user_id == request.auth.uid || isMember(resource.data.workspace_id));
+      allow create: if signedIn() && canManageWorkspace(request.resource.data.workspace_id)
+        && request.resource.data.role in ['cr', 'co_admin', 'member'];
+      allow update: if signedIn() && (
+        (resource.data.user_id == request.auth.uid
+          && request.resource.data.user_id == resource.data.user_id
+          && request.resource.data.workspace_id == resource.data.workspace_id
+          && request.resource.data.role == resource.data.role)
+        || (canManageWorkspace(resource.data.workspace_id)
+          && request.resource.data.workspace_id == resource.data.workspace_id
+          && request.resource.data.role in ['cr', 'co_admin', 'member'])
+      );
+      allow delete: if canManageWorkspace(resource.data.workspace_id)
+        && resource.data.role != 'owner';
+    }
+
+    match /class_join_requests/{requestId} {
+      allow read: if signedIn() && (resource.data.user_id == request.auth.uid || canManageWorkspace(resource.data.workspace_id));
+      allow create: if signedIn() && request.resource.data.user_id == request.auth.uid && isMember(request.resource.data.workspace_id);
+      allow update, delete: if canManageWorkspace(resource.data.workspace_id);
+    }
+
+    match /class_channels/{channelId} {
+      allow read: if rowMember();
+      allow create: if canManageWorkspace(request.resource.data.workspace_id);
+      allow update, delete: if canManageWorkspace(resource.data.workspace_id);
+    }
+
+    match /class_timetable_rules/{ruleId} {
+      allow read: if rowMember();
+      allow create: if canManageSchedule(request.resource.data.workspace_id);
+      allow update, delete: if canManageSchedule(resource.data.workspace_id);
+    }
+
+    match /class_timetable_overrides/{overrideId} {
+      allow read: if rowMember();
+      allow create: if canManageSchedule(request.resource.data.workspace_id);
+      allow update, delete: if canManageSchedule(resource.data.workspace_id);
+    }
+
+    match /class_attendance_records/{recordId} {
+      allow read: if signedIn() && request.auth.uid == resource.data.user_id;
+      allow create: if signedIn() && request.auth.uid == request.resource.data.user_id && isMember(request.resource.data.workspace_id);
+      allow update: if signedIn() && request.auth.uid == resource.data.user_id
+        && request.resource.data.user_id == resource.data.user_id
+        && request.resource.data.workspace_id == resource.data.workspace_id;
+      allow delete: if signedIn() && request.auth.uid == resource.data.user_id;
+    }
+
+    match /class_messages/{messageId} {
+      allow read: if rowMember();
+      allow create: if signedIn() && isMember(request.resource.data.workspace_id)
+        && request.resource.data.sender_id == request.auth.uid;
+      allow update: if signedIn() && isMember(resource.data.workspace_id)
+        && request.resource.data.sender_id == resource.data.sender_id
+        && request.resource.data.workspace_id == resource.data.workspace_id
+        && (resource.data.sender_id == request.auth.uid || canModerate(resource.data.workspace_id));
+      allow delete: if signedIn() && canModerate(resource.data.workspace_id);
+    }
+
+    match /class_message_reactions/{reactionId} {
+      function canSeeReaction(messageId) {
+        let messagePath = /databases/$(database)/documents/class_messages/$(messageId);
+        return signedIn() && exists(messagePath) && isMember(get(messagePath).data.workspace_id);
+      }
+      allow read: if canSeeReaction(resource.data.message_id);
+      allow create: if signedIn() && request.resource.data.user_id == request.auth.uid
+        && canSeeReaction(request.resource.data.message_id);
+      allow delete: if signedIn() && resource.data.user_id == request.auth.uid
+        && canSeeReaction(resource.data.message_id);
+      allow update: if false;
+    }
+
+    match /class_saved_messages/{savedId} {
+      allow read, delete: if signedIn() && request.auth.uid == resource.data.user_id;
+      allow create: if signedIn() && request.auth.uid == request.resource.data.user_id && isMember(request.resource.data.workspace_id);
+      allow update: if false;
+    }
+
+    match /class_notifications/{notificationId} {
+      allow read, update, delete: if signedIn() && request.auth.uid == resource.data.user_id;
+      allow create: if signedIn() && request.auth.uid == request.resource.data.created_by
+        && isMember(request.resource.data.workspace_id)
+        && exists(memberPath(request.resource.data.workspace_id, request.resource.data.user_id));
+    }
+
+    match /class_profiles/{profileId} {
+      allow read: if signedIn() && resource.data.user_id == request.auth.uid;
+      allow create, update: if signedIn() && request.resource.data.user_id == request.auth.uid;
+      allow delete: if signedIn() && resource.data.user_id == request.auth.uid;
+    }
+
+    match /user_subscriptions/{userId} {
+      allow read: if signedIn() && request.auth.uid == userId;
+      allow write: if false;
+    }
+
+    match /payment_records/{paymentId} {
+      allow read: if signedIn() && request.auth.uid == resource.data.user_id;
+      allow write: if false;
+    }
+
+    match /payment_webhook_events/{eventId} {
+      allow read, write: if false;
+    }
+
+    match /admin_users/{userId} {
+      allow read: if signedIn() && (request.auth.uid == userId || isAdmin());
+      allow write: if false;
+    }
+
+    match /admin_audit_logs/{logId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

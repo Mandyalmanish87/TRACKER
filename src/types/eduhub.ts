@@ -50,7 +50,15 @@ export interface ImportPlaylistResponse {
   success: boolean;
   preview?: YouTubePlaylistPreview;
   error?: string;
-  errorCode?: 'INVALID_URL' | 'PRIVATE_PLAYLIST' | 'NOT_FOUND' | 'QUOTA_EXCEEDED' | 'NO_API_KEY' | 'FETCH_ERROR';
+  errorCode?:
+    | 'INVALID_URL'
+    | 'PRIVATE_PLAYLIST'
+    | 'NOT_FOUND'
+    | 'QUOTA_EXCEEDED'
+    | 'NO_API_KEY'
+    | 'FETCH_ERROR'
+    | 'UNAUTHENTICATED'
+    | 'RATE_LIMIT_EXCEEDED';
 }
 
 

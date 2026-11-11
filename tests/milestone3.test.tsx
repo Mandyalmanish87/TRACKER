@@ -4,6 +4,25 @@ import App from '../src/App';
 import { loadData, saveData, storageService } from '../src/services/storage';
 import { SyllabusSubject, TimetableImportPayload } from '../src/types';
 
+const STARTER_SYLLABUS: SyllabusSubject[] = [
+  {
+    id: 'syl-subject-phy',
+    name: 'Physics',
+    chapters: [
+      {
+        id: 'ch-newton',
+        name: 'Newtonian Laws & Friction',
+        subtopics: [
+          { id: 'top-1', name: 'Laws of Motion', status: 'done', revisionCount: 1, pyqCovered: true, priority: 'high' },
+        ],
+      },
+    ],
+  },
+  { id: 'syl-subject-chem', name: 'Chemistry', chapters: [] },
+  { id: 'syl-subject-math', name: 'Mathematics', chapters: [] },
+  { id: 'syl-subject-bio', name: 'Biology', chapters: [] },
+];
+
 describe('Milestone 3: Syllabus Tracker, Smart Calendar & GPT Timetable Importer', () => {
   beforeEach(() => {
     localStorage.clear();
@@ -84,6 +103,9 @@ describe('Milestone 3: Syllabus Tracker, Smart Calendar & GPT Timetable Importer
 
   describe('Syllabus Tracker UI Interactions', () => {
     it('renders the Syllabus tab in navigation and displays starter subjects', () => {
+      const data = loadData();
+      saveData({ ...data, syllabusSubjects: STARTER_SYLLABUS });
+
       render(<App />);
 
       const syllabusTab = screen.getByRole('button', { name: /syllabus/i });
@@ -105,7 +127,7 @@ describe('Milestone 3: Syllabus Tracker, Smart Calendar & GPT Timetable Importer
       fireEvent.click(screen.getByRole('button', { name: /syllabus/i }));
 
       // Click Add Subject
-      const addSubjectBtn = screen.getByRole('button', { name: /add subject/i });
+      const addSubjectBtn = screen.getAllByRole('button', { name: /add subject/i })[0];
       fireEvent.click(addSubjectBtn);
 
       // Form modal should appear
@@ -121,6 +143,9 @@ describe('Milestone 3: Syllabus Tracker, Smart Calendar & GPT Timetable Importer
     });
 
     it('filters topics by search query', () => {
+      const data = loadData();
+      saveData({ ...data, syllabusSubjects: STARTER_SYLLABUS });
+
       render(<App />);
       fireEvent.click(screen.getByRole('button', { name: /syllabus/i }));
 
@@ -257,6 +282,9 @@ describe('Milestone 3: Syllabus Tracker, Smart Calendar & GPT Timetable Importer
 
   describe('Dashboard Integration', () => {
     it('renders Syllabus Mastery widget on Dashboard and navigates on click', () => {
+      const data = loadData();
+      saveData({ ...data, syllabusSubjects: STARTER_SYLLABUS });
+
       render(<App />);
 
       // Dashboard is default tab

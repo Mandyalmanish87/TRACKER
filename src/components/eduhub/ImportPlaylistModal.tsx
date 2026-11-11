@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import {
   fetchYouTubePlaylistPreview,
 } from '../../services/youtubePlaylistService';
+import { parseYouTubeVideoId } from '../focus-radio/youtubeUtils';
 import {
   findCourseByPlaylistId,
   importCourseFromPlaylist,
@@ -53,8 +54,13 @@ export const ImportPlaylistModal: React.FC<ImportPlaylistModalProps> = ({
 
     setIsLoading(false);
 
-    if (!res.success || !res.preview) {
-      setError(res.error || 'Failed to load YouTube playlist.');
+    if (!res.success || !res.preview || !Array.isArray(res.preview.lectures) || res.preview.lectures.length === 0) {
+      const videoId = parseYouTubeVideoId(playlistUrl);
+      let errMsg = res.error || 'Failed to load YouTube playlist details.';
+      if (videoId && !errMsg.includes('single video')) {
+        errMsg += ' Note: This link contains a video. You can import individual videos using "Add Lecture" on your course.';
+      }
+      setError(errMsg);
       return;
     }
 

@@ -36,6 +36,53 @@ export {
 
 export const STORAGE_KEY_V2 = 'tracker_app_data_v2';
 export const THEME_KEY = 'tracker_app_theme';
+const RETIRED_FEATURE_DATA_KEY = 'retiredFeatureData';
+
+/**
+ * Keep data that a newer UI no longer knows how to render. For records that
+ * remain active, merge object fields by id so edits from an older screen do not
+ * erase fields added by a newer feature.
+ */
+const preserveForwardCompatibleData = (previous: any, next: any): any => {
+  if (!previous || typeof previous !== 'object' || Array.isArray(previous)) return next;
+  const preserved = { ...next };
+  const retired = {
+    ...(previous[RETIRED_FEATURE_DATA_KEY] && typeof previous[RETIRED_FEATURE_DATA_KEY] === 'object'
+      ? previous[RETIRED_FEATURE_DATA_KEY]
+      : {}),
+    ...(next?.[RETIRED_FEATURE_DATA_KEY] && typeof next[RETIRED_FEATURE_DATA_KEY] === 'object'
+      ? next[RETIRED_FEATURE_DATA_KEY]
+      : {}),
+  };
+
+  for (const key of Object.keys(previous)) {
+    if (key === RETIRED_FEATURE_DATA_KEY) continue;
+    if (!Object.prototype.hasOwnProperty.call(preserved, key) && previous[key] !== undefined) {
+      retired[key] = previous[key];
+    }
+
+    const oldValue = previous[key];
+    const newValue = preserved[key];
+    if (key === 'tombstones' || !Array.isArray(oldValue) || !Array.isArray(newValue)) continue;
+    const byId = new Map<string, Record<string, unknown>>();
+    for (const item of oldValue) {
+      if (item && typeof item === 'object' && typeof item.id === 'string') byId.set(item.id, item);
+    }
+    preserved[key] = newValue.map((item: any) => {
+      if (!item || typeof item !== 'object' || typeof item.id !== 'string') return item;
+      const older = byId.get(item.id);
+      return older ? { ...older, ...item } : item;
+    });
+  }
+
+  for (const key of ['profile', 'settings', 'nutritionProfile']) {
+    if (previous[key] && typeof previous[key] === 'object' && preserved[key] && typeof preserved[key] === 'object') {
+      preserved[key] = { ...previous[key], ...preserved[key] };
+    }
+  }
+  if (Object.keys(retired).length > 0) preserved[RETIRED_FEATURE_DATA_KEY] = retired;
+  return preserved;
+};
 
 // Pre-filled defaults are clean and empty for new users (no demo records in production)
 export const DEFAULT_EVENTS: CalendarEvent[] = [];
@@ -78,6 +125,7 @@ export const sanitizeEduHubCourses = (courses: unknown): EduHubCourse[] => {
         c.id.trim() !== 'sample-cs50-intro'
     )
     .map((c) => ({
+      ...c,
       id: c.id.trim(),
       title: c.title.trim() || 'Untitled Course',
       description: typeof c.description === 'string' ? c.description : '',
@@ -97,6 +145,7 @@ export const sanitizeEduHubCourses = (courses: unknown): EduHubCourse[] => {
                 typeof l.title === 'string'
             )
             .map((l: any) => ({
+              ...l,
               id: l.id.trim(),
               title: l.title.trim() || 'Untitled Lecture',
               youtubeUrl: typeof l.youtubeUrl === 'string' ? l.youtubeUrl : '',
@@ -121,7 +170,13 @@ export const getUserStorageKey = (userId: string): string => `tracker_user_data_
 export const saveUserData = (userId: string, data: AppStateData): void => {
   if (!userId || typeof userId !== 'string') return;
   try {
-    localStorage.setItem(getUserStorageKey(userId), JSON.stringify(data));
+    const key = getUserStorageKey(userId);
+    let previous: any = null;
+    try {
+      const raw = localStorage.getItem(key);
+      if (raw) previous = JSON.parse(raw);
+    } catch {}
+    localStorage.setItem(key, JSON.stringify(preserveForwardCompatibleData(previous, data)));
   } catch (err) {
     console.error(`Failed to persist user data for ${userId}:`, err);
   }
@@ -140,6 +195,8 @@ export const sanitizeLoadedState = (parsed: any): AppStateData => {
   }
   const playlists = sanitizeEntityArray<CustomPlaylist>(parsed.customPlaylists);
   return {
+    ...EMPTY_STATE,
+    ...parsed,
     hasSampleData: Boolean(parsed.hasSampleData),
     subjects: sanitizeEntityArray(parsed.subjects),
     timetable: sanitizeEntityArray(parsed.timetable),
@@ -154,8 +211,10 @@ export const sanitizeLoadedState = (parsed: any): AppStateData => {
     reminders: sanitizeEntityArray<Reminder>(parsed.reminders).filter(
       (r) => !r.isSample && !DEMO_REMINDER_IDS.has(r.id)
     ),
-    schemaVersion: 2,
+    schemaVersion: typeof parsed.schemaVersion === 'number' ? parsed.schemaVersion : 2,
     profile: {
+      ...DEFAULT_PROFILE,
+      ...(parsed.profile && typeof parsed.profile === 'object' ? parsed.profile : {}),
       displayName: typeof parsed.profile?.displayName === 'string' ? parsed.profile.displayName : '',
       targetExam: typeof parsed.profile?.targetExam === 'string' ? parsed.profile.targetExam : '',
       examDate: parsed.profile?.examDate,
@@ -168,9 +227,19 @@ export const sanitizeLoadedState = (parsed: any): AppStateData => {
       bio: typeof parsed.profile?.bio === 'string' ? parsed.profile.bio : undefined,
     },
     settings: {
+      ...DEFAULT_SETTINGS,
+      ...(parsed.settings && typeof parsed.settings === 'object' ? parsed.settings : {}),
       themeMode: parsed.settings?.themeMode ?? 'system',
+      appearanceMode: parsed.settings?.appearanceMode === 'digital-paper' ? 'digital-paper' : 'classic',
+      paperContrast: ['soft', 'balanced', 'crisp'].includes(parsed.settings?.paperContrast) ? parsed.settings.paperContrast : 'balanced',
       accentColor: parsed.settings?.accentColor ?? 'terracotta',
+      customAccentColor: typeof parsed.settings?.customAccentColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(parsed.settings.customAccentColor) ? parsed.settings.customAccentColor : undefined,
+      savedAccentColors: Array.isArray(parsed.settings?.savedAccentColors) ? parsed.settings.savedAccentColors.filter((color: unknown) => typeof color === 'string' && /^#[0-9a-fA-F]{6}$/.test(color)).slice(0, 12) : [],
       backgroundStyle: parsed.settings?.backgroundStyle ?? 'minimal',
+      backgroundEffect: ['static', 'breathing', 'color-cycle', 'rainbow', 'starry-night', 'adaptive-color', 'immersion', 'off'].includes(parsed.settings?.backgroundEffect) ? parsed.settings.backgroundEffect : 'static',
+      backgroundEffectSpeed: typeof parsed.settings?.backgroundEffectSpeed === 'number' ? Math.min(5, Math.max(1, parsed.settings.backgroundEffectSpeed)) : 2,
+      backgroundEffectIntensity: typeof parsed.settings?.backgroundEffectIntensity === 'number' ? Math.min(0.4, Math.max(0.05, parsed.settings.backgroundEffectIntensity)) : 0.22,
+      accentEdgeGlow: typeof parsed.settings?.accentEdgeGlow === 'boolean' ? parsed.settings.accentEdgeGlow : true,
       customBackgroundUrl: parsed.settings?.customBackgroundUrl,
       studyDayRolloverHour: typeof parsed.settings?.studyDayRolloverHour === 'number' ? parsed.settings.studyDayRolloverHour : 0,
       showExamCountdown: typeof parsed.settings?.showExamCountdown === 'boolean' ? parsed.settings.showExamCountdown : true,
@@ -180,6 +249,9 @@ export const sanitizeLoadedState = (parsed: any): AppStateData => {
       dashboardLayoutMode: parsed.settings?.dashboardLayoutMode || 'bento',
       dashboardDensity: parsed.settings?.dashboardDensity || 'compact',
       userMode: parsed.settings?.userMode === 'class_based' ? 'class_based' : 'individual',
+      bodyModelPreference: parsed.settings?.gender === 'female' || (!parsed.settings?.gender && parsed.settings?.bodyModelPreference === 'female') ? 'female' : 'male',
+      gender: parsed.settings?.gender === 'female' || (!parsed.settings?.gender && parsed.settings?.bodyModelPreference === 'female') ? 'female' : 'male',
+      bloomEnabled: (parsed.settings?.gender === 'female' || (!parsed.settings?.gender && parsed.settings?.bodyModelPreference === 'female')) && Boolean(parsed.settings?.bloomEnabled),
     },
     syllabusSubjects: sanitizeEntityArray<SyllabusSubject>(parsed.syllabusSubjects).filter(
       (s) => !s.isSample && !DEMO_SYLLABUS_IDS.has(s.id)
@@ -199,11 +271,27 @@ export const sanitizeLoadedState = (parsed: any): AppStateData => {
     recipes: sanitizeEntityArray(parsed.recipes),
     weightLogs: sanitizeEntityArray(parsed.weightLogs),
     nutritionProfile: parsed.nutritionProfile ?? DEFAULT_NUTRITION_PROFILE,
+    // Fitness Ecosystem Core Collections
+    workoutSessions: sanitizeEntityArray(parsed.workoutSessions),
+    workoutPrograms: sanitizeEntityArray(parsed.workoutPrograms),
+    workoutTemplates: sanitizeEntityArray(parsed.workoutTemplates),
+    exerciseLibrary: sanitizeEntityArray(parsed.exerciseLibrary),
+    customBarcodes: sanitizeEntityArray(parsed.customBarcodes),
+    mealPlans: sanitizeEntityArray(parsed.mealPlans),
+    bodyMeasurements: sanitizeEntityArray(parsed.bodyMeasurements),
+    bodyCompositions: sanitizeEntityArray(parsed.bodyCompositions),
+    progressPhotos: sanitizeEntityArray(parsed.progressPhotos),
+    sleepRecoveryLogs: sanitizeEntityArray(parsed.sleepRecoveryLogs),
+    cardioSessions: sanitizeEntityArray(parsed.cardioSessions),
+    hydrationLogs: sanitizeEntityArray(parsed.hydrationLogs),
+    fitnessInsights: sanitizeEntityArray(parsed.fitnessInsights),
     radioUrls: sanitizeEntityArray(parsed.radioUrls),
     radioQueue: sanitizeEntityArray(parsed.radioQueue),
     radioLoopMode: parsed.radioLoopMode === 'all' || parsed.radioLoopMode === 'one' ? parsed.radioLoopMode : 'off',
     radioIsShuffle: Boolean(parsed.radioIsShuffle),
-    customPlaylists: playlists.length > 0 ? playlists : JSON.parse(JSON.stringify(DEFAULT_CUSTOM_PLAYLISTS)),
+    customPlaylists: Array.isArray(parsed.customPlaylists)
+      ? playlists
+      : JSON.parse(JSON.stringify(DEFAULT_CUSTOM_PLAYLISTS)),
     mockTests: sanitizeEntityArray<MockTest>(parsed.mockTests).filter(
       (m) => !m.isSample && !DEMO_MOCK_TEST_IDS.has(m.id)
     ),
@@ -242,7 +330,12 @@ export const GUEST_BACKUP_KEY = 'tracker_guest_data_backup';
 
 export const saveGuestBackup = (data: AppStateData): void => {
   try {
-    localStorage.setItem(GUEST_BACKUP_KEY, JSON.stringify(data));
+    let previous: any = null;
+    try {
+      const raw = localStorage.getItem(GUEST_BACKUP_KEY);
+      if (raw) previous = JSON.parse(raw);
+    } catch {}
+    localStorage.setItem(GUEST_BACKUP_KEY, JSON.stringify(preserveForwardCompatibleData(previous, data)));
   } catch (err) {
     console.error('Failed to save guest backup:', err);
   }
@@ -306,8 +399,9 @@ export const loadData = (): AppStateData => {
       if (legacy.length > 0) {
         migrated.eduhubCourses = legacy;
       }
-      // Save migrated data under v2 key
-      localStorage.setItem(STORAGE_KEY_V2, JSON.stringify(migrated));
+      // Save migrated data under v2 key without dropping any fields from an
+      // existing local copy.
+      saveData(migrated);
       return migrated;
     } catch {
       console.error('Failed to parse v1 data, initializing empty state');
@@ -330,9 +424,19 @@ export const loadData = (): AppStateData => {
 
 export const saveData = (data: AppStateData): void => {
   try {
+    let previous: any = null;
+    try {
+      const previousSerialized = localStorage.getItem(STORAGE_KEY_V2);
+      if (previousSerialized) previous = JSON.parse(previousSerialized);
+    } catch {}
     const toSave: AppStateData = {
       ...data,
-      schemaVersion: 2,
+      // An older app must never downgrade a newer data schema when it saves.
+      schemaVersion: Math.max(
+        2,
+        typeof data.schemaVersion === 'number' ? data.schemaVersion : 0,
+        typeof previous?.schemaVersion === 'number' ? previous.schemaVersion : 0,
+      ),
       profile: data.profile ?? DEFAULT_PROFILE,
       settings: data.settings ?? DEFAULT_SETTINGS,
       syllabusSubjects: Array.isArray(data.syllabusSubjects) ? data.syllabusSubjects : [],
@@ -348,6 +452,20 @@ export const saveData = (data: AppStateData): void => {
       recipes: Array.isArray(data.recipes) ? data.recipes : [],
       weightLogs: Array.isArray(data.weightLogs) ? data.weightLogs : [],
       nutritionProfile: data.nutritionProfile ?? DEFAULT_NUTRITION_PROFILE,
+      // Fitness Ecosystem Core Collections
+      workoutSessions: Array.isArray(data.workoutSessions) ? data.workoutSessions : [],
+      workoutPrograms: Array.isArray(data.workoutPrograms) ? data.workoutPrograms : [],
+      workoutTemplates: Array.isArray(data.workoutTemplates) ? data.workoutTemplates : [],
+      exerciseLibrary: Array.isArray(data.exerciseLibrary) ? data.exerciseLibrary : [],
+      customBarcodes: Array.isArray(data.customBarcodes) ? data.customBarcodes : [],
+      mealPlans: Array.isArray(data.mealPlans) ? data.mealPlans : [],
+      bodyMeasurements: Array.isArray(data.bodyMeasurements) ? data.bodyMeasurements : [],
+      bodyCompositions: Array.isArray(data.bodyCompositions) ? data.bodyCompositions : [],
+      progressPhotos: Array.isArray(data.progressPhotos) ? data.progressPhotos : [],
+      sleepRecoveryLogs: Array.isArray(data.sleepRecoveryLogs) ? data.sleepRecoveryLogs : [],
+      cardioSessions: Array.isArray(data.cardioSessions) ? data.cardioSessions : [],
+      hydrationLogs: Array.isArray(data.hydrationLogs) ? data.hydrationLogs : [],
+      fitnessInsights: Array.isArray(data.fitnessInsights) ? data.fitnessInsights : [],
       radioUrls: Array.isArray(data.radioUrls) ? data.radioUrls : [],
       radioQueue: Array.isArray(data.radioQueue) ? data.radioQueue : [],
       radioLoopMode: data.radioLoopMode === 'all' || data.radioLoopMode === 'one' ? data.radioLoopMode : 'off',
@@ -359,7 +477,7 @@ export const saveData = (data: AppStateData): void => {
       eduhubCourses: sanitizeEduHubCourses(data.eduhubCourses),
       tombstones: Array.isArray(data.tombstones) ? data.tombstones : [],
     };
-    localStorage.setItem(STORAGE_KEY_V2, JSON.stringify(toSave));
+    localStorage.setItem(STORAGE_KEY_V2, JSON.stringify(preserveForwardCompatibleData(previous, toSave)));
     // Synchronize legacy key for backwards compatibility
     if (Array.isArray(toSave.eduhubCourses) && toSave.eduhubCourses.length > 0) {
       try {
@@ -772,6 +890,7 @@ class LocalStorageService implements IStorageService {
 
   clearSampleData(current: AppStateData): AppStateData {
     const cleaned: AppStateData = {
+      ...current,
       hasSampleData: false,
       schemaVersion: 2,
       profile: current.profile ?? DEFAULT_PROFILE,
@@ -779,12 +898,12 @@ class LocalStorageService implements IStorageService {
       syllabusSubjects: (current.syllabusSubjects || []).filter(
         (s) => !s.isSample && !DEMO_SYLLABUS_IDS.has(s.id)
       ),
-      subjects: current.subjects.filter((s) => !s.isSample),
-      timetable: current.timetable.filter((t) => !t.isSample),
-      attendanceLogs: current.attendanceLogs.filter((a) => !a.isSample),
-      studySessions: current.studySessions.filter((s) => !s.isSample),
-      gymWorkouts: current.gymWorkouts.filter((g) => !g.isSample && g.id !== 'gym-today'),
-      reminders: current.reminders.filter((r) => !r.isSample && !DEMO_REMINDER_IDS.has(r.id)),
+      subjects: (current.subjects || []).filter((s) => !s.isSample),
+      timetable: (current.timetable || []).filter((t) => !t.isSample),
+      attendanceLogs: (current.attendanceLogs || []).filter((a) => !a.isSample),
+      studySessions: (current.studySessions || []).filter((s) => !s.isSample),
+      gymWorkouts: (current.gymWorkouts || []).filter((g) => !g.isSample && g.id !== 'gym-today'),
+      reminders: (current.reminders || []).filter((r) => !r.isSample && !DEMO_REMINDER_IDS.has(r.id)),
       occurrenceOverrides: current.occurrenceOverrides ?? [],
       extraClasses: current.extraClasses ?? [],
       tasks: (current.tasks || []).filter((t) => !t.isSample && !DEMO_TASK_IDS.has(t.id)),
@@ -792,12 +911,26 @@ class LocalStorageService implements IStorageService {
       dailyQuestions: (current.dailyQuestions || []).filter((q) => !q.isSample),
       dailyQuestionTarget: current.dailyQuestionTarget ?? DEFAULT_DAILY_QUESTION_TARGET,
       reviewIntervals: current.reviewIntervals ?? DEFAULT_REVIEW_INTERVALS,
-      // NUTRITION SECTION: STRICTLY PRESERVED AS REQUIRED BY USER
-      foodDiaryEntries: current.foodDiaryEntries || [],
+      // NUTRITION SECTION: Clean demo sample entries while preserving real user entries
+      foodDiaryEntries: (current.foodDiaryEntries || []).filter((e) => !e.isSample),
       customFoods: current.customFoods || [],
       recipes: current.recipes || [],
-      weightLogs: current.weightLogs || [],
+      weightLogs: (current.weightLogs || []).filter((w) => !w.isSample),
       nutritionProfile: current.nutritionProfile ?? DEFAULT_NUTRITION_PROFILE,
+      // FITNESS ECOSYSTEM COLLECTIONS: STRICTLY PRESERVED AS REQUIRED
+      workoutSessions: (current.workoutSessions || []).filter((w) => !w.isSample),
+      workoutPrograms: current.workoutPrograms || [],
+      workoutTemplates: current.workoutTemplates || [],
+      exerciseLibrary: current.exerciseLibrary || [],
+      customBarcodes: current.customBarcodes || [],
+      mealPlans: current.mealPlans || [],
+      bodyMeasurements: current.bodyMeasurements || [],
+      bodyCompositions: current.bodyCompositions || [],
+      progressPhotos: current.progressPhotos || [],
+      sleepRecoveryLogs: current.sleepRecoveryLogs || [],
+      cardioSessions: current.cardioSessions || [],
+      hydrationLogs: current.hydrationLogs || [],
+      fitnessInsights: current.fitnessInsights || [],
       radioUrls: current.radioUrls ?? [],
       radioQueue: current.radioQueue ?? [],
       radioLoopMode: current.radioLoopMode ?? 'off',
@@ -844,6 +977,19 @@ class LocalStorageService implements IStorageService {
       'recipes',
       'weightLogs',
       'nutritionProfile',
+      'workoutSessions',
+      'workoutPrograms',
+      'workoutTemplates',
+      'exerciseLibrary',
+      'customBarcodes',
+      'mealPlans',
+      'bodyMeasurements',
+      'bodyCompositions',
+      'progressPhotos',
+      'sleepRecoveryLogs',
+      'cardioSessions',
+      'hydrationLogs',
+      'fitnessInsights',
       'radioUrls',
       'radioQueue',
       'customPlaylists',
@@ -869,7 +1015,13 @@ class LocalStorageService implements IStorageService {
     };
 
     const validated: AppStateData = {
-      schemaVersion: 2,
+      ...existing,
+      ...parsed,
+      schemaVersion: Math.max(
+        2,
+        typeof parsed.schemaVersion === 'number' ? parsed.schemaVersion : 0,
+        typeof existing.schemaVersion === 'number' ? existing.schemaVersion : 0,
+      ),
       hasSampleData: 'hasSampleData' in parsed ? Boolean(parsed.hasSampleData) : existing.hasSampleData,
       profile: 'profile' in parsed && parsed.profile && typeof parsed.profile === 'object'
         ? { ...DEFAULT_PROFILE, ...existing.profile, ...parsed.profile }
@@ -902,6 +1054,20 @@ class LocalStorageService implements IStorageService {
       nutritionProfile: 'nutritionProfile' in parsed && parsed.nutritionProfile
         ? parsed.nutritionProfile
         : (existing.nutritionProfile ?? DEFAULT_NUTRITION_PROFILE),
+      // Fitness Ecosystem Core Collections
+      workoutSessions: readCollection('workoutSessions', existing.workoutSessions),
+      workoutPrograms: readCollection('workoutPrograms', existing.workoutPrograms),
+      workoutTemplates: readCollection('workoutTemplates', existing.workoutTemplates),
+      exerciseLibrary: readCollection('exerciseLibrary', existing.exerciseLibrary),
+      customBarcodes: readCollection('customBarcodes', existing.customBarcodes),
+      mealPlans: readCollection('mealPlans', existing.mealPlans),
+      bodyMeasurements: readCollection('bodyMeasurements', existing.bodyMeasurements),
+      bodyCompositions: readCollection('bodyCompositions', existing.bodyCompositions),
+      progressPhotos: readCollection('progressPhotos', existing.progressPhotos),
+      sleepRecoveryLogs: readCollection('sleepRecoveryLogs', existing.sleepRecoveryLogs),
+      cardioSessions: readCollection('cardioSessions', existing.cardioSessions),
+      hydrationLogs: readCollection('hydrationLogs', existing.hydrationLogs),
+      fitnessInsights: readCollection('fitnessInsights', existing.fitnessInsights),
       radioUrls: readCollection('radioUrls', existing.radioUrls),
       radioQueue: readCollection('radioQueue', existing.radioQueue),
       radioLoopMode: parsed.radioLoopMode === 'all' || parsed.radioLoopMode === 'one' || parsed.radioLoopMode === 'off'

@@ -176,7 +176,11 @@ export function toYouTubeEmbedUrl(raw: string): string | null {
  */
 export function extractYouTubeVideoId(raw: string): string | null {
   if (!raw || typeof raw !== 'string') return null;
-  const trimmed = raw.trim();
+  const trimmed = raw
+    .replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#x20;/gi, ' ')
+    .trim();
   try {
     const url = new URL(trimmed);
     if (!YT_HOSTNAME_RE.test(url.hostname)) return null;
@@ -208,7 +212,11 @@ export function extractYouTubeVideoId(raw: string): string | null {
  */
 export function extractYouTubePlaylistId(raw: string): string | null {
   if (!raw || typeof raw !== 'string') return null;
-  const trimmed = raw.trim();
+  const trimmed = raw
+    .replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#x20;/gi, ' ')
+    .trim();
   try {
     const url = new URL(trimmed);
     if (!YT_HOSTNAME_RE.test(url.hostname)) return null;

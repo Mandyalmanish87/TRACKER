@@ -131,15 +131,16 @@ export const EventModal: React.FC<EventModalProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
+    if (endDate && endDate < date) return;
 
     const eventPayload: Omit<CalendarEvent, 'id' | 'createdAt'> = {
       title: title.trim(),
       category,
       date,
       endDate: endDate || undefined,
-      isAllDay,
-      startTime: isAllDay ? undefined : startTime,
-      endTime: isAllDay ? undefined : endTime,
+      isAllDay: isAllDay || category === 'holiday' || Boolean(endDate),
+      startTime: isAllDay || category === 'holiday' || endDate ? undefined : startTime,
+      endTime: isAllDay || category === 'holiday' || endDate ? undefined : endTime,
       priority,
       status,
       isCompleted: status === 'done',
@@ -230,7 +231,10 @@ export const EventModal: React.FC<EventModalProps> = ({
                   <button
                     key={catKey}
                     type="button"
-                    onClick={() => setCategory(catKey)}
+                    onClick={() => {
+                      setCategory(catKey);
+                      if (catKey === 'holiday') setIsAllDay(true);
+                    }}
                     className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium border text-left transition-all ${
                       isSelected
                         ? 'border-transparent text-espresso-950 dark:text-ivory-50 shadow-xs'
@@ -289,8 +293,25 @@ export const EventModal: React.FC<EventModalProps> = ({
             </div>
           </div>
 
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-espresso-600 dark:text-espresso-300 mb-1.5 flex items-center gap-1.5">
+              <CalendarIcon className="w-3.5 h-3.5" /> End Date <span className="normal-case tracking-normal font-normal">(optional, inclusive)</span>
+            </label>
+            <input
+              type="date"
+              min={date || undefined}
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              aria-describedby="event-range-help"
+              className="w-full px-3 py-2 rounded-xl text-xs sm:text-sm border border-ivory-300 dark:border-espresso-700 bg-ivory-50 dark:bg-espresso-850 text-espresso-950 dark:text-ivory-50 focus:outline-none focus:ring-2 focus:ring-terracotta-500"
+            />
+            <p id="event-range-help" className="mt-1 text-[11px] text-espresso-500 dark:text-espresso-400">
+              {category === 'holiday' || endDate ? 'This will appear on every date in the range and count as a non-class holiday.' : 'Use for events or tasks that continue across multiple days.'}
+            </p>
+          </div>
+
           {/* Times (if not all day) */}
-          {!isAllDay && (
+          {!isAllDay && !endDate && category !== 'holiday' && (
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wider text-espresso-600 dark:text-espresso-300 mb-1.5 flex items-center gap-1.5">

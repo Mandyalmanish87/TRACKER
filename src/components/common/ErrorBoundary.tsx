@@ -3,6 +3,8 @@ import { AlertTriangle, RefreshCw, RotateCcw } from 'lucide-react';
 
 interface Props {
   children: ReactNode;
+  fallback?: ReactNode | ((error: Error, reset: () => void) => ReactNode);
+  onReset?: () => void;
 }
 
 interface State {
@@ -34,6 +36,11 @@ export class ErrorBoundary extends Component<Props, State> {
     this.setState({ errorInfo });
   }
 
+  handleReset = () => {
+    this.setState({ hasError: false, error: null, errorInfo: null });
+    this.props.onReset?.();
+  };
+
   handleReload = () => {
     window.location.reload();
   };
@@ -47,44 +54,52 @@ export class ErrorBoundary extends Component<Props, State> {
   };
 
   render() {
-    if (this.state.hasError) {
+    if (this.state.hasError && this.state.error) {
+      if (typeof this.props.fallback === 'function') {
+        return this.props.fallback(this.state.error, this.handleReset);
+      }
+      if (this.props.fallback) {
+        return this.props.fallback;
+      }
+
       return (
-        <div className="min-h-screen bg-[#1c1917] text-[#fafaf9] flex items-center justify-center p-6">
-          <div className="max-w-md w-full bg-[#292524] border border-[#44403c] rounded-2xl p-6 sm:p-8 text-center shadow-2xl space-y-6">
-            <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-500 flex items-center justify-center mx-auto">
-              <AlertTriangle className="w-8 h-8" />
+        <div className="min-h-[300px] flex items-center justify-center p-6 text-espresso-950 dark:text-ivory-50">
+          <div className="max-w-md w-full bg-white dark:bg-[#18151D] border border-ivory-300 dark:border-white/10 rounded-2xl p-6 sm:p-8 text-center shadow-xl space-y-5">
+            <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-500 flex items-center justify-center mx-auto">
+              <AlertTriangle className="w-7 h-7" />
             </div>
 
             <div>
-              <h2 className="font-serif text-2xl font-bold tracking-tight text-[#fafaf9]">
+              <h2 className="font-serif text-xl font-bold tracking-tight text-espresso-950 dark:text-ivory-50">
                 Something went wrong
               </h2>
-              <p className="text-xs text-[#a8a29e] mt-2 leading-relaxed">
+              <p className="text-xs text-espresso-500 dark:text-espresso-400 mt-2 leading-relaxed">
                 The application encountered an unexpected runtime error. Your stored local data is preserved and intact.
               </p>
             </div>
 
-            {this.state.error && (
-              <div className="p-3 bg-[#1c1917] rounded-xl border border-[#44403c] text-left">
-                <p className="text-[11px] font-mono text-rose-400 break-words">
-                  {this.state.error.message || 'Unknown runtime error'}
-                </p>
-              </div>
-            )}
+            <div className="p-3 bg-ivory-100/60 dark:bg-white/[0.03] rounded-xl border border-ivory-200 dark:border-white/10 text-left">
+              <p className="text-[11px] font-mono text-rose-500 break-words">
+                {this.state.error.message || 'Unknown runtime error'}
+              </p>
+            </div>
 
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-2.5 pt-2">
               <button
-                onClick={this.handleReload}
-                className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-[#C45532] hover:bg-[#b04828] text-white text-xs font-semibold flex items-center justify-center gap-2 transition cursor-pointer shadow-md"
+                type="button"
+                onClick={this.handleReset}
+                className="w-full sm:w-auto px-4 py-2 rounded-xl text-white text-xs font-semibold flex items-center justify-center gap-2 transition cursor-pointer shadow-subtle hover:opacity-95"
+                style={{ backgroundColor: 'var(--accent)' }}
               >
-                <RefreshCw className="w-4 h-4" />
-                <span>Reload Application</span>
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Try Again</span>
               </button>
               <button
+                type="button"
                 onClick={this.handleResetAndRecover}
-                className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-[#3b3633] hover:bg-[#44403c] text-[#e7e5e4] text-xs font-semibold flex items-center justify-center gap-2 transition cursor-pointer border border-[#57534e]"
+                className="w-full sm:w-auto px-4 py-2 rounded-xl bg-ivory-200/80 dark:bg-white/10 hover:bg-ivory-300 dark:hover:bg-white/15 text-espresso-800 dark:text-ivory-100 text-xs font-semibold flex items-center justify-center gap-2 transition cursor-pointer"
               >
-                <RotateCcw className="w-4 h-4" />
+                <RotateCcw className="w-3.5 h-3.5" />
                 <span>Reset to Dashboard</span>
               </button>
             </div>
@@ -96,4 +111,3 @@ export class ErrorBoundary extends Component<Props, State> {
     return this.props.children;
   }
 }
-

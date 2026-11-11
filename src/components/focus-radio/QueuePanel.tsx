@@ -21,7 +21,7 @@ export const QueuePanel: React.FC<{
     <div className="space-y-3">
       {/* Queue Header & Actions */}
       <div className="flex items-center justify-between text-xs text-zinc-400 pb-2 border-b border-zinc-800">
-        <span className="font-mono text-[11px] uppercase tracking-wider text-[#A3B899]">
+        <span className="font-mono text-[11px] uppercase tracking-wider text-[var(--accent)]">
           Now Playing & Queue ({queue.length})
         </span>
         <div className="flex items-center gap-2">
@@ -51,7 +51,7 @@ export const QueuePanel: React.FC<{
       {/* Track List */}
       {queue.length === 0 ? (
         <div className="py-8 text-center text-zinc-500 space-y-2">
-          <Music2 className="w-8 h-8 mx-auto opacity-40 text-[#C8FF45]" />
+          <Music2 className="w-8 h-8 mx-auto opacity-40 text-[var(--accent)]" />
           <p className="text-xs">Your radio queue is empty.</p>
           <p className="text-[10px] text-zinc-600">
             Paste a YouTube link or select a curated focus stream above.
@@ -67,7 +67,7 @@ export const QueuePanel: React.FC<{
                 key={track.id}
                 className={`flex items-center justify-between p-2 rounded-xl transition text-xs group ${
                   isCurrent
-                    ? 'bg-zinc-800/90 border border-[#C8FF45]/40 text-white shadow-xs'
+                    ? 'bg-zinc-800/90 border border-[var(--accent)]/40 text-white shadow-xs'
                     : 'bg-zinc-900/60 hover:bg-zinc-850 border border-transparent text-zinc-300'
                 }`}
               >
@@ -92,14 +92,14 @@ export const QueuePanel: React.FC<{
                     )}
                     {isCurrent && isPlaying && (
                       <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                        <span className="w-2 h-2 rounded-full bg-[#C8FF45] animate-ping" />
+                        <span className="w-2 h-2 rounded-full bg-[var(--accent)] animate-ping" />
                       </div>
                     )}
                   </div>
                   <div className="min-w-0 pr-2">
                     <p
                       className={`truncate font-medium ${
-                        isCurrent ? 'text-[#C8FF45] font-semibold' : 'text-zinc-200'
+                        isCurrent ? 'text-[var(--accent)] font-semibold' : 'text-zinc-200'
                       }`}
                     >
                       {track.title}
