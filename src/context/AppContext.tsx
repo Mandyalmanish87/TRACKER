@@ -435,8 +435,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setSyncStatus('syncing');
     classSpaceService.restoreArchivedData(user.id);
     try {
-      const userArchive = storageService.loadUserData(user.id);
       const fetchResult = await cloudSyncService.fetchCloudDataDetailed(user.id);
+      // Re-read user archive AFTER the async fetch so it captures any state
+      // changes (e.g. timetable imports) that occurred during the network request.
+      const userArchive = storageService.loadUserData(user.id);
 
       // Scenario 1: Network, auth, timeout, or RLS error
       // We MUST NOT assume remote is empty and MUST NOT overwrite remote data with empty/guest state!
@@ -494,11 +496,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           return;
         }
 
-        // No prior local archive on this device: check for guest data conflict
-        const hasLocalGuestData = checkHasGuestData(state);
+        // No prior local archive on this device: check for guest data conflict.
+        // Read fresh from localStorage to capture any imports made during async fetch.
+        const currentLocalData = storageService.loadData();
+        const hasLocalGuestData = checkHasGuestData(currentLocalData);
 
         if (hasLocalGuestData) {
-          storageService.saveGuestBackup(state);
+          storageService.saveGuestBackup(currentLocalData);
           setConflictData({ cloudRecord });
           setSyncStatus('idle');
         } else {
@@ -546,12 +550,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
 
         // Brand new user with no cloud record and no prior archive on this device
-        // Check if they created guest data offline before signing in for the first time
-        const hasLocalGuestData = checkHasGuestData(state);
+        // Check if they created guest data offline before signing in for the first time.
+        // Read fresh from localStorage to capture any imports made during async fetch.
+        const currentLocalData = storageService.loadData();
+        const hasLocalGuestData = checkHasGuestData(currentLocalData);
         if (hasLocalGuestData) {
-          storageService.saveGuestBackup(state);
-          storageService.saveUserData(user.id, state);
-          const uploadRes = await cloudSyncService.uploadToCloud(user.id, state);
+          storageService.saveGuestBackup(currentLocalData);
+          storageService.saveUserData(user.id, currentLocalData);
+          const uploadRes = await cloudSyncService.uploadToCloud(user.id, currentLocalData);
           if (uploadRes.success) {
             cloudSyncService.clearPendingSync(user.id);
             setSyncStatus('synced');
@@ -1938,72 +1944,93 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     let importedCount = 0;
     let skippedCount = 0;
+    let newStateSnapshot: AppStateData | null = null;
 
-    const baseTimetable = replaceExisting ? [] : [...state.timetable];
-    const updatedSubjects = [...state.subjects];
-    const req = getAttendanceReq();
+    // Use functional setState to read the latest committed state (prev),
+    // avoiding stale closure reads of `state.timetable` / `state.subjects`.
+    setState((prev) => {
+      importedCount = 0;
+      skippedCount = 0;
 
-    classes.forEach((item) => {
-      const normalizedDay = dayMap[item.day.toLowerCase().trim()];
-      if (!normalizedDay) {
-        skippedCount++;
-        return;
-      }
+      const baseTimetable = replaceExisting ? [] : [...prev.timetable];
+      const updatedSubjects = [...prev.subjects];
+      const req = getAttendanceReq();
 
-      // Match or create subject
-      const subName = item.subject.trim();
-      let subject = updatedSubjects.find(
-        (s) =>
-          s.name.toLowerCase() === subName.toLowerCase() ||
-          s.code.toLowerCase() === subName.toLowerCase()
-      );
+      classes.forEach((item) => {
+        const normalizedDay = dayMap[item.day.toLowerCase().trim()];
+        if (!normalizedDay) {
+          skippedCount++;
+          return;
+        }
 
-      if (!subject) {
-        subject = {
-          id: 'sub-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
-          code: subName.length <= 6 ? subName.toUpperCase() : subName.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 5),
-          name: subName,
-          attended: 0,
-          totalConducted: 0,
-          targetPct: req,
-          color: '#B8732E',
+        // Match or create subject
+        const subName = item.subject.trim();
+        let subject = updatedSubjects.find(
+          (s) =>
+            s.name.toLowerCase() === subName.toLowerCase() ||
+            s.code.toLowerCase() === subName.toLowerCase()
+        );
+
+        if (!subject) {
+          subject = {
+            id: 'sub-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+            code: subName.length <= 6 ? subName.toUpperCase() : subName.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 5),
+            name: subName,
+            attended: 0,
+            totalConducted: 0,
+            targetPct: req,
+            color: '#B8732E',
+          };
+          updatedSubjects.push(subject);
+        }
+
+        // Check for duplicate in baseTimetable
+        const isDuplicate = baseTimetable.some(
+          (slot) =>
+            slot.dayOfWeek === normalizedDay &&
+            slot.startTime === item.startTime &&
+            slot.subjectId === subject!.id
+        );
+
+        if (isDuplicate) {
+          skippedCount++;
+          return;
+        }
+
+        const newSlot: TimetableSlot = {
+          id: 'tt-imp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7),
+          dayOfWeek: normalizedDay,
+          startTime: item.startTime,
+          endTime: item.endTime,
+          subjectId: subject.id,
+          room: item.room || item.location || undefined,
+          instructor: item.instructor || undefined,
+          notes: item.notes || undefined,
         };
-        updatedSubjects.push(subject);
-      }
 
-      // Check for duplicate in baseTimetable
-      const isDuplicate = baseTimetable.some(
-        (slot) =>
-          slot.dayOfWeek === normalizedDay &&
-          slot.startTime === item.startTime &&
-          slot.subjectId === subject!.id
-      );
+        baseTimetable.push(newSlot);
+        importedCount++;
+      });
 
-      if (isDuplicate) {
-        skippedCount++;
-        return;
-      }
-
-      const newSlot: TimetableSlot = {
-        id: 'tt-imp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7),
-        dayOfWeek: normalizedDay,
-        startTime: item.startTime,
-        endTime: item.endTime,
-        subjectId: subject.id,
-        room: item.room || item.location || undefined,
-        instructor: item.instructor || undefined,
-        notes: item.notes || undefined,
+      const result = {
+        ...prev,
+        subjects: updatedSubjects,
+        timetable: baseTimetable,
       };
-
-      baseTimetable.push(newSlot);
-      importedCount++;
+      newStateSnapshot = result as AppStateData;
+      return result;
     });
 
-    setState((prev) => ({
-      ...prev,
-      subjects: updatedSubjects,
-      timetable: baseTimetable,
-    }));
+    // ── Synchronous Immediate Persistence Guard ──
+    // Save to localStorage right now to prevent data loss if the user refreshes
+    // before the React useEffect commits, or if handleInitialSync overwrites
+    // state from a stale cloud snapshot while the async fetch was in-flight.
+    if (newStateSnapshot) {
+      storageService.saveData(newStateSnapshot);
+      if (authUser?.id) {
+        storageService.saveUserData(authUser.id, newStateSnapshot);
+      }
+    }
 
     return { importedCount, skippedCount };
   };
