@@ -5,7 +5,7 @@ import {
   ResolvedClassOccurrence,
 } from '../types/classSpace';
 import { DayOfWeek } from '../types';
-import { getDatesInRange, formatDateStr, dateToDayOfWeek } from './scheduleResolver';
+import { getDatesInRange, formatDateStr, dateToDayOfWeek, parseDateStr } from './scheduleResolver';
 
 // Alphabet excluding ambiguous characters: 0, O, 1, I, L
 export const JOIN_CODE_CHARACTERS = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
@@ -211,13 +211,14 @@ export function resolveClassSchedule(
     }
   }
 
-  // 2. Add any rescheduled occurrences whose original date was outside this range but landed in this range
+  // 2. Add any rescheduled occurrences whose new date lands in this range
   for (const ov of overrides) {
-    if (ov.type === 'reschedule' && ov.ruleId && ov.originalDate) {
-      const originalDateObj = new Date(ov.originalDate);
-      const newDateObj = new Date(ov.newDate);
-      // If newDate is in range, but originalDate was outside the range
-      if (newDateObj >= startDate && newDateObj <= endDate && (originalDateObj < startDate || originalDateObj > endDate)) {
+    if (ov.type === 'reschedule' && ov.ruleId && ov.newDate) {
+      // If originalDate === newDate, it was already handled in step 1
+      if (ov.originalDate === ov.newDate) continue;
+
+      const newDateObj = parseDateStr(ov.newDate);
+      if (newDateObj >= startDate && newDateObj <= endDate) {
         const rule = rules.find((r) => r.id === ov.ruleId);
         if (rule) {
           occurrences.push({
@@ -245,7 +246,7 @@ export function resolveClassSchedule(
 
   // 3. Add extra classes that fall in range
   for (const extra of extraClasses) {
-    const extraDate = new Date(extra.newDate);
+    const extraDate = parseDateStr(extra.newDate);
     if (extraDate >= startDate && extraDate <= endDate) {
       occurrences.push({
         occurrenceKey: extra.id,

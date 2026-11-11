@@ -2012,10 +2012,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         importedCount++;
       });
 
+      let updatedTombstones = prev.tombstones || [];
+      const replacedSlotIds = new Set(prev.timetable.map((s) => s.id));
+      const remainingOverrides = replaceExisting
+        ? (prev.occurrenceOverrides || []).filter((o) => !replacedSlotIds.has(o.slotId))
+        : (prev.occurrenceOverrides || []);
+
+      if (replaceExisting) {
+        for (const slot of prev.timetable) {
+          updatedTombstones = cloudSyncService.addTombstone(updatedTombstones, slot.id, 'timetable');
+        }
+        for (const ovr of (prev.occurrenceOverrides || [])) {
+          if (replacedSlotIds.has(ovr.slotId)) {
+            updatedTombstones = cloudSyncService.addTombstone(updatedTombstones, ovr.id, 'occurrenceOverrides');
+          }
+        }
+      }
+
       const result = {
         ...prev,
         subjects: updatedSubjects,
         timetable: baseTimetable,
+        occurrenceOverrides: remainingOverrides,
+        tombstones: updatedTombstones,
       };
       newStateSnapshot = result as AppStateData;
       return result;

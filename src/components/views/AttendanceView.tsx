@@ -142,8 +142,8 @@ export const AttendanceView: React.FC = () => {
         </div>
       </div>
 
-      {/* ─── Scope Selection Bar (Personal vs Enrolled ClassSpaces) ─── */}
-      {classSpace && classSpace.workspaces.length > 0 && (
+      {/* ─── Scope Selection Bar (Enrolled ClassSpaces — Visible ONLY in Class-based mode) ─── */}
+      {userMode === 'class_based' && classSpace && classSpace.workspaces.length > 0 && (
         <div className="p-4 rounded-2xl bg-white dark:bg-espresso-850 border border-ivory-300 dark:border-espresso-750 shadow-subtle flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-xl bg-terracotta-100 dark:bg-terracotta-950/60 text-terracotta-600 dark:text-terracotta-400 shrink-0">

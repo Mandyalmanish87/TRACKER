@@ -396,10 +396,6 @@ export const ClassSpaceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           saveActiveWorkspaceId(fallback.id, effectiveUser.id);
           return fallback;
         });
-
-        if (userModeRef.current !== 'class_based') {
-          updateSettings({ userMode: 'class_based' });
-        }
       } else {
         setActiveWorkspace(null);
         if (authUser && !effectiveUser.isSimulated) {

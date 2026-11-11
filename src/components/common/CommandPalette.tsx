@@ -201,15 +201,19 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         action: () => { recordExecution('nav-eduhub'); onSelectTab('eduhub'); onClose(); },
         keywords: ['youtube', 'lectures', 'video', 'eduhub'],
       },
-      {
-        id: 'nav-classspace',
-        title: 'Classroom — Collaborative Workspace',
-        subtitle: 'Shared cohort timetables, notes & class channels',
-        category: 'Navigation',
-        icon: <Building className="w-4 h-4 text-sky-600" />,
-        action: () => { recordExecution('nav-classspace'); onSelectTab('classspace'); onClose(); },
-        keywords: ['cohort', 'class', 'batch', 'group', 'classspace'],
-      },
+      ...(state.settings?.userMode === 'class_based'
+        ? [
+            {
+              id: 'nav-classspace',
+              title: 'Classroom — Collaborative Workspace',
+              subtitle: 'Shared cohort timetables, notes & class channels',
+              category: 'Navigation' as const,
+              icon: <Building className="w-4 h-4 text-sky-600" />,
+              action: () => { recordExecution('nav-classspace'); onSelectTab('classspace'); onClose(); },
+              keywords: ['cohort', 'class', 'batch', 'group', 'classspace'],
+            },
+          ]
+        : []),
       {
         id: 'nav-reminders',
         title: 'Events & Tasks — Timeline Calendar',
@@ -329,7 +333,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
     });
 
     return list;
-  }, [state.subjects, state.tasks, resolvedTheme, onSelectTab, onClose, setMode, syncNow, onOpenShortcuts, modKey, recordExecution]);
+  }, [state.settings?.userMode, state.subjects, state.tasks, resolvedTheme, onSelectTab, onClose, setMode, syncNow, onOpenShortcuts, modKey, recordExecution]);
 
   // Filter based on search query
   const filteredCommands = useMemo(() => {

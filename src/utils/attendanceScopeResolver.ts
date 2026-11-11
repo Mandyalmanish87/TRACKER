@@ -25,7 +25,7 @@ import {
   calculateSubjectAttendanceFromCounts,
   calculateWeightedAggregateAttendance,
 } from './academicCalendarEngine';
-import { resolveSchedule, formatDateStr, parseDateStr } from './scheduleResolver';
+import { resolveSchedule, formatDateStr, parseDateStr, dateToDayOfWeek } from './scheduleResolver';
 import { resolveClassSchedule } from './classSpaceUtils';
 import { getEventHolidayRanges, isEventHolidayOnDate, mergeEventHolidays } from './eventHolidayCalendar';
 
@@ -138,7 +138,7 @@ export function resolveAttendanceScope(params: ResolveScopeParams): AttendanceSc
       extraClassId: occ.source === 'extra' ? occ.overrideId : undefined,
       overrideId: occ.overrideId,
       subjectId: occ.ruleId || occ.overrideId || occ.occurrenceKey,
-      dayOfWeek: occ.date ? ((new Date(occ.date).getDay() === 0 ? 7 : new Date(occ.date).getDay()) as any) : 1,
+      dayOfWeek: occ.date ? dateToDayOfWeek(parseDateStr(occ.date)) : 1,
       date: occ.date,
       startTime: occ.startTime,
       endTime: occ.endTime,

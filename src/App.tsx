@@ -108,10 +108,17 @@ export function resolveNavTabFromLocation(): NavTab | null {
   return null;
 }
 
-export function getInitialNavTab(userId?: string | null): NavTab {
+export function getInitialNavTab(userId?: string | null, userMode?: string): NavTab {
+  const isClassBased = userMode === 'class_based';
+
   // Check location first (URL takes precedence)
   const fromLocation = resolveNavTabFromLocation();
-  if (fromLocation) return fromLocation;
+  if (fromLocation) {
+    if (fromLocation === 'classspace' && !isClassBased) {
+      return 'dashboard';
+    }
+    return fromLocation;
+  }
 
   // Check persisted storage
   try {
@@ -119,12 +126,16 @@ export function getInitialNavTab(userId?: string | null): NavTab {
       if (userId && userId !== 'usr_local_student') {
         const userSaved = localStorage.getItem(getActiveTabStorageKey(userId));
         if (userSaved && userSaved in VALID_NAV_TABS) {
-          return VALID_NAV_TABS[userSaved];
+          const tab = VALID_NAV_TABS[userSaved];
+          if (tab === 'classspace' && !isClassBased) return 'dashboard';
+          return tab;
         }
       }
       const saved = localStorage.getItem(ACTIVE_TAB_STORAGE_KEY);
       if (saved && saved in VALID_NAV_TABS) {
-        return VALID_NAV_TABS[saved];
+        const tab = VALID_NAV_TABS[saved];
+        if (tab === 'classspace' && !isClassBased) return 'dashboard';
+        return tab;
       }
     }
   } catch {}
@@ -136,6 +147,7 @@ export const MainApp: React.FC = () => {
   const { authUser, state, syncNow } = useApp();
   const { mode, setMode } = useTheme();
   const classSpace = useOptionalClassSpace();
+  const isClassBased = state.settings?.userMode === 'class_based';
 
   const isInvalidInitialRoute = () => {
     if (typeof window === 'undefined') return false;
@@ -150,7 +162,7 @@ export const MainApp: React.FC = () => {
   const [isNotFound, setIsNotFound] = useState<boolean>(() => isInvalidInitialRoute());
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
   const [plannerFocusLaunch, setPlannerFocusLaunch] = useState<PlannerFocusLaunch | null>(null);
-  const [currentTab, setCurrentTab] = useState<NavTab>(() => getInitialNavTab(authUser?.id));
+  const [currentTab, setCurrentTab] = useState<NavTab>(() => getInitialNavTab(authUser?.id, state.settings?.userMode));
   const workspaceBounds = useRef<DOMRect | null>(null);
 
   // Global Keyboard Shortcuts
@@ -350,7 +362,28 @@ export const MainApp: React.FC = () => {
     }
   }, [authUser?.id]);
 
+  // Route guard: auto-redirect away from ClassSpace if in Individual mode
+  useEffect(() => {
+    if (currentTab === 'classspace' && !isClassBased) {
+      setCurrentTab('dashboard');
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, 'dashboard');
+          if (authUser?.id && authUser.id !== 'usr_local_student') {
+            localStorage.setItem(getActiveTabStorageKey(authUser.id), 'dashboard');
+          }
+          if (window.location.hash.startsWith('#classspace')) {
+            window.history.replaceState(null, '', '/' + (window.location.search || ''));
+          }
+        } catch {}
+      }
+    }
+  }, [currentTab, isClassBased, authUser?.id]);
+
   const handleSelectTab = (tab: NavTab) => {
+    if (tab === 'classspace' && !isClassBased) {
+      return; // Route guard: Type A cannot navigate to ClassSpace
+    }
     setIsNotFound(false);
     setCurrentTab(tab);
 
@@ -408,6 +441,13 @@ export const MainApp: React.FC = () => {
     const handleLocationChange = () => {
       const tabFromLoc = resolveNavTabFromLocation();
       if (tabFromLoc) {
+        if (tabFromLoc === 'classspace' && !isClassBased) {
+          setCurrentTab('dashboard');
+          if (window.location.hash.startsWith('#classspace')) {
+            window.history.replaceState(null, '', '/' + (window.location.search || ''));
+          }
+          return;
+        }
         setCurrentTab(tabFromLoc);
         try {
           localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, tabFromLoc);
@@ -426,11 +466,14 @@ export const MainApp: React.FC = () => {
       window.removeEventListener('hashchange', handleLocationChange);
       window.removeEventListener('tracker:open-focus-from-mini', handleOpenFocusFromMini);
     };
-  }, [authUser?.id]);
+  }, [authUser?.id, isClassBased]);
 
   const bloomAllowed = (state.settings?.gender ?? state.settings?.bodyModelPreference ?? 'male') === 'female' && Boolean(state.settings?.bloomEnabled);
-  // A direct URL or restored tab cannot expose Bloom unless the female profile has opted in.
-  const effectiveTab: NavTab = currentTab === 'bloom' && !bloomAllowed ? 'dashboard' : currentTab;
+  // Route guards: Bloom requires female profile opt-in; ClassSpace requires class_based userMode.
+  const effectiveTab: NavTab =
+    (currentTab === 'bloom' && !bloomAllowed) || (currentTab === 'classspace' && !isClassBased)
+      ? 'dashboard'
+      : currentTab;
 
   // Standalone Fullscreen View for Admin Control Center (removes upper student tab/nav clutter)
   if (effectiveTab === 'admin') {

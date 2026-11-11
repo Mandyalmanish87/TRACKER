@@ -10,7 +10,7 @@ import {
 import { useApp } from '../../context/AppContext';
 import { getActiveAccentColor } from '../../utils/themeColors';
 import { DayOfWeek, ResolvedCalendarEvent } from '../../types';
-import { resolveSchedule } from '../../utils/scheduleResolver';
+import { resolveSchedule, parseDateStr } from '../../utils/scheduleResolver';
 import { getEventHolidayRanges, isEventHolidayOnDate, mergeEventHolidays } from '../../utils/eventHolidayCalendar';
 import { useOptionalClassSpace } from '../../context/ClassSpaceContext';
 import {
@@ -211,7 +211,7 @@ export const AttendanceCalendarTab: React.FC = () => {
           extraClassId: occ.source === 'extra' ? occ.overrideId : undefined,
           overrideId: occ.overrideId,
           subjectId: occ.ruleId || occ.overrideId || occ.occurrenceKey,
-          dayOfWeek: (new Date(occ.date).getDay() === 0 ? 7 : new Date(occ.date).getDay()) as DayOfWeek,
+          dayOfWeek: getDayOfWeekFromDate(parseDateStr(occ.date)),
           date: occ.date,
           startTime: occ.startTime,
           endTime: occ.endTime,

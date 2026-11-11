@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useApp } from '../../context/AppContext';
-import { useOptionalClassSpace, getSavedWorkspaceId } from '../../context/ClassSpaceContext';
+import { useOptionalClassSpace } from '../../context/ClassSpaceContext';
 import { isTaskOverdue } from '../../utils/plannerUtils';
 import { detectRecurringWeaknesses } from '../../utils/testAnalytics';
 
@@ -115,11 +115,8 @@ export const Navigation: React.FC<NavigationProps> = ({ currentTab, onSelectTab 
   const orbitMenuRef = useRef<HTMLDivElement>(null);
   const orbitBtnRef = useRef<HTMLButtonElement>(null);
 
-  const hasClassSpace =
-    state.settings?.userMode === 'class_based' ||
-    Boolean(classSpace?.activeWorkspace) ||
-    (classSpace?.workspaces && classSpace.workspaces.length > 0) ||
-    Boolean(getSavedWorkspaceId());
+  const isClassBased = state.settings?.userMode === 'class_based';
+  const hasClassSpace = isClassBased;
 
   const isMyOrbitActive =
     currentTab === 'dayos' ||
@@ -172,7 +169,13 @@ export const Navigation: React.FC<NavigationProps> = ({ currentTab, onSelectTab 
 
   // Compute live contextual badges
   const pendingRemindersCount = state.reminders.filter((r) => !r.isCompleted).length;
-  const todayClassesCount = state.timetable.filter((t) => t.dayOfWeek === 3).length; // Day 3 = Wednesday
+  const todayDow = (() => {
+    const d = new Date().getDay();
+    return d === 0 ? 7 : d;
+  })();
+  const todayClassesCount = isClassBased && classSpace?.activeWorkspace
+    ? (classSpace.rules || []).filter((r) => r.dayOfWeek === todayDow).length
+    : (state.timetable || []).filter((t) => t.dayOfWeek === todayDow).length;
   const atRiskCount = state.subjects.filter((s) => {
     if (s.totalConducted === 0) return false;
     return (s.attended / s.totalConducted) * 100 < s.targetPct;
